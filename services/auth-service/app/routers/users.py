@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app import schemas, models, utils
 from app.database import get_db
+from app import redis_client
 
 router = APIRouter()
 
@@ -33,6 +34,10 @@ def get_current_user(
 
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid token type")
+
+    jti = payload.get("jti")
+    if jti and redis_client.is_blacklisted(jti):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
 
     user_id = payload.get("sub")
     user = db.query(models.User).filter(models.User.id == user_id).first()

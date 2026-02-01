@@ -12,7 +12,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -39,10 +38,8 @@ services:
     container_name: travel-planner-auth
     ports:
       - "8001:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/travel_planner
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-supersecretkey}
+    env_file:
+      - .env.docker
     depends_on:
       postgres:
         condition: service_healthy
