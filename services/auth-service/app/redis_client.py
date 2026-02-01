@@ -1,11 +1,12 @@
 """
 Redis client for token management
 """
+
 import redis
-from typing import Optional
+
 from app.config import settings
 
-redis_client: Optional[redis.Redis] = None
+redis_client: redis.Redis | None = None
 
 
 def get_redis() -> redis.Redis:
@@ -23,7 +24,7 @@ def store_refresh_token(user_id: str, jti: str, ttl_seconds: int, metadata: dict
     """Store refresh token in Redis"""
     import json
     from datetime import datetime
-    
+
     r = get_redis()
     key = f"refresh_token:{user_id}:{jti}"
     value = json.dumps({

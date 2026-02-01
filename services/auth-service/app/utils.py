@@ -1,8 +1,9 @@
 import uuid
-from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from typing import Optional, Tuple
-from jose import jwt, JWTError
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
 from app.config import settings
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -21,7 +22,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> Tuple[str, str]:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> tuple[str, str]:
     """Create access token with JTI"""
     to_encode = data.copy()
     jti = generate_jti()
@@ -34,7 +35,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return token, jti
 
 
-def create_refresh_token(data: dict) -> Tuple[str, str]:
+def create_refresh_token(data: dict) -> tuple[str, str]:
     """Create refresh token with JTI"""
     to_encode = data.copy()
     jti = generate_jti()
@@ -44,7 +45,7 @@ def create_refresh_token(data: dict) -> Tuple[str, str]:
     return token, jti
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         return payload

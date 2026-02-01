@@ -3,9 +3,18 @@ Test fixtures for auth-service tests
 Uses test PostgreSQL database and fakeredis
 """
 import os
-import pytest
+
+import fakeredis
 import psycopg2
+import pytest
+from fastapi.testclient import TestClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app import redis_client
+from app.database import Base, get_db
+from app.main import app
 
 
 def ensure_test_database_exists():
@@ -19,12 +28,12 @@ def ensure_test_database_exists():
     )
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT 1 FROM pg_database WHERE datname = 'travel_planner_test'")
     if not cursor.fetchone():
         cursor.execute("CREATE DATABASE travel_planner_test")
         print("Created test database: travel_planner_test")
-    
+
     cursor.close()
     conn.close()
 
@@ -35,16 +44,6 @@ os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
-
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import fakeredis
-
-from app.main import app
-from app.database import Base, get_db
-from app import redis_client
-
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 test_engine = create_engine(TEST_DATABASE_URL)
@@ -79,7 +78,7 @@ def client(fake_redis):
 
     app.dependency_overrides.clear()
     redis_client.get_redis = original_get_redis
-    
+
     Base.metadata.drop_all(bind=test_engine)
 
 

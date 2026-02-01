@@ -7,36 +7,30 @@
 ### 1. Настройка окружения
 
 ```bash
-# Скопируйте пример .env и настройте при необходимости, заменив `localhost` на имена контейнеров в .env.docker
+# Скопируйте .env и настройте (в .env.docker замените localhost на имена контейнеров)
 cp .env.example .env
 cp .env.example .env.docker
-```
-
-### 2. Запуск приложения в Docker
-
-```bash
-docker-compose up -d
-```
-
-Auth Service будет доступен: http://localhost:8001
-
-**Swagger UI**: http://localhost:8001/docs
-
-### 3. Запуск для разработки (без Docker)
-
-```bash
-# Запустите только БД и Redis в Docker
-docker-compose up -d postgres redis
 
 # Установите зависимости
-cd services/auth-service
-pip install -r requirements.txt
-
-# Запустите auth-service
-uvicorn app.main:app --reload --port 8001
+make install
 ```
 
-### 4. Запуск фронтенда
+### 2. Запуск в Docker
+
+```bash
+make up
+```
+
+Auth Service: http://localhost:8001  
+**Swagger UI**: http://localhost:8001/docs
+
+### 3. Локальная разработка
+
+```bash
+make dev
+```
+
+### 4. Фронтенд
 
 ```bash
 cd frontend && npm install && npm run dev
@@ -46,22 +40,38 @@ cd frontend && npm install && npm run dev
 
 ## 🧪 Тестирование
 
-### Запуск тестов Auth Service
-
 ```bash
-# Запустите БД
-docker-compose up -d postgres redis
-
-cd services/auth-service
-
 # Тесты
-pytest tests/ -v
+make test
 
 # Тесты с покрытием
-pytest tests/ --cov=app --cov-report=term-missing
+make test-cov
+
+# Линтер
+make lint
+
+# Авто-исправление
+make fix
 ```
 
 Тестовая БД `travel_planner_test` создаётся автоматически.
+
+---
+
+## � Makefile команды
+
+| Команда | Описание |
+|---------|----------|
+| `make up` | Запустить в Docker |
+| `make down` | Остановить + удалить volumes |
+| `make build` | Пересобрать образы |
+| `make dev` | Локальная разработка |
+| `make test` | Тесты |
+| `make test-cov` | Тесты с покрытием |
+| `make lint` | Проверка ruff |
+| `make fix` | Авто-исправление |
+| `make install` | Установить зависимости |
+| `make clean` | Очистить кеши |
 
 ---
 
@@ -69,19 +79,16 @@ pytest tests/ --cov=app --cov-report=term-missing
 
 ```
 travel-planner/
-├── services/                    # Backend микросервисы
-│   └── auth-service/            # Аутентификация (FastAPI)
+├── services/
+│   └── auth-service/           # FastAPI
 │       ├── app/
-│       │   ├── routers/        # Endpoints
-│       │   ├── config.py       # Настройки
-│       │   ├── models.py       # SQLAlchemy модели
-│       │   └── ...
-│       └── tests/              # pytest
+│       └── tests/
 ├── frontend/                   # React + Vite
+├── .github/workflows/          # CI/CD
 ├── docker-compose.yml
+├── Makefile
 ├── .env                        # Локальная разработка
-├── .env.docker                 # Docker окружение
-└── .env.example
+└── .env.docker                 # Docker
 ```
 
 ---
@@ -97,6 +104,7 @@ travel-planner/
 | Frontend | React, TypeScript, Vite |
 | Infrastructure | Docker, Docker Compose |
 | Testing | pytest, httpx, fakeredis |
+| CI | GitHub Actions, ruff |
 
 ---
 

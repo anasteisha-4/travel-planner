@@ -1,25 +1,25 @@
 """
 Users router - profile and preferences management
 """
-from fastapi import APIRouter, Depends, HTTPException, Header
-from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr
-from typing import Optional
-from app import schemas, models, utils
+from sqlalchemy.orm import Session
+
+from app import models, redis_client, schemas, utils
 from app.database import get_db
-from app import redis_client
 
 router = APIRouter()
 
 
 class ProfileUpdateRequest(BaseModel):
-    email: Optional[EmailStr] = None
-    login: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    email: EmailStr | None = None
+    login: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
 
 def get_current_user(
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ) -> models.User:
     """Extract and validate user from Authorization header"""

@@ -1,14 +1,14 @@
 """
 Authentication router - login, register, refresh tokens, password change
 """
-from fastapi import APIRouter, HTTPException, Depends, Header
-from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from app import models, utils, schemas
+from sqlalchemy.orm import Session
+
+from app import models, redis_client, schemas, utils
 from app.config import settings
 from app.database import get_db
-from app import redis_client
 
 router = APIRouter()
 
@@ -38,7 +38,7 @@ class LogoutRequest(BaseModel):
 
 
 def get_current_user(
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ) -> models.User:
     """Extract and validate user from Authorization header."""
@@ -176,7 +176,7 @@ def change_password(
 @router.post("/logout")
 def logout(
     request: LogoutRequest,
-    authorization: Optional[str] = Header(None)
+    authorization: str | None = Header(None)
 ):
     """Logout - revoke refresh token and optionally blacklist access token"""
     payload = utils.decode_token(request.refresh_token)
@@ -202,7 +202,7 @@ def logout(
 @router.post("/logout-all")
 def logout_all(
     current_user: models.User = Depends(get_current_user),
-    authorization: Optional[str] = Header(None)
+    authorization: str | None = Header(None)
 ):
     """Logout from all devices - revoke all refresh tokens for user"""
     user_id = str(current_user.id)
