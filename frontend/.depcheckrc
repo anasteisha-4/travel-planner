@@ -1,0 +1,5 @@
+ignores:
+  - "autoprefixer"
+  - "postcss"
+  - "virtual:pwa-register"
+  - "@feature-sliced/steiger-plugin"

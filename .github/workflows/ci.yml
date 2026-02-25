@@ -70,7 +70,6 @@ jobs:
 
   lint-frontend:
     name: Lint Frontend
-    if: ${{ !inputs.skip_lint }}
     runs-on: ubuntu-latest
     defaults:
       run:
