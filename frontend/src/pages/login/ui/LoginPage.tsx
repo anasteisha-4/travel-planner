@@ -12,6 +12,7 @@ export const LoginPage = () => {
     <LoginForm 
       onSuccess={handleSuccess} 
       onRegisterClick={() => navigate('/register')} 
+      onForgotPasswordClick={() => navigate('/forgot-password')}
     />
   );
 };

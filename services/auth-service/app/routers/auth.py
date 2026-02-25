@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app import models, redis_client, schemas, utils
 from app.config import settings
 from app.database import get_db
+from app.email import send_password_reset_email
 
 router = APIRouter()
 
@@ -281,6 +282,53 @@ def change_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
+
+
+@router.post("/password/forgot")
+async def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Request password reset — always returns 200 to prevent email enumeration"""
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+
+    if user and user.password_hash:
+        # Generate reset token and store in Redis (20 min TTL)
+        reset_token = str(uuid.uuid4())
+        redis_client.store_reset_token(reset_token, str(user.id))
+
+        # Send email (async)
+
+        await send_password_reset_email(user.email, reset_token)
+
+    # Always return success to prevent email enumeration
+    return {"message": "If this email exists, a reset link has been sent"}
+
+
+@router.post("/password/reset")
+def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password using token from email"""
+    # Validate token
+    user_id = redis_client.get_reset_token_user_id(request.token)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    # Check new password is not the same as the old one
+    if user.password_hash and utils.verify_password(request.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must differ from the current one")
+
+    # Update password
+    user.password_hash = utils.get_password_hash(request.new_password)
+    db.commit()
+
+    # Revoke the reset token (one-time use)
+    redis_client.revoke_reset_token(request.token)
+
+    # Revoke all refresh tokens for security
+    redis_client.revoke_all_user_tokens(str(user.id))
+
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/logout")

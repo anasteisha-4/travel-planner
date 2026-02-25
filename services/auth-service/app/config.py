@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     YANDEX_CLIENT_SECRET: str | None = None
     YANDEX_REDIRECT_URI: str | None = None
 
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 465
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM_NAME: str = "Triply"
+    SMTP_USE_TLS: bool = True
+    FRONTEND_URL: str = "http://localhost:80"
+
     class Config:
         env_file = find_env_file()
         extra = "allow"

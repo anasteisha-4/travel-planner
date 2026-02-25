@@ -15,11 +15,13 @@ export const LoginForm = ({
   oauthCallback = false,
   onSuccess,
   onRegisterClick,
+  onForgotPasswordClick,
   onError
 }: { 
   oauthCallback?: boolean;
   onSuccess: (onboardingCompleted?: boolean) => void;
   onRegisterClick: () => void;
+  onForgotPasswordClick: () => void;
   onError?: () => void;
 }) => {
   const {
@@ -74,7 +76,7 @@ export const LoginForm = ({
           <Button 
             variant="link"
             type="button"
-            onClick={(e) => { e.preventDefault(); }}
+            onClick={onForgotPasswordClick}
             className="text-sm p-0 h-auto"
           >
             Забыли пароль?

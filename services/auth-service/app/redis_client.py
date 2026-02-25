@@ -66,6 +66,27 @@ def is_blacklisted(jti: str) -> bool:
     return r.exists(key) == 1
 
 
+def store_reset_token(token: str, user_id: str, ttl_seconds: int = 1200) -> None:
+    """Store password reset token in Redis (default 20 min TTL)"""
+    r = get_redis()
+    key = f"reset_token:{token}"
+    r.setex(key, ttl_seconds, user_id)
+
+
+def get_reset_token_user_id(token: str) -> str | None:
+    """Get user_id from reset token, returns None if expired/invalid"""
+    r = get_redis()
+    key = f"reset_token:{token}"
+    return r.get(key)
+
+
+def revoke_reset_token(token: str) -> bool:
+    """Delete a reset token (one-time use)"""
+    r = get_redis()
+    key = f"reset_token:{token}"
+    return r.delete(key) > 0
+
+
 def check_redis_connection() -> bool:
     """Health check for Redis connection"""
     try:

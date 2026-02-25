@@ -1,3 +1,6 @@
+import unittest.mock
+
+
 class TestRegister:
     """POST /api/auth/register"""
 
@@ -196,3 +199,136 @@ class TestLogoutAll:
         """Logout-all without auth returns 401"""
         response = client.post("/api/auth/logout-all")
         assert response.status_code == 401
+
+
+class TestPasswordReset:
+    """POST /api/auth/password/forgot and /api/auth/password/reset"""
+
+    def test_forgot_password_existing_email(self, client, test_user, test_user_data):
+        """Forgot password for registered email returns 200"""
+        with unittest.mock.patch("app.routers.auth.send_password_reset_email", return_value=True) as mock_send:
+            response = client.post("/api/auth/password/forgot", json={"email": test_user_data["email"]})
+            assert response.status_code == 200
+            assert "reset link" in response.json()["message"]
+            mock_send.assert_called_once()
+
+    def test_forgot_password_unknown_email(self, client, test_user):
+        """Forgot password for unknown email still returns 200 (no leak)"""
+        response = client.post("/api/auth/password/forgot", json={"email": "nobody@example.com"})
+        assert response.status_code == 200
+        assert "reset link" in response.json()["message"]
+
+    def test_forgot_password_yandex_only_user(self, client, fake_redis):
+        """Forgot password for Yandex-only user (no password_hash) returns 200 but no email sent"""
+        from app import models
+        from app.database import get_db
+
+        db = next(client.app.dependency_overrides[get_db]())
+        yandex_user = models.User(email="yandex@example.com", login="yandex_user", yandex_id="123", password_hash=None)
+        db.add(yandex_user)
+        db.commit()
+
+        with unittest.mock.patch("app.routers.auth.send_password_reset_email") as mock_send:
+            response = client.post("/api/auth/password/forgot", json={"email": "yandex@example.com"})
+            assert response.status_code == 200
+            mock_send.assert_not_called()
+        db.close()
+
+    def test_reset_password_success(self, client, test_user, test_user_data, fake_redis):
+        """Valid reset token allows password change"""
+        from app import redis_client
+
+        token = "test-reset-token-123"
+        redis_client.store_reset_token(token, str(test_user["access_token"]))
+
+        # Get real user_id from the token
+        from app.utils import decode_token
+
+        payload = decode_token(test_user["access_token"])
+        user_id = payload["sub"]
+        redis_client.store_reset_token(token, user_id)
+
+        new_password = "BrandNew789!"
+        response = client.post(
+            "/api/auth/password/reset",
+            json={"token": token, "new_password": new_password, "confirm_password": new_password},
+        )
+        assert response.status_code == 200
+        assert "successfully" in response.json()["message"]
+
+        # Verify new password works
+        login_response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["email"], "password": new_password}
+        )
+        assert login_response.status_code == 200
+
+    def test_reset_password_mismatch(self, client, test_user, fake_redis):
+        """Mismatched passwords return 422"""
+        response = client.post(
+            "/api/auth/password/reset",
+            json={"token": "any-token", "new_password": "NewPass123!", "confirm_password": "Different123!"},
+        )
+        assert response.status_code == 422
+
+    def test_reset_password_same_as_old(self, client, test_user, test_user_data, fake_redis):
+        """Same password as current returns 400"""
+        from app import redis_client
+        from app.utils import decode_token
+
+        token = "test-same-password-token"
+        payload = decode_token(test_user["access_token"])
+        user_id = payload["sub"]
+        redis_client.store_reset_token(token, user_id)
+
+        response = client.post(
+            "/api/auth/password/reset",
+            json={
+                "token": token,
+                "new_password": test_user_data["password"],
+                "confirm_password": test_user_data["password"],
+            },
+        )
+        assert response.status_code == 400
+        assert "differ" in response.json()["detail"]
+
+    def test_reset_password_weak(self, client, test_user, fake_redis):
+        """Weak password returns 422"""
+        response = client.post(
+            "/api/auth/password/reset",
+            json={"token": "any-token", "new_password": "weak", "confirm_password": "weak"},
+        )
+        assert response.status_code == 422
+
+    def test_reset_password_invalid_token(self, client, test_user, fake_redis):
+        """Invalid/expired token returns 400"""
+        response = client.post(
+            "/api/auth/password/reset",
+            json={"token": "nonexistent-token", "new_password": "ValidNew123!", "confirm_password": "ValidNew123!"},
+        )
+        assert response.status_code == 400
+        assert "Invalid" in response.json()["detail"]
+
+    def test_reset_password_token_reuse(self, client, test_user, test_user_data, fake_redis):
+        """Used reset token cannot be reused"""
+        from app import redis_client
+        from app.utils import decode_token
+
+        token = "test-reuse-token"
+        payload = decode_token(test_user["access_token"])
+        user_id = payload["sub"]
+        redis_client.store_reset_token(token, user_id)
+
+        # First use — success
+        new_password = "FirstNew789!"
+        response1 = client.post(
+            "/api/auth/password/reset",
+            json={"token": token, "new_password": new_password, "confirm_password": new_password},
+        )
+        assert response1.status_code == 200
+
+        # Second use — fail
+        response2 = client.post(
+            "/api/auth/password/reset",
+            json={"token": token, "new_password": "SecondNew789!", "confirm_password": "SecondNew789!"},
+        )
+        assert response2.status_code == 400

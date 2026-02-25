@@ -24,8 +24,8 @@ export const BottomNav = () => {
   ];
 
 
-  const hiddenPaths = ['/login', '/register', '/onboarding'];
-  if (hiddenPaths.includes(location.pathname)) {
+  const hiddenPaths = ['/login', '/register', '/onboarding', '/forgot-password', '/reset-password'];
+  if (hiddenPaths.some(path => location.pathname.startsWith(path))) {
     return null;
   }
 

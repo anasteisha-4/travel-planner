@@ -48,3 +48,38 @@ export const RegisterFormSchema = RegisterApiSchema.extend({
 });
 
 export type RegisterFormData = z.infer<typeof RegisterFormSchema>;
+
+/**
+ * Schema for forgot password form
+ */
+export const ForgotPasswordSchema = z.object({
+  email: z.string()
+    .nonempty("Введите почту")
+    .email("Введите корректную почту"),
+});
+
+export type ForgotPasswordData = z.infer<typeof ForgotPasswordSchema>;
+
+/**
+ * Password strength rules (shared)
+ */
+const passwordField = z.string()
+  .nonempty("Введите пароль")
+  .min(8, "Пароль должен содержать минимум 8 символов")
+  .regex(
+    /^(?=.*[a-zA-Zа-яА-ЯёЁ])(?=.*\d)(?=.*[^a-zA-Zа-яА-ЯёЁ0-9\s]).+$/,
+    "Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы"
+  );
+
+/**
+ * Schema for reset password form
+ */
+export const ResetPasswordSchema = z.object({
+  new_password: passwordField,
+  confirm_password: z.string().nonempty("Подтвердите пароль"),
+}).refine((data) => data.new_password === data.confirm_password, {
+  message: "Пароли не совпадают",
+  path: ["confirm_password"],
+});
+
+export type ResetPasswordData = z.infer<typeof ResetPasswordSchema>;

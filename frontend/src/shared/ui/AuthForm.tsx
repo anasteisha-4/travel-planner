@@ -43,7 +43,7 @@ export const AuthForm = ({
           <div className="my-6 flex items-center">
             <Separator className="flex-1 opacity-50" />
             <span className="mx-4 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-              Или продолжить через
+              или
             </span>
             <Separator className="flex-1 opacity-50" />
           </div>
@@ -56,7 +56,7 @@ export const AuthForm = ({
             disabled={isLoading}
           >
             <img src="/assets/yandex.png" alt="Yandex" className="h-4 w-4 object-contain" />
-            Яндекс ID
+            Продолжить с Яндекс ID
           </Button>
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">

@@ -1,7 +1,9 @@
 import { DashboardPage } from '@/pages/dashboard';
+import { ForgotPasswordPage } from '@/pages/forgot-password';
 import { LoginPage, OAuthCallbackPage } from '@/pages/login';
 import { OnboardingPage } from '@/pages/onboarding';
 import { RegisterPage } from '@/pages/register';
+import { ResetPasswordPage } from '@/pages/reset-password';
 import { ThemeProvider } from '@/shared/ui';
 import { BottomNav } from '@/widgets/bottom-nav';
 import { Layout } from '@/widgets/layout';
@@ -60,6 +62,15 @@ export const App = () => {
                 </PublicOnlyRoute>
               } 
             />
+            <Route 
+              path="/forgot-password" 
+              element={
+                <PublicOnlyRoute>
+                  <ForgotPasswordPage />
+                </PublicOnlyRoute>
+              } 
+            />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route 
               path="/onboarding" 
               element={

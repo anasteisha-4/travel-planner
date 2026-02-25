@@ -13,6 +13,7 @@ export const OAuthCallbackPage = () => {
       oauthCallback={true} 
       onSuccess={handleSuccess}
       onRegisterClick={() => navigate('/register')}
+      onForgotPasswordClick={() => navigate('/forgot-password')}
       onError={() => navigate('/login', { replace: true })}
     />
   );

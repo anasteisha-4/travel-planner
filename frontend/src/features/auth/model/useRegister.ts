@@ -14,6 +14,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
     confirmPassword: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const { toast } = useToast();
 
@@ -84,6 +85,8 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
     handleChange,
     fieldErrors,
     isLoading,
+    showPassword,
+    setShowPassword,
     handleSubmit,
     handleYandexLogin,
   };
