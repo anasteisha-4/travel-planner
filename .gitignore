@@ -42,3 +42,5 @@ htmlcov/
 .ruff_cache/
 pip-log.txt
 pip-delete-this-directory.txt
+
+.agent/*

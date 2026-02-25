@@ -2,7 +2,11 @@
 Authentication router - login, register, refresh tokens, password change
 """
 
+import uuid
+
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -37,10 +41,7 @@ class LogoutRequest(BaseModel):
     refresh_token: str
 
 
-def get_current_user(
-    authorization: str | None = Header(None),
-    db: Session = Depends(get_db)
-) -> models.User:
+def get_current_user(authorization: str | None = Header(None), db: Session = Depends(get_db)) -> models.User:
     """Extract and validate user from Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
@@ -70,25 +71,18 @@ def get_current_user(
 @router.post("/register", response_model=TokenResponse)
 def register(request: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user"""
-    db_user = db.query(models.User).filter(
-        (models.User.email == request.email) | (models.User.login == request.login)
-    ).first()
+    db_user = (
+        db.query(models.User)
+        .filter((models.User.email == request.email) | (models.User.login == request.login))
+        .first()
+    )
     if db_user:
         raise HTTPException(status_code=400, detail="Email or login already registered")
 
     hashed_password = utils.get_password_hash(request.password)
-    preferences_data = request.preferences.model_dump() if request.preferences else {}
 
     new_user = models.User(
-        email=request.email,
-        login=request.login,
-        password_hash=hashed_password,
-        first_name=request.first_name,
-        last_name=request.last_name,
-        interests=preferences_data.get("interests"),
-        budget_preference=preferences_data.get("budget_preference"),
-        travel_styles=preferences_data.get("travel_styles"),
-        preferences=preferences_data
+        email=request.email, login=request.login, password_hash=hashed_password, onboarding_completed=False
     )
 
     db.add(new_user)
@@ -108,11 +102,27 @@ def register(request: schemas.UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate user by email or login"""
-    user = db.query(models.User).filter(
-        (models.User.email == request.identifier) | (models.User.login == request.identifier)
-    ).first()
-    if not user or not utils.verify_password(request.password, user.password_hash):
+    print(f"DEBUG: Login attempt for identifier: {request.identifier}")
+    user = (
+        db.query(models.User)
+        .filter((models.User.email == request.identifier) | (models.User.login == request.identifier))
+        .first()
+    )
+
+    if not user:
+        print(f"DEBUG: User not found for identifier: {request.identifier}")
         raise HTTPException(status_code=400, detail="Incorrect credentials")
+
+    # Handle Yandex-only users who have no password set
+    if not user.password_hash:
+        print(f"DEBUG: User {user.login} has no password hash (Yandex-only)")
+        raise HTTPException(status_code=400, detail="This account uses Yandex login. Please sign in with Yandex ID.")
+
+    if not utils.verify_password(request.password, user.password_hash):
+        print(f"DEBUG: Password mismatch for user: {user.login}")
+        raise HTTPException(status_code=400, detail="Incorrect credentials")
+
+    print(f"DEBUG: Login successful for user: {user.login}")
 
     token_data = {"sub": str(user.id), "login": user.login}
     access_token, _ = utils.create_access_token(data=token_data)
@@ -122,6 +132,106 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     redis_client.store_refresh_token(str(user.id), refresh_jti, refresh_ttl)
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.get("/yandex/authorize")
+def yandex_authorize(origin: str | None = None):
+    """Redirect to Yandex OAuth page"""
+    if not settings.YANDEX_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Yandex OAuth not configured")
+
+    # Validation: only allow dynamic redirect_uri if the origin is in CORS_ORIGINS
+    allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
+
+    if origin and origin in allowed_origins:
+        redirect_uri = f"{origin}/auth/yandex/callback"
+    else:
+        # Fallback to the default configured redirect URI
+        redirect_uri = settings.YANDEX_REDIRECT_URI
+
+    if not redirect_uri:
+        raise HTTPException(status_code=500, detail="Redirect URI not configured")
+
+    url = f"https://oauth.yandex.ru/authorize?response_type=code&client_id={settings.YANDEX_CLIENT_ID}&redirect_uri={redirect_uri}"
+    return RedirectResponse(url)
+
+
+class YandexCallbackRequest(BaseModel):
+    code: str
+    redirect_uri: str | None = None
+
+
+@router.post("/yandex/callback", response_model=TokenResponse)
+async def yandex_callback(request: YandexCallbackRequest, db: Session = Depends(get_db)):
+    """Handle Yandex OAuth callback and return tokens"""
+    if not settings.YANDEX_CLIENT_ID or not settings.YANDEX_CLIENT_SECRET or not settings.YANDEX_REDIRECT_URI:
+        raise HTTPException(status_code=500, detail="Yandex OAuth not configured")
+
+    token_url = "https://oauth.yandex.ru/token"
+    # Use dynamic redirect_uri if provided by frontend
+    effective_redirect_uri = request.redirect_uri or settings.YANDEX_REDIRECT_URI
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": request.code,
+        "client_id": settings.YANDEX_CLIENT_ID,
+        "client_secret": settings.YANDEX_CLIENT_SECRET,
+        "redirect_uri": effective_redirect_uri,
+    }
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(token_url, data=data)
+        if token_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to get Yandex token")
+
+        access_token = token_resp.json().get("access_token")
+
+        info_url = "https://login.yandex.ru/info"
+        info_resp = await client.get(info_url, headers={"Authorization": f"OAuth {access_token}"})
+        if info_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to get Yandex user info")
+
+        user_info = info_resp.json()
+        yandex_id = user_info.get("id")
+        yandex_email = user_info.get("default_email", f"{yandex_id}@yandex.yandex")
+        yandex_login = user_info.get("login")
+
+        user = (
+            db.query(models.User)
+            .filter((models.User.yandex_id == yandex_id) | (models.User.email == yandex_email))
+            .first()
+        )
+
+        if user:
+            if not user.yandex_id:
+                user.yandex_id = yandex_id
+                db.commit()
+                db.refresh(user)
+        else:
+            unique_login = yandex_login or f"yandex_{yandex_id}"
+            existing_login = db.query(models.User).filter(models.User.login == unique_login).first()
+            if existing_login:
+                unique_login = f"{unique_login}_{str(uuid.uuid4())[:8]}"
+
+            user = models.User(
+                email=yandex_email,
+                login=unique_login,
+                yandex_id=yandex_id,
+                password_hash=None,
+                onboarding_completed=False,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        token_data = {"sub": str(user.id), "login": user.login}
+        new_access_token, _ = utils.create_access_token(data=token_data)
+        new_refresh_token, new_jti = utils.create_refresh_token(data=token_data)
+
+        refresh_ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        redis_client.store_refresh_token(str(user.id), new_jti, refresh_ttl)
+
+        return TokenResponse(access_token=new_access_token, refresh_token=new_refresh_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -158,11 +268,11 @@ def refresh_tokens(request: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post("/password/change")
 def change_password(
-    request: PasswordChangeRequest,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request: PasswordChangeRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Change password"""
+    if not current_user.password_hash:
+        raise HTTPException(status_code=400, detail="Cannot change password for Yandex-linked accounts")
     if not utils.verify_password(request.old_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Incorrect old password")
 
@@ -174,10 +284,7 @@ def change_password(
 
 
 @router.post("/logout")
-def logout(
-    request: LogoutRequest,
-    authorization: str | None = Header(None)
-):
+def logout(request: LogoutRequest, authorization: str | None = Header(None)):
     """Logout - revoke refresh token and optionally blacklist access token"""
     payload = utils.decode_token(request.refresh_token)
     if payload and payload.get("type") == "refresh":
@@ -200,10 +307,7 @@ def logout(
 
 
 @router.post("/logout-all")
-def logout_all(
-    current_user: models.User = Depends(get_current_user),
-    authorization: str | None = Header(None)
-):
+def logout_all(current_user: models.User = Depends(get_current_user), authorization: str | None = Header(None)):
     """Logout from all devices - revoke all refresh tokens for user"""
     user_id = str(current_user.id)
     revoked_count = redis_client.revoke_all_user_tokens(user_id)

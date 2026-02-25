@@ -1,6 +1,7 @@
 """
 Configuration settings for Auth Service
 """
+
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str
+
+    YANDEX_CLIENT_ID: str | None = None
+    YANDEX_CLIENT_SECRET: str | None = None
+    YANDEX_REDIRECT_URI: str | None = None
 
     class Config:
         env_file = find_env_file()

@@ -13,10 +13,7 @@ def get_redis() -> redis.Redis:
     """Get Redis client instance (singleton)."""
     global redis_client
     if redis_client is None:
-        redis_client = redis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True
-        )
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     return redis_client
 
 
@@ -27,10 +24,7 @@ def store_refresh_token(user_id: str, jti: str, ttl_seconds: int, metadata: dict
 
     r = get_redis()
     key = f"refresh_token:{user_id}:{jti}"
-    value = json.dumps({
-        "created_at": datetime.utcnow().isoformat(),
-        **(metadata or {})
-    })
+    value = json.dumps({"created_at": datetime.utcnow().isoformat(), **(metadata or {})})
     r.setex(key, ttl_seconds, value)
 
 

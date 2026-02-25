@@ -41,38 +41,34 @@ class TestLogin:
 
     def test_login_by_email(self, client, test_user, test_user_data):
         """Login by email returns tokens"""
-        response = client.post("/api/auth/login", json={
-            "identifier": test_user_data["email"],
-            "password": test_user_data["password"]
-        })
+        response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["email"], "password": test_user_data["password"]}
+        )
         assert response.status_code == 200
         assert "access_token" in response.json()
         assert "refresh_token" in response.json()
 
     def test_login_by_login(self, client, test_user, test_user_data):
         """Login by login returns tokens"""
-        response = client.post("/api/auth/login", json={
-            "identifier": test_user_data["login"],
-            "password": test_user_data["password"]
-        })
+        response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["login"], "password": test_user_data["password"]}
+        )
         assert response.status_code == 200
         assert "access_token" in response.json()
 
     def test_login_wrong_password(self, client, test_user, test_user_data):
         """Wrong password returns 400"""
-        response = client.post("/api/auth/login", json={
-            "identifier": test_user_data["email"],
-            "password": "WrongPassword123"
-        })
+        response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["email"], "password": "WrongPassword123"}
+        )
         assert response.status_code == 400
         assert "Incorrect credentials" in response.json()["detail"]
 
     def test_login_nonexistent_user(self, test_user, client):
         """Non-existent user returns 400"""
-        response = client.post("/api/auth/login", json={
-            "identifier": "nobody@example.com",
-            "password": "SomePassword123"
-        })
+        response = client.post(
+            "/api/auth/login", json={"identifier": "nobody@example.com", "password": "SomePassword123"}
+        )
         assert response.status_code == 400
         assert "Incorrect credentials" in response.json()["detail"]
 
@@ -82,9 +78,7 @@ class TestRefresh:
 
     def test_refresh_success(self, client, test_user):
         """Valid refresh token returns new tokens"""
-        response = client.post("/api/auth/refresh", json={
-            "refresh_token": test_user["refresh_token"]
-        })
+        response = client.post("/api/auth/refresh", json={"refresh_token": test_user["refresh_token"]})
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -93,30 +87,22 @@ class TestRefresh:
 
     def test_refresh_invalid_token(self, client, test_user):
         """Invalid token returns 401"""
-        response = client.post("/api/auth/refresh", json={
-            "refresh_token": "invalid.token.here"
-        })
+        response = client.post("/api/auth/refresh", json={"refresh_token": "invalid.token.here"})
         assert response.status_code == 401
         assert "Invalid refresh token" in response.json()["detail"]
 
     def test_refresh_with_access_token(self, client, test_user):
         """Using access token instead of refresh returns 401"""
-        response = client.post("/api/auth/refresh", json={
-            "refresh_token": test_user["access_token"]
-        })
+        response = client.post("/api/auth/refresh", json={"refresh_token": test_user["access_token"]})
         assert response.status_code == 401
         assert "Invalid token type" in response.json()["detail"]
 
     def test_refresh_revoked_token(self, client, test_user):
         """Using already-used refresh token returns 401"""
-        response1 = client.post("/api/auth/refresh", json={
-            "refresh_token": test_user["refresh_token"]
-        })
+        response1 = client.post("/api/auth/refresh", json={"refresh_token": test_user["refresh_token"]})
         assert response1.status_code == 200
 
-        response2 = client.post("/api/auth/refresh", json={
-            "refresh_token": test_user["refresh_token"]
-        })
+        response2 = client.post("/api/auth/refresh", json={"refresh_token": test_user["refresh_token"]})
         assert response2.status_code == 401
         assert "revoked" in response2.json()["detail"]
 
@@ -130,15 +116,14 @@ class TestPasswordChange:
         response = client.post(
             "/api/auth/password/change",
             json={"old_password": test_user_data["password"], "new_password": new_password},
-            headers=auth_headers
+            headers=auth_headers,
         )
         assert response.status_code == 200
         assert "successfully" in response.json()["message"]
 
-        login_response = client.post("/api/auth/login", json={
-            "identifier": test_user_data["email"],
-            "password": new_password
-        })
+        login_response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["email"], "password": new_password}
+        )
         assert login_response.status_code == 200
 
     def test_password_change_wrong_old(self, client, auth_headers):
@@ -146,17 +131,14 @@ class TestPasswordChange:
         response = client.post(
             "/api/auth/password/change",
             json={"old_password": "WrongOldPassword", "new_password": "NewPass123!"},
-            headers=auth_headers
+            headers=auth_headers,
         )
         assert response.status_code == 400
         assert "Incorrect old password" in response.json()["detail"]
 
     def test_password_change_no_auth(self, client):
         """No authorization returns 401"""
-        response = client.post(
-            "/api/auth/password/change",
-            json={"old_password": "old", "new_password": "new"}
-        )
+        response = client.post("/api/auth/password/change", json={"old_password": "old", "new_password": "new"})
         assert response.status_code == 401
 
 
@@ -166,24 +148,18 @@ class TestLogout:
     def test_logout_success(self, client, test_user, auth_headers):
         """Logout revokes refresh token"""
         response = client.post(
-            "/api/auth/logout",
-            json={"refresh_token": test_user["refresh_token"]},
-            headers=auth_headers
+            "/api/auth/logout", json={"refresh_token": test_user["refresh_token"]}, headers=auth_headers
         )
         assert response.status_code == 200
         assert "successfully" in response.json()["message"]
 
-        refresh_response = client.post("/api/auth/refresh", json={
-            "refresh_token": test_user["refresh_token"]
-        })
+        refresh_response = client.post("/api/auth/refresh", json={"refresh_token": test_user["refresh_token"]})
         assert refresh_response.status_code == 401
 
     def test_logout_blacklists_access_token(self, client, test_user, auth_headers):
         """Logout with access token blacklists it"""
         response = client.post(
-            "/api/auth/logout",
-            json={"refresh_token": test_user["refresh_token"]},
-            headers=auth_headers
+            "/api/auth/logout", json={"refresh_token": test_user["refresh_token"]}, headers=auth_headers
         )
         assert response.status_code == 200
 
@@ -193,10 +169,7 @@ class TestLogout:
 
     def test_logout_invalid_refresh(self, test_user, client):
         """Logout with invalid refresh token succeeds"""
-        response = client.post(
-            "/api/auth/logout",
-            json={"refresh_token": "invalid.token"}
-        )
+        response = client.post("/api/auth/logout", json={"refresh_token": "invalid.token"})
         assert response.status_code == 200
 
 
@@ -206,10 +179,9 @@ class TestLogoutAll:
     def test_logout_all_success(self, client, test_user, auth_headers, test_user_data):
         """Logout-all revokes all sessions"""
         # Login again to create second session
-        login_response = client.post("/api/auth/login", json={
-            "identifier": test_user_data["email"],
-            "password": test_user_data["password"]
-        })
+        login_response = client.post(
+            "/api/auth/login", json={"identifier": test_user_data["email"], "password": test_user_data["password"]}
+        )
         second_refresh = login_response.json()["refresh_token"]
 
         response = client.post("/api/auth/logout-all", headers=auth_headers)
@@ -217,9 +189,7 @@ class TestLogoutAll:
         assert "sessions revoked" in response.json()["message"]
 
         for token in [test_user["refresh_token"], second_refresh]:
-            refresh_response = client.post("/api/auth/refresh", json={
-                "refresh_token": token
-            })
+            refresh_response = client.post("/api/auth/refresh", json={"refresh_token": token})
             assert refresh_response.status_code == 401
 
     def test_logout_all_no_auth(self, client):

@@ -15,13 +15,9 @@ router = APIRouter()
 class ProfileUpdateRequest(BaseModel):
     email: EmailStr | None = None
     login: str | None = None
-    first_name: str | None = None
-    last_name: str | None = None
 
-def get_current_user(
-    authorization: str | None = Header(None),
-    db: Session = Depends(get_db)
-) -> models.User:
+
+def get_current_user(authorization: str | None = Header(None), db: Session = Depends(get_db)) -> models.User:
     """Extract and validate user from Authorization header"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
@@ -51,19 +47,14 @@ def get_current_user(
 def user_to_profile(user: models.User) -> schemas.UserProfile:
     """Convert User model to UserProfile schema"""
     preferences = None
-    if user.interests or user.budget_preference or user.travel_styles:
-        preferences = schemas.UserPreferences(
-            interests=user.interests or [],
-            budget_preference=user.budget_preference or "medium",
-            travel_styles=user.travel_styles or [],
-        )
+    if user.preferences:
+        preferences = schemas.UserPreferences(**user.preferences)
     return schemas.UserProfile(
         id=user.id,
         email=user.email,
         login=user.login,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        preferences=preferences
+        onboarding_completed=user.onboarding_completed,
+        preferences=preferences,
     )
 
 
@@ -75,11 +66,9 @@ def get_profile(current_user: models.User = Depends(get_current_user)):
 
 @router.put("/me", response_model=schemas.UserProfile)
 def update_profile(
-    request: ProfileUpdateRequest,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request: ProfileUpdateRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Update user profile (email, login, first_name, last_name)"""
+    """Update user profile (email, login)"""
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
 
     if request.email and request.email != user.email:
@@ -94,12 +83,6 @@ def update_profile(
             raise HTTPException(status_code=400, detail="Login already taken")
         user.login = request.login
 
-    if request.first_name is not None:
-        user.first_name = request.first_name
-
-    if request.last_name is not None:
-        user.last_name = request.last_name
-
     db.commit()
     db.refresh(user)
 
@@ -109,26 +92,22 @@ def update_profile(
 @router.get("/me/preferences", response_model=schemas.UserPreferences)
 def get_preferences(current_user: models.User = Depends(get_current_user)):
     """Get user preferences"""
-    return schemas.UserPreferences(
-        interests=current_user.interests or [],
-        budget_preference=current_user.budget_preference or "medium",
-        travel_styles=current_user.travel_styles or [],
-    )
+    if current_user.preferences:
+        return schemas.UserPreferences(**current_user.preferences)
+    return schemas.UserPreferences()
 
 
 @router.put("/me/preferences", response_model=schemas.UserPreferences)
 def update_preferences(
     preferences: schemas.UserPreferences,
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Update user preferences"""
+    """Update user preferences and mark onboarding as completed"""
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
 
-    user.interests = preferences.interests
-    user.budget_preference = preferences.budget_preference
-    user.travel_styles = preferences.travel_styles
     user.preferences = preferences.model_dump()
+    user.onboarding_completed = True
 
     db.commit()
 

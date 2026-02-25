@@ -2,6 +2,7 @@
 Test fixtures for auth-service tests
 Uses test PostgreSQL database and fakeredis
 """
+
 import os
 
 import fakeredis
@@ -19,13 +20,8 @@ from app.main import app
 
 def ensure_test_database_exists():
     """Create test database if it doesn't exist"""
-    conn = psycopg2.connect(
-        host="localhost",
-        port=5432,
-        user="postgres",
-        password="postgres",
-        database="postgres"
-    )
+    db_host = os.environ.get("POSTGRES_HOST", "postgres")
+    conn = psycopg2.connect(host=db_host, port=5432, user="postgres", password="postgres", database="postgres")
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = conn.cursor()
 
@@ -40,8 +36,10 @@ def ensure_test_database_exists():
 
 ensure_test_database_exists()
 
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/travel_planner_test")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+db_host = os.environ.get("POSTGRES_HOST", "postgres")
+os.environ.setdefault("DATABASE_URL", f"postgresql://postgres:postgres@{db_host}:5432/travel_planner_test")
+redis_host = os.environ.get("REDIS_HOST", "redis")
+os.environ.setdefault("REDIS_URL", f"redis://{redis_host}:6379/0")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 
@@ -84,13 +82,7 @@ def client(fake_redis):
 
 @pytest.fixture
 def test_user_data():
-    return {
-        "email": "test@example.com",
-        "login": "testuser",
-        "password": "SecurePass123!",
-        "first_name": "Test",
-        "last_name": "User"
-    }
+    return {"email": "test@example.com", "login": "testuser", "password": "SecurePass123!"}
 
 
 @pytest.fixture
@@ -98,11 +90,7 @@ def test_user(client, test_user_data):
     response = client.post("/api/auth/register", json=test_user_data)
     assert response.status_code == 200
     data = response.json()
-    return {
-        **test_user_data,
-        "access_token": data["access_token"],
-        "refresh_token": data["refresh_token"]
-    }
+    return {**test_user_data, "access_token": data["access_token"], "refresh_token": data["refresh_token"]}
 
 
 @pytest.fixture
@@ -112,10 +100,4 @@ def auth_headers(test_user):
 
 @pytest.fixture
 def second_user_data():
-    return {
-        "email": "second@example.com",
-        "login": "seconduser",
-        "password": "AnotherPass456!",
-        "first_name": "Second",
-        "last_name": "User"
-    }
+    return {"email": "second@example.com", "login": "seconduser", "password": "AnotherPass456!"}
