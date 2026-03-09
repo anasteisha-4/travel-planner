@@ -9,6 +9,14 @@ class TestCreateTrip:
         assert data["people_count"] == 2
         assert "id" in data
 
+    def test_create_with_type_and_season(self, client, auth_headers, trip_data):
+        extended_data = {**trip_data, "trip_type": "beach", "season": "summer"}
+        response = client.post("/api/trips/", json=extended_data, headers=auth_headers)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["trip_type"] == "beach"
+        assert data["season"] == "summer"
+
     def test_create_minimal(self, client, auth_headers):
         minimal = {
             "title": "Быстрая поездка",

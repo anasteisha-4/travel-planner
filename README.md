@@ -20,39 +20,51 @@
 
 ## 🚀 Быстрый старт
 
-### 1. Настройка окружения
+### 1. Подготовка окружения
+Для работы проекта необходим **Docker**.
 
 ```bash
-# Скопируйте .env и настройте (в .env.docker замените localhost на имена контейнеров)
+
+# 1. Настройте переменные окружения
+# Для локального запуска (БД в Docker, код локально)
 cp .env.example .env
+# Для запуска всего проекта в Docker
 cp .env.example .env.docker
-
-# Установите зависимости бэкенда
-make install
 ```
 
-### 2. Запуск в Docker
+> [!IMPORTANT]
+> В `.env.docker` убедитесь, что хосты баз данных и Redis указаны как имена сервисов (`db` и `redis`), а не `localhost`.
+
+### 2. Запуск проекта (Docker Compose)
 
 ```bash
+# Сборка и запуск
 make build up
+
+# Применение миграций (выполняется автоматически при старте, но можно запустить вручную)
+make migrate
 ```
 
-*   **Frontend**: http://localhost (сервер Vite в Docker работает на 80 порту)
-*   **Auth Service**: http://localhost:8001
-*   **Trip Service**: http://localhost:8002
-*   **Auth Swagger UI**: http://localhost:8001/docs
-*   **Trip Swagger UI**: http://localhost:8002/docs
+*   **Frontend**: [http://localhost](http://localhost)
+*   **Auth Service**: [http://localhost:8001/docs](http://localhost:8001/docs)
+*   **Trip Service**: [http://localhost:8002/docs](http://localhost:8002/docs)
 
-### 3. Локальная разработка
+### 3. Локальная разработка (Hybrid)
+Для изменений в код бэкенда с hot-reload:
 
 ```bash
-# Запуск инфраструктуры (БД, Redis) и Auth Service
-make dev
-```
-В соседнем терминале:
-```bash
-# Фронтенд (запускается на порту 5173 в dev-режиме)
-cd frontend && npm install && npm run dev
+# 1. Запустите инфраструктуру (БД и Redis)
+docker-compose up -d db redis
+
+# 2. Установите зависимости и запустите интересующий сервис
+cd services/auth-service
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
+
+# 3. В другом терминале запустите фронтенд
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -71,16 +83,37 @@ cd frontend && npm install && npm run dev
 ## 🧪 Тестирование и Линтинг
 
 ```bash
-# Бэкенд тесты и линтинг (ruff) для auth-service
+# Бэкенд тесты (внутри Docker)
 make test
-make lint
+make test-cov
 
-# Trip-service тесты (внутри Docker)
-docker compose exec trip-service python -m pytest tests/ -v
+# Линтинг (ruff)
+make lint
 
 # Фронтенд: Проверка архитектуры (Steiger), линтинг (ESLint) и типы
 cd frontend && npm run lint && npx tsc --noEmit
 ```
+
+---
+
+## 🗃 Миграции базы данных (Alembic)
+
+Проект использует **Alembic** для управления миграциями. Каждый сервис имеет собственный набор миграций.
+
+```bash
+# Создать новую миграцию (после изменения models.py)
+docker-compose run --rm auth-service alembic revision --autogenerate -m "описание"
+docker-compose run --rm trip-service alembic revision --autogenerate -m "описание"
+
+# Применить миграции
+docker-compose run --rm auth-service alembic upgrade head
+docker-compose run --rm trip-service alembic upgrade head
+
+# Откатить последнюю миграцию
+docker-compose run --rm auth-service alembic downgrade -1
+```
+
+> **Примечание**: При запуске Docker-контейнеров миграции применяются автоматически (`alembic upgrade head` в CMD).
 
 ---
 
@@ -105,7 +138,7 @@ cd frontend && npm run lint && npx tsc --noEmit
 
 | Компонент | Технологии |
 |-----------|------------|
-| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic V2, Jinja2 |
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic V2, Alembic, Jinja2 |
 | Database | PostgreSQL 15 |
 | Cache/Tokens | Redis 7 |
 | Auth | JWT, OAuth 2.0 (Yandex) |
@@ -124,7 +157,8 @@ cd frontend && npm run lint && npx tsc --noEmit
 | `make up` | Запустить весь проект в Docker |
 | `make build` | Собрать Docker образы |
 | `make down` | Остановить и очистить volumes |
-| `make test` | Тесты auth-service |
+| `make test` | Тесты auth-service и trip-service (Docker) |
+| `make test-cov` | Тесты с покрытием (Docker) |
 | `make lint` | Линтинг auth-service |
 | `make install` | Установка зависимостей auth-service |
 

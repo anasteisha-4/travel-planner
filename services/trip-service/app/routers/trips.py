@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user_id
+from app.exceptions import AppException
 
 router = APIRouter()
 
@@ -22,6 +23,8 @@ def trip_to_response(trip: models.Trip) -> schemas.TripResponse:
         currency=trip.currency,
         people_count=trip.people_count,
         status=trip.status,
+        trip_type=trip.trip_type,
+        season=trip.season,
         notes=trip.notes,
         created_at=trip.created_at.isoformat() if trip.created_at else "",
         updated_at=trip.updated_at.isoformat() if trip.updated_at else None,
@@ -56,6 +59,8 @@ def create_trip(
         budget=trip_data.budget,
         currency=trip_data.currency,
         people_count=trip_data.people_count,
+        trip_type=trip_data.trip_type,
+        season=trip_data.season,
         notes=trip_data.notes,
     )
     db.add(trip)
@@ -72,7 +77,7 @@ def get_trip(
 ):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id, models.Trip.user_id == user_id).first()
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        raise AppException(status_code=404, code="NOT_FOUND", message="Trip not found")
     return trip_to_response(trip)
 
 
@@ -85,7 +90,7 @@ def update_trip(
 ):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id, models.Trip.user_id == user_id).first()
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        raise AppException(status_code=404, code="NOT_FOUND", message="Trip not found")
 
     update_fields = trip_data.model_dump(exclude_unset=True)
     for field, value in update_fields.items():
@@ -107,6 +112,6 @@ def delete_trip(
 ):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id, models.Trip.user_id == user_id).first()
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        raise AppException(status_code=404, code="NOT_FOUND", message="Trip not found")
     db.delete(trip)
     db.commit()

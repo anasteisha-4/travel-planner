@@ -2,12 +2,14 @@
 Users router - profile and preferences management
 """
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app import models, redis_client, schemas, utils
+from app import models, schemas
 from app.database import get_db
+from app.deps import get_current_user
+from app.exceptions import AppException
 
 router = APIRouter()
 
@@ -15,33 +17,6 @@ router = APIRouter()
 class ProfileUpdateRequest(BaseModel):
     email: EmailStr | None = None
     login: str | None = None
-
-
-def get_current_user(authorization: str | None = Header(None), db: Session = Depends(get_db)) -> models.User:
-    """Extract and validate user from Authorization header"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
-
-    token = authorization.replace("Bearer ", "")
-    payload = utils.decode_token(token)
-
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    if payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="Invalid token type")
-
-    jti = payload.get("jti")
-    if jti and redis_client.is_blacklisted(jti):
-        raise HTTPException(status_code=401, detail="Token has been revoked")
-
-    user_id = payload.get("sub")
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return user
 
 
 def user_to_profile(user: models.User) -> schemas.UserProfile:
@@ -74,13 +49,13 @@ def update_profile(
     if request.email and request.email != user.email:
         existing = db.query(models.User).filter(models.User.email == request.email).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Email already taken")
+            raise AppException(status_code=400, code="BAD_REQUEST", message="Email already taken")
         user.email = request.email
 
     if request.login and request.login != user.login:
         existing = db.query(models.User).filter(models.User.login == request.login).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Login already taken")
+            raise AppException(status_code=400, code="BAD_REQUEST", message="Login already taken")
         user.login = request.login
 
     db.commit()

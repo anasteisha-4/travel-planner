@@ -20,3 +20,4 @@ ignore = [
 
 [lint.per-file-ignores]
 "tests/*" = ["S101"]  # allow assert in tests
+"migrations/*" = ["UP007", "UP035", "W291"]  # auto-generated code

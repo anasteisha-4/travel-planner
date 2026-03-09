@@ -1,16 +1,11 @@
-import uuid
-
-from sqlalchemy import TIMESTAMP, Column, Date, Float, Integer, String, Text
+from sqlalchemy import Column, Date, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 
-from app.database import Base
+from app.base_model import BaseModel
 
 
-class Trip(Base):
+class Trip(BaseModel):
     __tablename__ = "trips"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     title = Column(String, nullable=False)
     destination = Column(String, nullable=False)
@@ -20,6 +15,6 @@ class Trip(Base):
     currency = Column(String, nullable=False, default="RUB")
     people_count = Column(Integer, nullable=False, default=1)
     status = Column(String, nullable=False, default="planned")
+    trip_type = Column(String, nullable=True)
+    season = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

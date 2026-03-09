@@ -5,7 +5,7 @@ Authentication router - login, register, refresh tokens, password change
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from app import models, redis_client, schemas, utils
 from app.config import settings
 from app.database import get_db
+from app.deps import get_current_user
 from app.email import send_password_reset_email
+from app.exceptions import AppException
 
 router = APIRouter()
 
@@ -42,33 +44,6 @@ class LogoutRequest(BaseModel):
     refresh_token: str
 
 
-def get_current_user(authorization: str | None = Header(None), db: Session = Depends(get_db)) -> models.User:
-    """Extract and validate user from Authorization header."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
-
-    token = authorization.replace("Bearer ", "")
-    payload = utils.decode_token(token)
-
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    if payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="Invalid token type")
-
-    jti = payload.get("jti")
-    if jti and redis_client.is_blacklisted(jti):
-        raise HTTPException(status_code=401, detail="Token has been revoked")
-
-    user_id = payload.get("sub")
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return user
-
-
 @router.post("/register", response_model=TokenResponse)
 def register(request: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user"""
@@ -78,7 +53,7 @@ def register(request: schemas.UserCreate, db: Session = Depends(get_db)):
         .first()
     )
     if db_user:
-        raise HTTPException(status_code=400, detail="Email or login already registered")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="Email or login already registered")
 
     hashed_password = utils.get_password_hash(request.password)
 
@@ -112,16 +87,20 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     if not user:
         print(f"DEBUG: User not found for identifier: {request.identifier}")
-        raise HTTPException(status_code=400, detail="Incorrect credentials")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="Incorrect credentials")
 
     # Handle Yandex-only users who have no password set
     if not user.password_hash:
         print(f"DEBUG: User {user.login} has no password hash (Yandex-only)")
-        raise HTTPException(status_code=400, detail="This account uses Yandex login. Please sign in with Yandex ID.")
+        raise AppException(
+            status_code=400,
+            code="BAD_REQUEST",
+            message="This account uses Yandex login. Please sign in with Yandex ID.",
+        )
 
     if not utils.verify_password(request.password, user.password_hash):
         print(f"DEBUG: Password mismatch for user: {user.login}")
-        raise HTTPException(status_code=400, detail="Incorrect credentials")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="Incorrect credentials")
 
     print(f"DEBUG: Login successful for user: {user.login}")
 
@@ -139,7 +118,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 def yandex_authorize(origin: str | None = None):
     """Redirect to Yandex OAuth page"""
     if not settings.YANDEX_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="Yandex OAuth not configured")
+        raise AppException(status_code=500, code="INTERNAL_ERROR", message="Yandex OAuth not configured")
 
     # Validation: only allow dynamic redirect_uri if the origin is in CORS_ORIGINS
     allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
@@ -151,7 +130,7 @@ def yandex_authorize(origin: str | None = None):
         redirect_uri = settings.YANDEX_REDIRECT_URI
 
     if not redirect_uri:
-        raise HTTPException(status_code=500, detail="Redirect URI not configured")
+        raise AppException(status_code=500, code="INTERNAL_ERROR", message="Redirect URI not configured")
 
     url = f"https://oauth.yandex.ru/authorize?response_type=code&client_id={settings.YANDEX_CLIENT_ID}&redirect_uri={redirect_uri}"
     return RedirectResponse(url)
@@ -166,7 +145,7 @@ class YandexCallbackRequest(BaseModel):
 async def yandex_callback(request: YandexCallbackRequest, db: Session = Depends(get_db)):
     """Handle Yandex OAuth callback and return tokens"""
     if not settings.YANDEX_CLIENT_ID or not settings.YANDEX_CLIENT_SECRET or not settings.YANDEX_REDIRECT_URI:
-        raise HTTPException(status_code=500, detail="Yandex OAuth not configured")
+        raise AppException(status_code=500, code="INTERNAL_ERROR", message="Yandex OAuth not configured")
 
     token_url = "https://oauth.yandex.ru/token"
     # Use dynamic redirect_uri if provided by frontend
@@ -183,14 +162,14 @@ async def yandex_callback(request: YandexCallbackRequest, db: Session = Depends(
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(token_url, data=data)
         if token_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to get Yandex token")
+            raise AppException(status_code=400, code="BAD_REQUEST", message="Failed to get Yandex token")
 
         access_token = token_resp.json().get("access_token")
 
         info_url = "https://login.yandex.ru/info"
         info_resp = await client.get(info_url, headers={"Authorization": f"OAuth {access_token}"})
         if info_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to get Yandex user info")
+            raise AppException(status_code=400, code="BAD_REQUEST", message="Failed to get Yandex user info")
 
         user_info = info_resp.json()
         yandex_id = user_info.get("id")
@@ -240,20 +219,20 @@ def refresh_tokens(request: RefreshRequest, db: Session = Depends(get_db)):
     """Refresh access token using refresh token"""
     payload = utils.decode_token(request.refresh_token)
     if not payload:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        raise AppException(status_code=401, code="UNAUTHORIZED", message="Invalid refresh token")
 
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Invalid token type")
+        raise AppException(status_code=401, code="UNAUTHORIZED", message="Invalid token type")
 
     user_id = payload.get("sub")
     old_jti = payload.get("jti")
 
     if not redis_client.validate_refresh_token(user_id, old_jti):
-        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+        raise AppException(status_code=401, code="UNAUTHORIZED", message="Refresh token has been revoked")
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise AppException(status_code=401, code="UNAUTHORIZED", message="User not found")
 
     redis_client.revoke_refresh_token(user_id, old_jti)
 
@@ -273,9 +252,11 @@ def change_password(
 ):
     """Change password"""
     if not current_user.password_hash:
-        raise HTTPException(status_code=400, detail="Cannot change password for Yandex-linked accounts")
+        raise AppException(
+            status_code=400, code="BAD_REQUEST", message="Cannot change password for Yandex-linked accounts"
+        )
     if not utils.verify_password(request.old_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Incorrect old password")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="Incorrect old password")
 
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
     user.password_hash = utils.get_password_hash(request.new_password)
@@ -308,15 +289,15 @@ def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(
     # Validate token
     user_id = redis_client.get_reset_token_user_id(request.token)
     if not user_id:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="Invalid or expired reset token")
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=400, detail="User not found")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="User not found")
 
     # Check new password is not the same as the old one
     if user.password_hash and utils.verify_password(request.new_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="New password must differ from the current one")
+        raise AppException(status_code=400, code="BAD_REQUEST", message="New password must differ from the current one")
 
     # Update password
     user.password_hash = utils.get_password_hash(request.new_password)

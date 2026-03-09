@@ -58,6 +58,6 @@ def get_token_remaining_ttl(token: str) -> int:
     payload = decode_token(token)
     if not payload or "exp" not in payload:
         return 0
-    exp = datetime.fromtimestamp(payload["exp"])
+    exp = datetime.utcfromtimestamp(payload["exp"])
     remaining = (exp - datetime.utcnow()).total_seconds()
     return max(0, int(remaining))

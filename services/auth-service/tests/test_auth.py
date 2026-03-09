@@ -18,14 +18,14 @@ class TestRegister:
         new_data = {**test_user_data, "login": "different_login"}
         response = client.post("/api/auth/register", json=new_data)
         assert response.status_code == 400
-        assert "already registered" in response.json()["detail"]
+        assert "already registered" in response.json()["message"]
 
     def test_register_duplicate_login(self, client, test_user, test_user_data):
         """Duplicate login returns 400"""
         new_data = {**test_user_data, "email": "different@example.com"}
         response = client.post("/api/auth/register", json=new_data)
         assert response.status_code == 400
-        assert "already registered" in response.json()["detail"]
+        assert "already registered" in response.json()["message"]
 
     def test_register_invalid_email(self, client, test_user_data):
         """Invalid email format returns 422"""
@@ -65,7 +65,7 @@ class TestLogin:
             "/api/auth/login", json={"identifier": test_user_data["email"], "password": "WrongPassword123"}
         )
         assert response.status_code == 400
-        assert "Incorrect credentials" in response.json()["detail"]
+        assert "Incorrect credentials" in response.json()["message"]
 
     def test_login_nonexistent_user(self, test_user, client):
         """Non-existent user returns 400"""
@@ -73,7 +73,7 @@ class TestLogin:
             "/api/auth/login", json={"identifier": "nobody@example.com", "password": "SomePassword123"}
         )
         assert response.status_code == 400
-        assert "Incorrect credentials" in response.json()["detail"]
+        assert "Incorrect credentials" in response.json()["message"]
 
 
 class TestRefresh:
@@ -92,13 +92,13 @@ class TestRefresh:
         """Invalid token returns 401"""
         response = client.post("/api/auth/refresh", json={"refresh_token": "invalid.token.here"})
         assert response.status_code == 401
-        assert "Invalid refresh token" in response.json()["detail"]
+        assert "Invalid refresh token" in response.json()["message"]
 
     def test_refresh_with_access_token(self, client, test_user):
         """Using access token instead of refresh returns 401"""
         response = client.post("/api/auth/refresh", json={"refresh_token": test_user["access_token"]})
         assert response.status_code == 401
-        assert "Invalid token type" in response.json()["detail"]
+        assert "Invalid token type" in response.json()["message"]
 
     def test_refresh_revoked_token(self, client, test_user):
         """Using already-used refresh token returns 401"""
@@ -107,7 +107,7 @@ class TestRefresh:
 
         response2 = client.post("/api/auth/refresh", json={"refresh_token": test_user["refresh_token"]})
         assert response2.status_code == 401
-        assert "revoked" in response2.json()["detail"]
+        assert "revoked" in response2.json()["message"]
 
 
 class TestPasswordChange:
@@ -137,7 +137,7 @@ class TestPasswordChange:
             headers=auth_headers,
         )
         assert response.status_code == 400
-        assert "Incorrect old password" in response.json()["detail"]
+        assert "Incorrect old password" in response.json()["message"]
 
     def test_password_change_no_auth(self, client):
         """No authorization returns 401"""
@@ -168,7 +168,7 @@ class TestLogout:
 
         profile_response = client.get("/api/users/me", headers=auth_headers)
         assert profile_response.status_code == 401
-        assert "revoked" in profile_response.json()["detail"]
+        assert "revoked" in profile_response.json()["message"]
 
     def test_logout_invalid_refresh(self, test_user, client):
         """Logout with invalid refresh token succeeds"""
@@ -289,7 +289,7 @@ class TestPasswordReset:
             },
         )
         assert response.status_code == 400
-        assert "differ" in response.json()["detail"]
+        assert "differ" in response.json()["message"]
 
     def test_reset_password_weak(self, client, test_user, fake_redis):
         """Weak password returns 422"""
@@ -306,7 +306,7 @@ class TestPasswordReset:
             json={"token": "nonexistent-token", "new_password": "ValidNew123!", "confirm_password": "ValidNew123!"},
         )
         assert response.status_code == 400
-        assert "Invalid" in response.json()["detail"]
+        assert "Invalid" in response.json()["message"]
 
     def test_reset_password_token_reuse(self, client, test_user, test_user_data, fake_redis):
         """Used reset token cannot be reused"""

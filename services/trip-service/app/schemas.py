@@ -1,11 +1,11 @@
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel
 
 
-class TripStatus(str, Enum):
+class TripStatus(StrEnum):
     planned = "planned"
     active = "active"
     completed = "completed"
@@ -20,6 +20,8 @@ class TripCreate(BaseModel):
     budget: float | None = None
     currency: str = "RUB"
     people_count: int = 1
+    trip_type: str | None = None
+    season: str | None = None
     notes: str | None = None
 
 
@@ -32,6 +34,8 @@ class TripUpdate(BaseModel):
     currency: str | None = None
     people_count: int | None = None
     status: TripStatus | None = None
+    trip_type: str | None = None
+    season: str | None = None
     notes: str | None = None
 
 
@@ -46,6 +50,8 @@ class TripResponse(BaseModel):
     currency: str
     people_count: int
     status: TripStatus
+    trip_type: str | None = None
+    season: str | None = None
     notes: str | None
     created_at: str
     updated_at: str | None

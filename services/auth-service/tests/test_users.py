@@ -38,7 +38,7 @@ class TestUpdateProfile:
 
         response = client.put("/api/users/me", json={"email": second_user_data["email"]}, headers=auth_headers)
         assert response.status_code == 400
-        assert "already taken" in response.json()["detail"]
+        assert "already taken" in response.json()["message"]
 
     def test_update_login_success(self, client, auth_headers):
         """Update login with unique value succeeds"""
@@ -53,7 +53,7 @@ class TestUpdateProfile:
 
         response = client.put("/api/users/me", json={"login": second_user_data["login"]}, headers=auth_headers)
         assert response.status_code == 400
-        assert "already taken" in response.json()["detail"]
+        assert "already taken" in response.json()["message"]
 
     def test_update_no_auth(self, client):
         """Update without auth returns 401"""

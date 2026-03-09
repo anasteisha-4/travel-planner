@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import Base, engine
+from app.exceptions import AppException
 from app.routers import trips
 
 app = FastAPI(
@@ -11,7 +12,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-Base.metadata.create_all(bind=engine)
+
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
 
 app.add_middleware(
@@ -24,6 +25,11 @@ app.add_middleware(
 )
 
 app.include_router(trips.router, prefix="/api/trips", tags=["Trips"])
+
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request, exc):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.code, "message": exc.message})
 
 
 @app.get("/health")
