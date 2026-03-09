@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { onboardingApi } from '../api/onboarding.api';
 import { BUDGET_LIMITS } from '../config/constants';
 
-export const useOnboarding = ({ 
-  onComplete, 
-  onSkip 
-}: { 
-  onComplete: () => void; 
-  onSkip: () => void; 
+export const useOnboarding = ({
+  onComplete,
+  onSkip,
+}: {
+  onComplete: () => void;
+  onSkip: () => void;
 }) => {
   const [step, setStep] = useState(1);
   const [travelTypes, setTravelTypes] = useState<string[]>([]);
@@ -16,15 +16,14 @@ export const useOnboarding = ({
   const [currency, setCurrency] = useState('RUB');
   const [budgetRange, setBudgetRange] = useState<[number, number]>([0, 100000]);
   const [tripDuration, setTripDuration] = useState<string | null>(null);
+  const [departureCity, setDepartureCity] = useState('');
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const { toast } = useToast();
 
   const toggleTravelType = (id: string) => {
-    setTravelTypes(prev =>
-      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-    );
+    setTravelTypes((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
   };
 
   const handleCurrencyChange = (v: string) => {
@@ -43,6 +42,7 @@ export const useOnboarding = ({
         budget_min: null,
         budget_max: null,
         trip_duration: null,
+        departure_city: null,
         additional_info: null,
       });
       onSkip();
@@ -63,11 +63,16 @@ export const useOnboarding = ({
         budget_min: budgetRange[0] || null,
         budget_max: budgetRange[1] || null,
         trip_duration: tripDuration,
+        departure_city: departureCity || null,
         additional_info: additionalInfo || null,
       });
       onComplete();
     } catch {
-      toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось сохранить предпочтения' });
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка',
+        description: 'Не удалось сохранить предпочтения',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -88,6 +93,8 @@ export const useOnboarding = ({
     setBudgetRange,
     tripDuration,
     setTripDuration,
+    departureCity,
+    setDepartureCity,
     additionalInfo,
     setAdditionalInfo,
     isLoading,

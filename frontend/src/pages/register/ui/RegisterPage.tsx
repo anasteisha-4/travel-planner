@@ -5,9 +5,9 @@ export const RegisterPage = () => {
   const navigate = useNavigate();
 
   return (
-    <RegisterForm 
-      onSuccess={() => navigate('/onboarding')} 
-      onLoginClick={() => navigate('/login')} 
+    <RegisterForm
+      onSuccess={() => navigate('/onboarding')}
+      onLoginClick={() => navigate('/login')}
     />
   );
 };

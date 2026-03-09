@@ -1,18 +1,30 @@
-import { Badge } from '@/shared/ui';
-import { Button } from '@/shared/ui';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui';
-import { Label } from '@/shared/ui';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui';
-import { Slider } from '@/shared/ui';
-import { Textarea } from '@/shared/ui';
+import { useIsOnline } from '@/shared/lib';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Slider,
+  Textarea,
+} from '@/shared/ui';
 import { ArrowLeft, Loader2, SkipForward } from 'lucide-react';
 import { CURRENCIES, TRAVEL_TYPES, TRIP_DURATIONS } from '../config/constants';
 import { useOnboarding } from '../model/useOnboarding';
 
-export const OnboardingWizard = ({ 
+export const OnboardingWizard = ({
   onComplete,
-  onSkip
-}: { 
+  onSkip,
+}: {
   onComplete: () => void;
   onSkip: () => void;
 }) => {
@@ -29,6 +41,8 @@ export const OnboardingWizard = ({
     setBudgetRange,
     tripDuration,
     setTripDuration,
+    departureCity,
+    setDepartureCity,
     additionalInfo,
     setAdditionalInfo,
     isLoading,
@@ -36,20 +50,23 @@ export const OnboardingWizard = ({
     handleSave,
     budgetConfig,
   } = useOnboarding({ onComplete, onSkip });
+  const isOnline = useIsOnline();
 
   return (
-    <div className="flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-lg mx-auto glass-card">
-        <CardHeader className="text-center space-y-2">
+    <div className="flex flex-1 items-center justify-center p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
+      <Card className="glass-card mx-auto w-full max-w-lg">
+        <CardHeader className="space-y-2 text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">
             {step === 1 ? 'Расскажите о себе' : 'Ещё пара вопросов'}
           </CardTitle>
-          <CardDescription>
-            Шаг {step} из 2
-          </CardDescription>
-          <div className="flex gap-2 justify-center pt-2">
-            <div className={`h-1.5 w-16 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
-            <div className={`h-1.5 w-16 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
+          <CardDescription>Шаг {step} из 2</CardDescription>
+          <div className="flex justify-center gap-2 pt-2">
+            <div
+              className={`h-1.5 w-16 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-muted'}`}
+            />
+            <div
+              className={`h-1.5 w-16 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-muted'}`}
+            />
           </div>
         </CardHeader>
 
@@ -59,11 +76,11 @@ export const OnboardingWizard = ({
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Любимые виды отдыха</Label>
                 <div className="flex flex-wrap gap-2">
-                  {TRAVEL_TYPES.map(type => (
+                  {TRAVEL_TYPES.map((type) => (
                     <Badge
                       key={type.id}
                       variant={travelTypes.includes(type.id) ? 'default' : 'outline'}
-                      className="cursor-pointer text-sm py-2 px-3 transition-all active:scale-95 select-none"
+                      className="cursor-pointer select-none px-3 py-2 text-sm transition-all active:scale-95"
                       onClick={() => toggleTravelType(type.id)}
                     >
                       {type.label}
@@ -89,8 +106,10 @@ export const OnboardingWizard = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CURRENCIES.map(c => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    {CURRENCIES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -110,7 +129,7 @@ export const OnboardingWizard = ({
                     className="w-full"
                   />
                 </div>
-                <div className="flex justify-between text-sm text-muted-foreground font-medium">
+                <div className="flex justify-between text-sm font-medium text-muted-foreground">
                   <span>{budgetConfig.format(budgetRange[0])}</span>
                   <span>{budgetConfig.format(budgetRange[1])}</span>
                 </div>
@@ -119,17 +138,27 @@ export const OnboardingWizard = ({
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Обычная длительность поездок</Label>
                 <div className="flex flex-wrap gap-2">
-                  {TRIP_DURATIONS.map(d => (
+                  {TRIP_DURATIONS.map((d) => (
                     <Badge
                       key={d.id}
                       variant={tripDuration === d.id ? 'default' : 'outline'}
-                      className="cursor-pointer text-sm py-2 px-4 transition-all active:scale-95 select-none"
+                      className="cursor-pointer select-none px-4 py-2 text-sm transition-all active:scale-95"
                       onClick={() => setTripDuration(tripDuration === d.id ? null : d.id)}
                     >
                       {d.label}
                     </Badge>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Город отправления</Label>
+                <Input
+                  placeholder="Например: Россия, Москва"
+                  value={departureCity}
+                  onChange={(e) => setDepartureCity(e.target.value)}
+                  className="h-12"
+                />
               </div>
 
               <div className="space-y-3">
@@ -147,7 +176,7 @@ export const OnboardingWizard = ({
           <div className="flex flex-col gap-3 pt-2">
             <div className="flex gap-3">
               {step === 2 && (
-               <Button
+                <Button
                   variant="outline"
                   onClick={() => setStep(1)}
                   disabled={isLoading}
@@ -159,7 +188,7 @@ export const OnboardingWizard = ({
               )}
               <Button
                 onClick={step === 1 ? () => setStep(2) : handleSave}
-                disabled={isLoading}
+                disabled={isLoading || (!isOnline && step === 2)}
                 className="flex-1"
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -169,7 +198,7 @@ export const OnboardingWizard = ({
             <Button
               variant="ghost"
               onClick={handleSkip}
-              disabled={isLoading}
+              disabled={isLoading || !isOnline}
               className="text-muted-foreground"
             >
               <SkipForward className="mr-2 h-4 w-4" />

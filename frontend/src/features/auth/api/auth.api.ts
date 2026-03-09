@@ -30,7 +30,11 @@ export const authApi = {
     const response = await apiClient.post('/api/auth/password/forgot', { email });
     return response.data as { message: string };
   },
-  resetPassword: async (data: { token: string; new_password: string; confirm_password: string }) => {
+  resetPassword: async (data: {
+    token: string;
+    new_password: string;
+    confirm_password: string;
+  }) => {
     const response = await apiClient.post('/api/auth/password/reset', data);
     return response.data as { message: string };
   },

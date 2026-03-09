@@ -5,19 +5,19 @@ import { useLogin } from '../model/useLogin';
 const FieldError = ({ message }: { message?: string }) => {
   if (!message) return null;
   return (
-    <p className="text-[13px] text-destructive font-medium mt-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+    <p className="mt-1.5 text-[13px] font-medium text-destructive duration-200 animate-in fade-in-0 slide-in-from-top-1">
       {message}
     </p>
   );
 };
 
-export const LoginForm = ({ 
+export const LoginForm = ({
   oauthCallback = false,
   onSuccess,
   onRegisterClick,
   onForgotPasswordClick,
-  onError
-}: { 
+  onError,
+}: {
   oauthCallback?: boolean;
   onSuccess: (onboardingCompleted?: boolean) => void;
   onRegisterClick: () => void;
@@ -58,35 +58,37 @@ export const LoginForm = ({
     >
       <div className="space-y-1">
         <Label htmlFor="identifier">Логин или почта</Label>
-        <Input 
-          id="identifier" 
-          type="text" 
-          placeholder="email@example.com" 
-          required 
+        <Input
+          id="identifier"
+          type="text"
+          placeholder="email@example.com"
+          required
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           disabled={isLoading}
-          className={fieldErrors.identifier ? 'border-destructive focus-visible:ring-destructive' : ''}
+          className={
+            fieldErrors.identifier ? 'border-destructive focus-visible:ring-destructive' : ''
+          }
         />
         <FieldError message={fieldErrors.identifier} />
       </div>
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">Пароль</Label>
-          <Button 
+          <Button
             variant="link"
             type="button"
             onClick={onForgotPasswordClick}
-            className="text-sm p-0 h-auto"
+            className="h-auto p-0 text-sm"
           >
             Забыли пароль?
           </Button>
         </div>
         <div className="relative">
-          <Input 
-            id="password" 
-            type={showPassword ? "text" : "password"} 
-            required 
+          <Input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
@@ -95,14 +97,10 @@ export const LoginForm = ({
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground active:text-foreground transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors active:text-foreground"
             tabIndex={-1}
           >
-            {showPassword ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         <FieldError message={fieldErrors.password} />

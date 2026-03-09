@@ -26,6 +26,7 @@ class UserPreferences(BaseModel):
     budget_min: int | None = None
     budget_max: int | None = None
     trip_duration: str | None = None
+    departure_city: str | None = None
     additional_info: str | None = None
 
 

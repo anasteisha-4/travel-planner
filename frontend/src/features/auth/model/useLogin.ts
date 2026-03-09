@@ -23,7 +23,7 @@ export const useLogin = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  
+
   const location = useLocation();
   const { toast } = useToast();
 
@@ -33,12 +33,12 @@ export const useLogin = ({
         setIsLoading(true);
         const params = new URLSearchParams(location.search);
         const code = params.get('code');
-        
+
         if (code) {
           try {
-            const res = await authApi.yandexCallback({ 
+            const res = await authApi.yandexCallback({
               code,
-              redirect_uri: `${window.location.origin}/auth/yandex/callback`
+              redirect_uri: `${window.location.origin}/auth/yandex/callback`,
             });
             localStorage.setItem('access_token', res.access_token);
             localStorage.setItem('refresh_token', res.refresh_token);
@@ -49,21 +49,25 @@ export const useLogin = ({
             if (axios.isAxiosError(e)) {
               message = e.response?.data?.detail || message;
             }
-            toast({ 
-              variant: 'destructive', 
-              title: 'Ошибка OAuth', 
-              description: message 
+            toast({
+              variant: 'destructive',
+              title: 'Ошибка OAuth',
+              description: message,
             });
             if (onError) onError();
           }
         } else {
-          toast({ variant: 'destructive', title: 'Ошибка', description: 'Яндекс не вернул код авторизации' });
+          toast({
+            variant: 'destructive',
+            title: 'Ошибка',
+            description: 'Яндекс не вернул код авторизации',
+          });
           if (onError) onError();
         }
         setIsLoading(false);
       }
     };
-    
+
     processOAuth();
   }, [oauthCallback, location, onError, onSuccess, toast]);
 
@@ -71,7 +75,7 @@ export const useLogin = ({
     if (field === 'identifier') setIdentifier(value);
     if (field === 'password') setPassword(value);
     if (fieldErrors[field]) {
-      setFieldErrors(prev => {
+      setFieldErrors((prev) => {
         const next = { ...prev };
         delete next[field];
         return next;
@@ -94,7 +98,7 @@ export const useLogin = ({
     } catch (err) {
       if (err instanceof z.ZodError) {
         const errors: FieldErrors = {};
-        err.issues.forEach(issue => {
+        err.issues.forEach((issue) => {
           const field = issue.path[0];
           if (typeof field === 'string') {
             errors[field] = issue.message;
@@ -102,10 +106,10 @@ export const useLogin = ({
         });
         setFieldErrors(errors);
       } else if (axios.isAxiosError(err)) {
-        toast({ 
-          variant: 'destructive', 
-          title: 'Ошибка', 
-          description: err.response?.data?.detail || 'Неверный логин/пароль' 
+        toast({
+          variant: 'destructive',
+          title: 'Ошибка',
+          description: err.response?.data?.detail || 'Неверный логин/пароль',
         });
       }
     } finally {

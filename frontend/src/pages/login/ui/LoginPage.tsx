@@ -9,9 +9,9 @@ export const LoginPage = () => {
   };
 
   return (
-    <LoginForm 
-      onSuccess={handleSuccess} 
-      onRegisterClick={() => navigate('/register')} 
+    <LoginForm
+      onSuccess={handleSuccess}
+      onRegisterClick={() => navigate('/register')}
       onForgotPasswordClick={() => navigate('/forgot-password')}
     />
   );

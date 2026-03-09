@@ -4,9 +4,5 @@ import { useNavigate } from 'react-router-dom';
 export const ResetPasswordPage = () => {
   const navigate = useNavigate();
 
-  return (
-    <ResetPasswordForm
-      onLoginClick={() => navigate('/login')}
-    />
-  );
+  return <ResetPasswordForm onLoginClick={() => navigate('/login')} />;
 };

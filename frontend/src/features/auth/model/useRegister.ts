@@ -11,7 +11,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
     email: '',
     login: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,9 +20,9 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
-    setFormData(prev => ({ ...prev, [id]: value }));
+    setFormData((prev) => ({ ...prev, [id]: value }));
     if (fieldErrors[id]) {
-      setFieldErrors(prev => {
+      setFieldErrors((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -37,10 +37,10 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
     setIsLoading(true);
     try {
       const parsedData = RegisterFormSchema.parse(formData);
-      
+
       // Separate API data from validation data
       const { confirmPassword: _, ...apiData } = parsedData;
-      
+
       const res = await authApi.register(apiData);
       localStorage.setItem('access_token', res.access_token);
       localStorage.setItem('refresh_token', res.refresh_token);
@@ -49,7 +49,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
       if (err instanceof z.ZodError) {
         const errors: FieldErrors = {};
         // Use a map to keep only the first error for each field
-        err.issues.forEach(issue => {
+        err.issues.forEach((issue) => {
           const field = issue.path[0] as string;
           if (!errors[field]) {
             errors[field] = issue.message;
@@ -64,10 +64,10 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
         } else if (Array.isArray(detail)) {
           message = detail.map((d: { msg: string }) => d.msg).join('. ');
         }
-        toast({ 
-          variant: 'destructive', 
-          title: 'Ошибка регистрации', 
-          description: message 
+        toast({
+          variant: 'destructive',
+          title: 'Ошибка регистрации',
+          description: message,
         });
       }
     } finally {

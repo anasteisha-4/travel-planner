@@ -1,5 +1,12 @@
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/shared/ui/card';
 import { Separator } from '@/shared/ui/separator';
 
 type AuthFormProps = {
@@ -23,14 +30,18 @@ export const AuthForm = ({
   footerText,
   footerLinkText,
   onFooterLinkClick,
-  isLoading
+  isLoading,
 }: AuthFormProps) => {
   return (
-    <div className="flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-md mx-auto glass-card">
+    <div className="flex flex-1 items-center justify-center p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
+      <Card className="glass-card mx-auto w-full max-w-md">
         <CardHeader className="space-y-3 text-center">
           <div className="mx-auto flex items-center justify-center">
-            <img src="/assets/logo.png" alt="Triply Logo" className="h-20 w-20 object-contain drop-shadow-md" />
+            <img
+              src="/assets/logo.png"
+              alt="Triply Logo"
+              className="h-20 w-20 object-contain drop-shadow-md"
+            />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
@@ -39,19 +50,19 @@ export const AuthForm = ({
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             {children}
           </form>
-          
+
           <div className="my-6 flex items-center">
             <Separator className="flex-1 opacity-50" />
-            <span className="mx-4 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+            <span className="mx-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               или
             </span>
             <Separator className="flex-1 opacity-50" />
           </div>
-          
-          <Button 
+
+          <Button
             type="button"
-            variant="outline" 
-            className="w-full bg-[#FC3F1D]/10 active:bg-[#FC3F1D]/20 text-[#FC3F1D] border-[#FC3F1D]/20 transition-all group backdrop-blur-sm" 
+            variant="outline"
+            className="group w-full border-[#FC3F1D]/20 bg-[#FC3F1D]/10 text-[#FC3F1D] backdrop-blur-sm transition-all active:bg-[#FC3F1D]/20"
             onClick={onYandexLogin}
             disabled={isLoading}
           >
@@ -62,11 +73,11 @@ export const AuthForm = ({
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-center text-sm text-muted-foreground">
             {footerText}{' '}
-            <Button 
+            <Button
               variant="link"
               type="button"
-              onClick={onFooterLinkClick} 
-              className="text-primary font-medium text-base p-0 h-auto"
+              onClick={onFooterLinkClick}
+              className="h-auto p-0 text-base font-medium text-primary"
             >
               {footerLinkText}
             </Button>

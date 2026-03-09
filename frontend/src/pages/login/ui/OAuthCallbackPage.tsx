@@ -9,8 +9,8 @@ export const OAuthCallbackPage = () => {
   };
 
   return (
-    <LoginForm 
-      oauthCallback={true} 
+    <LoginForm
+      oauthCallback={true}
       onSuccess={handleSuccess}
       onRegisterClick={() => navigate('/register')}
       onForgotPasswordClick={() => navigate('/forgot-password')}

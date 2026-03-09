@@ -1,4 +1,4 @@
-import { apiClient } from "@/shared/api";
+import { apiClient } from '@/shared/api';
 import type { UserProfile } from '../model/types';
 import { UserProfileSchema } from '../model/types';
 

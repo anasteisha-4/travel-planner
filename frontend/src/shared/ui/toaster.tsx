@@ -1,15 +1,15 @@
 import {
-    Toast,
-    ToastClose,
-    ToastDescription,
-    ToastProvider,
-    ToastTitle,
-    ToastViewport,
-} from "@/shared/ui/toast"
-import { useToast } from "@/shared/ui/use-toast"
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from '@/shared/ui/toast';
+import { useToast } from '@/shared/ui/use-toast';
 
 export const Toaster = () => {
-  const { toasts } = useToast()
+  const { toasts } = useToast();
 
   return (
     <ToastProvider swipeDirection="up">
@@ -18,16 +18,14 @@ export const Toaster = () => {
           <Toast key={id} {...props}>
             <div className="grid gap-1">
               {title && <ToastTitle>{title}</ToastTitle>}
-              {description && (
-                <ToastDescription>{description}</ToastDescription>
-              )}
+              {description && <ToastDescription>{description}</ToastDescription>}
             </div>
             {action}
             <ToastClose />
           </Toast>
-        )
+        );
       })}
       <ToastViewport />
     </ToastProvider>
-  )
-}
+  );
+};

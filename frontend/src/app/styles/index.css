@@ -34,7 +34,6 @@
 
     --radius: 0.5rem;
 
-
     --color-primary-500: #3b82f6;
   }
 
@@ -73,16 +72,25 @@
   * {
     @apply border-border;
   }
+  html,
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    height: 100%;
+    height: -webkit-fill-available;
+    margin: 0;
+    padding: 0;
+  }
 
-    background-image: 
-      radial-gradient(at 0% 0%, hsla(var(--primary)/0.15) 0, transparent 50%),
-      radial-gradient(at 50% 100%, hsla(var(--primary)/0.1) 0, transparent 50%),
-      radial-gradient(at 100% 0%, hsla(var(--secondary)/0.15) 0, transparent 50%);
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+
+    background-image:
+      radial-gradient(at 0% 0%, hsla(var(--primary) / 0.15) 0, transparent 50%),
+      radial-gradient(at 50% 100%, hsla(var(--primary) / 0.1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(var(--secondary) / 0.15) 0, transparent 50%);
     background-origin: border-box;
     background-attachment: fixed;
-
 
     overscroll-behavior-y: none;
     -webkit-user-select: none;
@@ -91,8 +99,8 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-
-  input, textarea {
+  input,
+  textarea {
     -webkit-user-select: auto;
     user-select: auto;
   }
@@ -100,17 +108,16 @@
 
 @layer utilities {
   .glass-card {
-    @apply bg-background/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-2xl shadow-black/10 dark:shadow-black/40;
-  }
-  
-  .glass-panel {
-    @apply bg-background/40 backdrop-blur-md border border-white/10 dark:border-white/5;
-  }
-  
-  .glass-button {
-    @apply bg-primary/80 backdrop-blur-md active:bg-primary/90 text-primary-foreground border border-white/20 shadow-lg shadow-primary/20 transition-all;
+    @apply border border-white/20 bg-background/80 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:border-white/10 dark:shadow-black/40;
   }
 
+  .glass-panel {
+    @apply border border-white/10 bg-background/40 backdrop-blur-md dark:border-white/5;
+  }
+
+  .glass-button {
+    @apply border border-white/20 bg-primary/80 text-primary-foreground shadow-lg shadow-primary/20 backdrop-blur-md transition-all active:bg-primary/90;
+  }
 
   .safe-area-top {
     padding-top: env(safe-area-inset-top);

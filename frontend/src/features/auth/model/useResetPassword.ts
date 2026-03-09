@@ -24,7 +24,7 @@ export const useResetPassword = () => {
     if (field === 'new_password') setNewPassword(value);
     if (field === 'confirm_password') setConfirmPassword(value);
     if (fieldErrors[field]) {
-      setFieldErrors(prev => {
+      setFieldErrors((prev) => {
         const next = { ...prev };
         delete next[field];
         return next;
@@ -58,7 +58,7 @@ export const useResetPassword = () => {
     } catch (err) {
       if (err instanceof z.ZodError) {
         const errors: FieldErrors = {};
-        err.issues.forEach(issue => {
+        err.issues.forEach((issue) => {
           const field = issue.path[0];
           if (typeof field === 'string' && !errors[field]) {
             errors[field] = issue.message;

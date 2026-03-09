@@ -33,7 +33,7 @@ export const useForgotPassword = () => {
     } catch (err) {
       if (err instanceof z.ZodError) {
         const errors: FieldErrors = {};
-        err.issues.forEach(issue => {
+        err.issues.forEach((issue) => {
           const field = issue.path[0];
           if (typeof field === 'string') {
             errors[field] = issue.message;

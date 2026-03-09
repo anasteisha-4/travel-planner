@@ -3,11 +3,11 @@ import { Outlet } from 'react-router-dom';
 
 export const Layout = ({ bottomNav }: { bottomNav?: React.ReactNode }) => {
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-x-hidden">
-      <main className="flex-1 flex flex-col w-full max-w-md mx-auto relative safe-area-top" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <main className="relative mx-auto w-full max-w-md flex-1 overflow-y-auto overscroll-contain px-4">
         <Outlet />
       </main>
-      {bottomNav}
+      <div className="z-50 mx-auto w-full max-w-md shrink-0">{bottomNav}</div>
       <Toaster />
     </div>
   );
