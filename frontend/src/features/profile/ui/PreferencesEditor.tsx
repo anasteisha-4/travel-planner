@@ -10,10 +10,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
   Slider,
   Textarea,
 } from '@/shared/ui';
@@ -82,12 +82,12 @@ export const PreferencesEditor = ({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90dvh] overflow-y-auto rounded-t-2xl">
-        <SheetHeader className="pb-2">
-          <SheetTitle className="text-xl font-bold tracking-tight">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="h-[90dvh] overflow-y-auto">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle className="text-xl font-bold tracking-tight">
             {step === 1 ? 'Предпочтения' : 'Бюджет и детали'}
-          </SheetTitle>
+          </DrawerTitle>
           <div className="flex gap-2 pt-2">
             <div
               className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-muted'}`}
@@ -96,7 +96,7 @@ export const PreferencesEditor = ({
               className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-muted'}`}
             />
           </div>
-        </SheetHeader>
+        </DrawerHeader>
 
         <div className="space-y-6 pt-4">
           {step === 1 ? (
@@ -223,7 +223,7 @@ export const PreferencesEditor = ({
             </Button>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   );
 };

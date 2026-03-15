@@ -1,5 +1,5 @@
 import { Badge, Card, CardContent } from '@/shared/ui';
-import { Calendar, MapPin, Users, Wallet } from 'lucide-react';
+import { Calendar, Users, Wallet } from 'lucide-react';
 import type { Trip } from '../model/types';
 
 const STATUS_CONFIG: Record<
@@ -27,12 +27,13 @@ export const TripCard = ({ trip, onClick }: { trip: Trip; onClick: () => void })
     >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 space-y-1">
-            <h3 className="truncate text-base font-semibold">{trip.title}</h3>
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <MapPin className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{trip.destination}</span>
-            </p>
+          <div className="min-w-0 space-y-0.5">
+            <h3 className="truncate text-lg font-bold tracking-tight">{trip.destination}</h3>
+            {trip.departure_city && (
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                <span className="truncate">из {trip.departure_city}</span>
+              </p>
+            )}
           </div>
           <Badge variant={statusInfo.variant} className="shrink-0 text-xs">
             {statusInfo.label}

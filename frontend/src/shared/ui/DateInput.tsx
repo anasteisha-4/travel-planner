@@ -24,10 +24,11 @@ const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
     }, [value]);
 
     return (
-      <div className={cn('relative w-full', className)}>
+      <div className="relative w-full">
         <div
           className={cn(
-            'flex h-12 w-full items-center justify-between rounded-xl border border-input bg-transparent px-4 py-2 text-base shadow-sm ring-offset-background transition-colors placeholder:text-muted-foreground focus-within:ring-1 focus-within:ring-ring'
+            'flex h-12 w-full items-center justify-between rounded-xl border border-input bg-transparent px-4 py-2 text-base shadow-sm ring-offset-background transition-colors placeholder:text-muted-foreground focus-within:ring-1 focus-within:ring-ring',
+            className
           )}
         >
           <span className={cn('block truncate', !value && 'text-muted-foreground')}>

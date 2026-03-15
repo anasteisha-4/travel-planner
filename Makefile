@@ -28,10 +28,10 @@ test-cov:
 	docker-compose run --rm trip-service pytest --cov=app tests/
 
 lint:
-	cd services/auth-service && ruff check . --config ruff.toml
+	cd services/auth-service && ruff check . --config ruff.toml && cd ../trip-service && ruff check . --config ruff.toml
 
 fix:
-	cd services/auth-service && ruff check . --config ruff.toml --fix
+	cd services/auth-service && ruff check . --config ruff.toml --fix && cd ../trip-service && ruff check . --config ruff.toml --fix
 
 # Install
 install:

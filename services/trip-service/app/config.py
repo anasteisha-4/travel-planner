@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     CORS_ORIGINS: str
+    FXR_API_KEY: str = ""
 
     class Config:
         env_file = find_env_file()

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -13,7 +14,6 @@ class TripStatus(StrEnum):
 
 
 class TripCreate(BaseModel):
-    title: str
     destination: str
     start_date: date
     end_date: date
@@ -22,11 +22,11 @@ class TripCreate(BaseModel):
     people_count: int = 1
     trip_type: str | None = None
     season: str | None = None
+    departure_city: str | None = None
     notes: str | None = None
 
 
 class TripUpdate(BaseModel):
-    title: str | None = None
     destination: str | None = None
     start_date: date | None = None
     end_date: date | None = None
@@ -36,13 +36,13 @@ class TripUpdate(BaseModel):
     status: TripStatus | None = None
     trip_type: str | None = None
     season: str | None = None
+    departure_city: str | None = None
     notes: str | None = None
 
 
 class TripResponse(BaseModel):
     id: UUID
     user_id: UUID
-    title: str
     destination: str
     start_date: date
     end_date: date
@@ -52,9 +52,69 @@ class TripResponse(BaseModel):
     status: TripStatus
     trip_type: str | None = None
     season: str | None = None
+    departure_city: str | None = None
     notes: str | None
     created_at: str
     updated_at: str | None
 
     class Config:
         from_attributes = True
+
+
+class ExpenseCategory(StrEnum):
+    food = "food"
+    transport = "transport"
+    housing = "housing"
+    entertainment = "entertainment"
+    shopping = "shopping"
+    other = "other"
+
+
+class ExpenseCreate(BaseModel):
+    amount: Decimal
+    currency: str
+    category: ExpenseCategory
+    description: str | None = None
+    expense_date: date | None = None
+
+
+class ExpenseUpdate(BaseModel):
+    amount: Decimal | None = None
+    currency: str | None = None
+    category: ExpenseCategory | None = None
+    description: str | None = None
+    expense_date: date | None = None
+
+
+class ExpenseResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    user_id: UUID
+    amount: Decimal
+    currency: str
+    category: ExpenseCategory
+    description: str | None
+    expense_date: date | None
+    created_at: str
+    updated_at: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class ExpenseSummary(BaseModel):
+    total: Decimal
+    by_category: dict[str, Decimal]
+
+
+class ConvertedExpenseSummary(BaseModel):
+    total: Decimal
+    by_category: dict[str, Decimal]
+    target_currency: str
+    original_currencies: list[str]
+    has_conversion_errors: bool = False
+
+
+class ExchangeRatesResponse(BaseModel):
+    base: str
+    rates: dict[str, float]

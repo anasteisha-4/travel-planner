@@ -5,7 +5,7 @@ import { TripSchema } from '../model/types';
 export const tripApi = {
   getTrips: async (status?: TripStatus): Promise<Trip[]> => {
     const params = status ? { status } : {};
-    const response = await apiClient.get('/api/trips', { params });
+    const response = await apiClient.get('/api/trips/', { params });
     return response.data.map((item: unknown) => TripSchema.parse(item));
   },
 
@@ -15,7 +15,7 @@ export const tripApi = {
   },
 
   createTrip: async (data: TripCreate): Promise<Trip> => {
-    const response = await apiClient.post('/api/trips', data);
+    const response = await apiClient.post('/api/trips/', data);
     return TripSchema.parse(response.data);
   },
 

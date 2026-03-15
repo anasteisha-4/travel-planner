@@ -103,7 +103,6 @@ def other_user_headers():
 @pytest.fixture
 def trip_data():
     return {
-        "title": "Отпуск в Турции",
         "destination": "Стамбул",
         "start_date": "2026-06-01",
         "end_date": "2026-06-14",

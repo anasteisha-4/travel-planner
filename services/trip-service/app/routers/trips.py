@@ -15,7 +15,6 @@ def trip_to_response(trip: models.Trip) -> schemas.TripResponse:
     return schemas.TripResponse(
         id=trip.id,
         user_id=trip.user_id,
-        title=trip.title,
         destination=trip.destination,
         start_date=trip.start_date,
         end_date=trip.end_date,
@@ -25,6 +24,7 @@ def trip_to_response(trip: models.Trip) -> schemas.TripResponse:
         status=trip.status,
         trip_type=trip.trip_type,
         season=trip.season,
+        departure_city=trip.departure_city,
         notes=trip.notes,
         created_at=trip.created_at.isoformat() if trip.created_at else "",
         updated_at=trip.updated_at.isoformat() if trip.updated_at else None,
@@ -52,7 +52,6 @@ def create_trip(
 ):
     trip = models.Trip(
         user_id=user_id,
-        title=trip_data.title,
         destination=trip_data.destination,
         start_date=trip_data.start_date,
         end_date=trip_data.end_date,
@@ -61,6 +60,7 @@ def create_trip(
         people_count=trip_data.people_count,
         trip_type=trip_data.trip_type,
         season=trip_data.season,
+        departure_city=trip_data.departure_city,
         notes=trip_data.notes,
     )
     db.add(trip)

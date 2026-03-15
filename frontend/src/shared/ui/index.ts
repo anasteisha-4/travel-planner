@@ -1,4 +1,5 @@
 export * from './AuthForm';
+export * from './drawer';
 export * from './badge';
 export * from './button';
 export * from './card';
@@ -6,6 +7,7 @@ export * from './DateInput';
 export * from './dialog';
 export * from './dropdown-menu';
 export * from './form';
+export * from './form-error';
 export * from './input';
 export * from './label';
 export * from './PageHeader';

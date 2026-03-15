@@ -3,3 +3,4 @@ ignores:
   - "postcss"
   - "virtual:pwa-register"
   - "@feature-sliced/steiger-plugin"
+  - "prettier-plugin-tailwindcss"

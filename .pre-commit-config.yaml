@@ -1,10 +1,12 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.7 # Note: adjust version if needed
+    rev: v0.9.7
     hooks:
       - id: ruff
-        args: [ --fix ]
+        args: [--fix]
+        files: ^services/
       - id: ruff-format
+        files: ^services/
 
   - repo: local
     hooks:
@@ -15,9 +17,16 @@ repos:
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false
 
-      - id: frontend-tsc
+      - id: frontend-typecheck
         name: typecheck
-        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        entry: bash -c 'cd frontend && npm run typecheck'
         language: system
         files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
+      - id: frontend-depcheck
+        name: depcheck
+        entry: bash -c 'cd frontend && npm run check:deps'
+        language: system
+        files: ^frontend/(package\.json|src/.*\.(ts|tsx))$
         pass_filenames: false

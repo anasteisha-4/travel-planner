@@ -1,63 +1,74 @@
-import { Compass, Home, User } from 'lucide-react';
+import { cn } from '@/shared/lib/utils';
+import { motion } from 'framer-motion';
+import { Home, MapPin, User } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+const NAV_ITEMS = [
+  { name: 'Главная', path: '/dashboard', icon: Home },
+  { name: 'Поездки', path: '/trips', icon: MapPin },
+  { name: 'Профиль', path: '/profile', icon: User },
+] as const;
+
+const HIDDEN_EXACT = new Set([
+  '/login',
+  '/register',
+  '/onboarding',
+  '/forgot-password',
+  '/reset-password',
+  '/trips/new',
+]);
 
 export const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const navItems = [
-    {
-      name: '\u0413\u043b\u0430\u0432\u043d\u0430\u044f',
-      path: '/dashboard',
-      icon: Home,
-    },
-    {
-      name: '\u041f\u043e\u0435\u0437\u0434\u043a\u0438',
-      path: '/trips',
-      icon: Compass,
-    },
-    {
-      name: '\u041f\u0440\u043e\u0444\u0438\u043b\u044c',
-      path: '/profile',
-      icon: User,
-    },
-  ];
-
-  const hiddenPaths = ['/login', '/register', '/onboarding', '/forgot-password', '/reset-password'];
-  if (hiddenPaths.some((path) => location.pathname.startsWith(path))) {
-    return null;
-  }
+  if (HIDDEN_EXACT.has(location.pathname)) return null;
 
   return (
-    <div
-      className="glass-panel relative w-full shrink-0 transform-gpu border-t"
-      style={{
-        transform: 'translateZ(0)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      }}
-    >
-      <nav className="safe-area-left safe-area-right flex items-center justify-around px-2 py-3">
-        {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.path);
+    <div className="fixed bottom-0 mb-6 w-full border-t border-stone-100 bg-white pb-0 dark:border-stone-800 dark:bg-stone-950">
+      <nav className="mx-auto flex max-w-md items-start justify-around px-4 pt-2">
+        {NAV_ITEMS.map(({ name, path, icon: Icon }) => {
+          const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
+
           return (
             <button
-              key={item.name}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(item.path);
-              }}
-              className={`flex h-12 w-16 flex-col items-center justify-center gap-1 border-0 bg-transparent p-0 transition-all duration-200 ${
-                isActive ? 'text-primary' : 'text-muted-foreground active:text-foreground/80'
-              }`}
+              key={path}
+              type="button"
+              onClick={() => navigate(path)}
+              className="flex flex-col items-center gap-[5px] outline-none"
             >
-              <item.icon
-                className={`h-6 w-6 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}
-                strokeWidth={isActive ? 2.5 : 2}
-              />
+              {/* Icon area with shared layout indicator */}
+              <div className="relative flex h-[44px] w-[44px] items-center justify-center">
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-pill"
+                    className="absolute inset-0 rounded-full bg-[#2563EB]"
+                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                  />
+                )}
+                <motion.div
+                  className="relative z-10"
+                  animate={{ scale: isActive ? 1 : 0.8 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+                >
+                  <Icon
+                    className={cn(
+                      'h-[22px] w-[22px] transition-colors duration-200',
+                      isActive ? 'text-white' : 'text-stone-400 dark:text-stone-500'
+                    )}
+                    strokeWidth={isActive ? 2.3 : 1.8}
+                  />
+                </motion.div>
+              </div>
+
+              {/* Label */}
               <span
-                className={`text-[10px] font-medium ${isActive ? 'opacity-100' : 'opacity-80'}`}
+                className={cn(
+                  'text-[10px] font-semibold leading-none tracking-wide transition-colors duration-200',
+                  isActive ? 'text-[#2563EB]' : 'text-stone-400 dark:text-stone-500'
+                )}
               >
-                {item.name}
+                {name}
               </span>
             </button>
           );
