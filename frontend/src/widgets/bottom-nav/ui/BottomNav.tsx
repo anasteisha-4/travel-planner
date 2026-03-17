@@ -25,7 +25,7 @@ export const BottomNav = () => {
   if (HIDDEN_EXACT.has(location.pathname)) return null;
 
   return (
-    <div className="fixed bottom-0 mb-6 w-full border-t border-stone-100 bg-white pb-0 dark:border-stone-800 dark:bg-stone-950">
+    <div className="fixed bottom-0 w-full border-t border-stone-100 bg-white pb-6 dark:border-stone-800 dark:bg-stone-950">
       <nav className="mx-auto flex max-w-md items-start justify-around px-4 pt-2">
         {NAV_ITEMS.map(({ name, path, icon: Icon }) => {
           const isActive = location.pathname === path || location.pathname.startsWith(path + '/');

@@ -2,10 +2,11 @@ import type { Trip } from '@/entities/trip';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import { cn } from '@/shared/lib/utils';
 import {
+  AppInput,
   Button,
   DateInput,
+  FieldLabel,
   FormError,
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -17,11 +18,6 @@ import {
 import { Loader2, MapPin, Minus, Plus } from 'lucide-react';
 import { useTripForm } from '../model/useTripForm';
 import { TripFormSkeleton } from './TripFormSkeleton';
-
-const inputBase =
-  'h-[52px] w-full rounded-[14px] border border-stone-200 bg-stone-100 px-3.5 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-primary focus:border-[1.5px] dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500';
-
-const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-stone-700';
 
 export const TripForm = ({
   existingTrip,
@@ -71,33 +67,32 @@ export const TripForm = ({
     if (trip) onSuccess(trip);
   };
 
+  const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-stone-700';
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {/* Destination + People */}
       <div className="grid grid-cols-[1fr,auto] items-start gap-3">
         <div>
-          <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            Куда
-          </Label>
+          <FieldLabel>Куда</FieldLabel>
           <div className="relative">
             <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-stone-500" />
-            <input
+            <AppInput
               value={destination}
               onChange={(e) => {
                 setDestination(e.target.value);
                 clearError('destination');
               }}
-              placeholder="Направление"
-              className={cn(inputBase, 'pl-10', errors.destination && inputError)}
+              placeholder="Город или страна"
+              error={!!errors.destination}
+              className="pl-10"
             />
           </div>
-          <FormError message={errors.destination} className="mt-2" />
+          <FormError message={errors.destination} />
         </div>
 
         <div>
-          <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            Люди
-          </Label>
+          <FieldLabel>Люди</FieldLabel>
           <div className="flex h-[52px] items-center gap-2 rounded-2xl border border-stone-200 bg-stone-100 px-2.5 dark:border-stone-700 dark:bg-stone-800">
             <button
               type="button"
@@ -119,80 +114,78 @@ export const TripForm = ({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="min-h-[14px]" />
+          <div className="min-h-[11px]" />
         </div>
       </div>
 
       {/* Departure city */}
       <div>
-        <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-          Откуда
-        </Label>
-        <input
-          value={departureCity}
-          onChange={(e) => {
-            setDepartureCity(e.target.value);
-            clearError('departure_city');
-          }}
-          placeholder="Москва, Россия"
-          className={cn(inputBase, errors.departure_city && inputError)}
-        />
-        <FormError message={errors.departure_city} className="mt-2" />
+        <FieldLabel>Откуда</FieldLabel>
+        <div className="relative">
+          <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-stone-500" />
+          <AppInput
+            value={departureCity}
+            onChange={(e) => {
+              setDepartureCity(e.target.value);
+              clearError('departure_city');
+            }}
+            placeholder="Пункт отправления"
+            error={!!errors.departure_city}
+            className="pl-10"
+          />
+        </div>
+        <FormError message={errors.departure_city} />
       </div>
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            Начало
-          </Label>
+          <FieldLabel>Начало</FieldLabel>
           <DateInput
             value={startDate}
             min={todayStr}
+            placeholder="Дата"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               handleStartDateChange(e.target.value);
               clearError('start_date');
             }}
             className={cn(
-              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-white',
+              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800',
               errors.start_date && inputError
             )}
           />
-          <FormError message={errors.start_date} className="mt-2" />
+          <FormError message={errors.start_date} />
         </div>
         <div>
-          <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            Конец
-          </Label>
+          <FieldLabel>Конец</FieldLabel>
           <DateInput
             value={endDate}
             min={startDate || todayStr}
+            placeholder="Дата"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               setEndDate(e.target.value);
               clearError('end_date');
             }}
             className={cn(
-              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800 dark:text-white',
+              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800',
               errors.end_date && inputError
             )}
           />
-          <FormError message={errors.end_date} className="mt-2" />
+          <FormError message={errors.end_date} />
         </div>
       </div>
 
       {/* Budget slider */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <Label className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            Бюджет
-          </Label>
+          <FieldLabel className="mb-0">Бюджет</FieldLabel>
           <span className="text-[15px] font-bold text-stone-900 dark:text-white">
             {budget > 0 ? `${budget.toLocaleString('ru-RU')} ${currencySymbol}` : 'Без лимита'}
           </span>
         </div>
         <div className="flex items-center gap-3">
           <Select value={currency} onValueChange={handleCurrencyChange}>
-            <SelectTrigger className="h-[44px] w-[105px] shrink-0 rounded-2xl border-stone-200 bg-stone-100 text-[13px] font-semibold dark:border-stone-700 dark:bg-stone-800 dark:text-white">
+            <SelectTrigger className="h-[52px] w-[120px] shrink-0 rounded-2xl border-stone-200 bg-stone-100 text-[13px] font-semibold dark:border-stone-700 dark:bg-stone-800 dark:text-white">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -216,28 +209,15 @@ export const TripForm = ({
       </div>
 
       {/* Notes */}
-      <div className="space-y-2">
-        <div className="flex min-h-[20px] items-center justify-between">
-          <Label className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 animate-in fade-in dark:text-stone-500">
-            Заметки
-          </Label>
-        </div>
-        <div
-          className={cn('grid grid-rows-[1fr] opacity-100 transition-all duration-200 ease-in-out')}
-        >
-          <div className="overflow-hidden">
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Дополнительная информация о поездке"
-              className="mt-1.5 min-h-[80px] resize-none rounded-2xl border-stone-200 bg-stone-100 text-[15px] placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
-            />
-          </div>
-        </div>
+      <div className="mt-[20px]">
+        <FieldLabel>Заметки</FieldLabel>
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Аллергии, особые пожелания"
+          className="mb-4 min-h-[92px] resize-none rounded-2xl border-stone-200 bg-stone-100 text-[15px] placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
+        />
       </div>
-
-      {/* Spacer for fixed bottom bar in page mode */}
-      {!asSheet && <div className="h-[80px]" />}
 
       {/* Action buttons */}
       <div
@@ -248,7 +228,7 @@ export const TripForm = ({
             : 'pt-2'
         )}
         style={
-          !asSheet ? { paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' } : undefined
+          !asSheet ? { paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 24px)' } : undefined
         }
       >
         {onCancel && (

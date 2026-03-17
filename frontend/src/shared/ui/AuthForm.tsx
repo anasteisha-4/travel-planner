@@ -1,13 +1,4 @@
-import { Button } from '@/shared/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/shared/ui/card';
-import { Separator } from '@/shared/ui/separator';
+import { AppPageHeader, PageContent, PageLayout } from './page-layout';
 
 type AuthFormProps = {
   title: string;
@@ -33,57 +24,56 @@ export const AuthForm = ({
   isLoading,
 }: AuthFormProps) => {
   return (
-    <div className="flex flex-1 items-center justify-center p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
-      <Card className="glass-card mx-auto w-full max-w-md">
-        <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto flex items-center justify-center">
-            <img
-              src="/assets/logo.png"
-              alt="Triply Logo"
-              className="h-20 w-20 object-contain drop-shadow-md"
-            />
-          </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4" noValidate>
-            {children}
-          </form>
+    <PageLayout fullScreen>
+      <AppPageHeader pb="pb-6" className="flex flex-col items-center">
+        <img
+          src="/assets/logo.png"
+          alt="Triply"
+          className="mb-4 h-16 w-16 object-contain drop-shadow-sm"
+        />
+        <h1 className="text-center text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+          {title}
+        </h1>
+        <p className="mt-1 text-center text-[14px] font-medium text-stone-400 dark:text-stone-500">
+          {description}
+        </p>
+      </AppPageHeader>
 
-          <div className="my-6 flex items-center">
-            <Separator className="flex-1 opacity-50" />
-            <span className="mx-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              или
-            </span>
-            <Separator className="flex-1 opacity-50" />
-          </div>
+      <PageContent pb="pb-4">
+        <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+          {children}
+        </form>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="group w-full border-[#FC3F1D]/20 bg-[#FC3F1D]/10 text-[#FC3F1D] backdrop-blur-sm transition-all active:bg-[#FC3F1D]/20"
-            onClick={onYandexLogin}
-            disabled={isLoading}
-          >
-            <img src="/assets/yandex.png" alt="Yandex" className="h-4 w-4 object-contain" />
-            Продолжить с Яндекс ID
-          </Button>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <div className="text-center text-sm text-muted-foreground">
-            {footerText}{' '}
-            <Button
-              variant="link"
-              type="button"
-              onClick={onFooterLinkClick}
-              className="h-auto p-0 text-base font-medium text-primary"
-            >
-              {footerLinkText}
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
-    </div>
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-stone-100 dark:bg-stone-800" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-stone-300 dark:text-stone-600">
+            или
+          </span>
+          <div className="h-px flex-1 bg-stone-100 dark:bg-stone-800" />
+        </div>
+
+        <button
+          type="button"
+          onClick={onYandexLogin}
+          disabled={isLoading}
+          className="flex h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl border border-[#FC3F1D]/25 bg-[#FC3F1D]/10 text-[15px] font-semibold text-[#FC3F1D] transition-all active:bg-[#FC3F1D]/20 disabled:opacity-50"
+        >
+          <img src="/assets/yandex.png" alt="Yandex" className="h-4 w-4 object-contain" />
+          Продолжить с Яндекс ID
+        </button>
+      </PageContent>
+
+      <div
+        className="shrink-0 border-t border-stone-100 px-5 py-4 text-center dark:border-stone-800"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
+      >
+        <p className="text-[14px] text-stone-400 dark:text-stone-500">
+          {footerText}{' '}
+          <button type="button" onClick={onFooterLinkClick} className="font-semibold text-primary">
+            {footerLinkText}
+          </button>
+        </p>
+      </div>
+    </PageLayout>
   );
 };

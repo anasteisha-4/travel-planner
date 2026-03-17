@@ -1,15 +1,6 @@
-import { AuthForm, Button, Input, Label } from '@/shared/ui';
+import { AppInput, AuthForm, FieldLabel, FormError } from '@/shared/ui';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useLogin } from '../model/useLogin';
-
-const FieldError = ({ message }: { message?: string }) => {
-  if (!message) return null;
-  return (
-    <p className="mt-1.5 text-[13px] font-medium text-destructive duration-200 animate-in fade-in-0 slide-in-from-top-1">
-      {message}
-    </p>
-  );
-};
 
 export const LoginForm = ({
   oauthCallback = false,
@@ -47,7 +38,7 @@ export const LoginForm = ({
 
   return (
     <AuthForm
-      title="Triply — персональный планировщик поездок"
+      title="Triply"
       description="Войдите, чтобы продолжить"
       onSubmit={handleSubmit}
       onYandexLogin={handleYandexLogin}
@@ -56,9 +47,9 @@ export const LoginForm = ({
       onFooterLinkClick={onRegisterClick}
       isLoading={isLoading}
     >
-      <div className="space-y-1">
-        <Label htmlFor="identifier">Логин или почта</Label>
-        <Input
+      <div>
+        <FieldLabel>Логин или почта</FieldLabel>
+        <AppInput
           id="identifier"
           type="text"
           placeholder="email@example.com"
@@ -66,49 +57,53 @@ export const LoginForm = ({
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           disabled={isLoading}
-          className={
-            fieldErrors.identifier ? 'border-destructive focus-visible:ring-destructive' : ''
-          }
+          error={!!fieldErrors.identifier}
         />
-        <FieldError message={fieldErrors.identifier} />
+        <FormError message={fieldErrors.identifier} />
       </div>
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="password">Пароль</Label>
-          <Button
-            variant="link"
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <FieldLabel className="mb-0">Пароль</FieldLabel>
+          <button
             type="button"
             onClick={onForgotPasswordClick}
-            className="h-auto p-0 text-sm"
+            className="text-[12px] font-semibold text-primary"
           >
             Забыли пароль?
-          </Button>
+          </button>
         </div>
         <div className="relative">
-          <Input
+          <AppInput
             id="password"
             type={showPassword ? 'text' : 'password'}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
-            className={`pr-10 ${fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+            error={!!fieldErrors.password}
+            className="pr-11"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors active:text-foreground"
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 transition-colors active:text-stone-700 dark:active:text-stone-200"
             tabIndex={-1}
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        <FieldError message={fieldErrors.password} />
+        <FormError message={fieldErrors.password} />
       </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
+
+      <button
+        type="submit"
+        disabled={isLoading}
+        className="flex h-[52px] w-full items-center justify-center rounded-2xl bg-primary text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(37,99,235,0.28)] transition-all disabled:opacity-60"
+      >
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Войти
-      </Button>
+      </button>
     </AuthForm>
   );
 };

@@ -3,8 +3,8 @@ import type { Trip, TripStatus } from '@/entities/trip';
 import { tripApi } from '@/entities/trip';
 import { ExpenseForm, ExpenseList, ExpenseSummary, useExpenses } from '@/features/expenses';
 import { TripForm } from '@/features/trips';
-import { Button, Drawer, DrawerContent, DrawerHeader, DrawerTitle, useToast } from '@/shared/ui';
-import { ArrowLeft, Edit, Loader2, MapPin, Plus, Trash2, User } from 'lucide-react';
+import { Button, Drawer, DrawerContent, DrawerHeader, DrawerTitle, StatusBadge, TabBar, useToast } from '@/shared/ui';
+import { ChevronLeft, Edit, Loader2, MapPin, Plus, Trash2, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -44,24 +44,6 @@ const CURRENCY_LABEL: Record<string, string> = {
   GBP: 'Фунт',
   CNY: 'Юань',
   TRY: 'Лира',
-};
-
-const STATUS_LABEL: Record<TripStatus, string> = {
-  planned: 'Запланирована',
-  active: 'В пути',
-  completed: 'Завершена',
-  cancelled: 'Отменена',
-};
-
-const STATUS_BADGE_CLASS: Record<TripStatus, string> = {
-  planned:
-    'border-green-200/60 bg-green-50/80 text-green-700 dark:border-green-800/60 dark:bg-green-900/30 dark:text-green-400',
-  active:
-    'border-amber-300/50 bg-amber-50/80 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-400',
-  completed:
-    'border-stone-200 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400',
-  cancelled:
-    'border-red-200/60 bg-red-50/80 text-red-600 dark:border-red-800/60 dark:bg-red-900/30 dark:text-red-400',
 };
 
 type TabId = 'info' | 'expenses';
@@ -131,7 +113,6 @@ export const TripDetailPage = () => {
     setIsDeleting(true);
     try {
       await tripApi.deleteTrip(id);
-      toast({ title: 'Готово', description: 'Поездка удалена' });
       navigate('/trips', { replace: true });
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось удалить поездку' });
@@ -192,21 +173,17 @@ export const TripDetailPage = () => {
     <div className="flex h-full flex-col">
       <div
         className="shrink-0 px-5 pb-2"
-        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)' }}
+        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 20px)' }}
       >
         <div className="flex items-center justify-between">
           <button
             type="button"
-            className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800"
+            className="flex h-[38px] w-[38px] items-center justify-center"
             onClick={() => navigate('/trips')}
           >
-            <ArrowLeft className="h-4 w-4 text-stone-700 dark:text-stone-200" />
+            <ChevronLeft className="h-5 w-5 text-stone-700 dark:text-stone-200" />
           </button>
-          <span
-            className={`rounded-full border px-3.5 py-1.5 text-[12px] font-semibold ${STATUS_BADGE_CLASS[trip.status]}`}
-          >
-            {STATUS_LABEL[trip.status]}
-          </span>
+          <StatusBadge status={trip.status} />
         </div>
 
         <div className="mt-3">
@@ -226,22 +203,16 @@ export const TripDetailPage = () => {
           )}
         </div>
 
-        <div className="mt-4 flex items-end gap-5 border-b border-stone-200 dark:border-stone-700">
-          {(['info', 'expenses'] as TabId[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`pb-3 text-[15px] font-semibold transition-colors ${
-                activeTab === tab
-                  ? 'border-b-[2.5px] border-primary text-primary'
-                  : 'text-stone-400 dark:text-stone-500'
-              }`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab === 'info' ? 'О поездке' : 'Расходы'}
-            </button>
-          ))}
-          <div className="flex-1" />
+        <div className="mt-4 flex items-end border-b border-stone-200 dark:border-stone-700">
+          <TabBar
+            tabs={[
+              { id: 'info', label: 'О поездке' },
+              { id: 'expenses', label: 'Расходы' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+            className="flex-1 border-b-0"
+          />
           {activeTab === 'expenses' && !isCompleted && !isCancelled && (
             <button
               type="button"
@@ -278,7 +249,7 @@ export const TripDetailPage = () => {
                   />
                 </svg>
                 <p className="text-[13px] font-medium text-red-600 dark:text-red-400">
-                  Поездка отменена. Вы можете восстановить её или удалить навсегда.
+                  Поездка отменена. Вы можете восстановить ее или удалить навсегда
                 </p>
               </div>
             )}
@@ -292,7 +263,7 @@ export const TripDetailPage = () => {
                 <p className="text-[20px] font-bold leading-snug text-stone-900 dark:text-white">
                   {formatDateFull(trip.start_date)}
                 </p>
-                <p className="text-[12px] font-medium text-stone-400 dark:text-stone-500">
+                <p className="mt-1.5 text-[12px] font-medium text-stone-400 dark:text-stone-500">
                   {formatYear(trip.start_date)}
                 </p>
               </div>
@@ -304,7 +275,7 @@ export const TripDetailPage = () => {
                 <p className="text-[20px] font-bold leading-snug text-stone-900 dark:text-white">
                   {formatDateFull(trip.end_date)}
                 </p>
-                <p className="text-[12px] font-medium text-stone-400 dark:text-stone-500">
+                <p className="mt-1.5 text-[12px] font-medium text-stone-400 dark:text-stone-500">
                   {formatYear(trip.end_date)}
                   {(() => {
                     const d = getDaysDiff(trip.start_date, trip.end_date);
@@ -349,7 +320,7 @@ export const TripDetailPage = () => {
                 <p className="text-[22px] font-bold leading-none text-stone-900 dark:text-white">
                   {trip.budget ? trip.budget.toLocaleString('ru-RU') : '-'}
                 </p>
-                <p className="text-[12px] font-medium text-stone-400 dark:text-stone-500">
+                <p className="mt-1.5 text-[12px] font-medium text-stone-400 dark:text-stone-500">
                   {trip.currency} · {CURRENCY_LABEL[trip.currency] ?? trip.currency}
                 </p>
               </div>
@@ -583,7 +554,7 @@ export const TripDetailPage = () => {
               </DrawerTitle>
             </DrawerHeader>
             <p className="mt-1.5 text-sm text-stone-400 dark:text-stone-500">
-              Поездка в «{trip.destination}» будет отменена. Вы сможете восстановить её позже.
+              Поездка «{trip.destination}» будет отменена. Вы сможете восстановить ее позже
             </p>
           </div>
           <div className="flex flex-col gap-3">
@@ -635,8 +606,8 @@ export const TripDetailPage = () => {
               </DrawerTitle>
             </DrawerHeader>
             <p className="mt-1.5 text-sm text-stone-400 dark:text-stone-500">
-              Поездка в «{trip.destination}» и все её расходы будут удалены навсегда. Это действие
-              нельзя отменить.
+              Поездка «{trip.destination}» и все ее расходы будут удалены навсегда. Это действие
+              нельзя отменить
             </p>
           </div>
           <div className="flex flex-col gap-3">

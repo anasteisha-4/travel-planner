@@ -4,7 +4,7 @@ export const FormError = ({ message, className }: { message?: string; className?
   return (
     <p
       className={cn(
-        'min-h-[14px] text-[11px] font-medium leading-none',
+        'mt-2 min-h-[11px] text-[10px] font-medium leading-none',
         message ? 'text-red-500' : 'invisible',
         className
       )}

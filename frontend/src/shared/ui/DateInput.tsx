@@ -31,10 +31,17 @@ const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
             className
           )}
         >
-          <span className={cn('block truncate', !value && 'text-muted-foreground')}>
+          <span
+            className={cn(
+              'block truncate text-[15px]',
+              value
+                ? 'font-semibold text-stone-900 dark:text-white'
+                : 'font-normal text-stone-400 dark:text-stone-500'
+            )}
+          >
             {formattedDate || placeholder}
           </span>
-          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          <CalendarIcon className="h-4 w-4 text-muted-foreground text-stone-400 dark:text-stone-500" />
         </div>
         <input
           type="date"

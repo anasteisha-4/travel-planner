@@ -122,7 +122,6 @@ export const useTripForm = (existingTrip?: Trip) => {
     setIsLoading(true);
     try {
       const trip = await tripApi.createTrip(data);
-      toast({ title: 'Готово', description: 'Поездка создана' });
       return trip;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось создать поездку' });
@@ -141,7 +140,6 @@ export const useTripForm = (existingTrip?: Trip) => {
     setIsLoading(true);
     try {
       const trip = await tripApi.updateTrip(id, updateData);
-      toast({ title: 'Готово', description: 'Поездка обновлена' });
       return trip;
     } catch {
       toast({

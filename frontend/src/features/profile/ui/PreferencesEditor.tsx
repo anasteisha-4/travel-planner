@@ -1,23 +1,23 @@
 import { CURRENCIES, TRAVEL_TYPES, TRIP_DURATIONS } from '@/shared/config';
-import { useIsOnline } from '@/shared/lib';
 import {
-  Badge,
+  AppInput,
   Button,
-  Input,
-  Label,
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  FieldLabel,
+  PillChip,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
   Slider,
+  StepIndicator,
   Textarea,
 } from '@/shared/ui';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { usePreferencesEditor } from '../model/usePreferencesEditor';
 
@@ -65,7 +65,6 @@ export const PreferencesEditor = ({
     budgetConfig,
     reset,
   } = usePreferencesEditor(initialData);
-  const isOnline = useIsOnline();
 
   useEffect(() => {
     if (open) {
@@ -83,54 +82,47 @@ export const PreferencesEditor = ({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="h-[90dvh] overflow-y-auto">
-        <DrawerHeader className="pb-2">
-          <DrawerTitle className="text-xl font-bold tracking-tight">
+      <DrawerContent className="h-[90dvh] overflow-y-auto px-5">
+        <DrawerHeader className="px-0 pb-2">
+          <DrawerTitle className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
             {step === 1 ? 'Предпочтения' : 'Бюджет и детали'}
           </DrawerTitle>
-          <div className="flex gap-2 pt-2">
-            <div
-              className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-muted'}`}
-            />
-            <div
-              className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-muted'}`}
-            />
-          </div>
+          <StepIndicator steps={2} current={step} barClassName="flex-1" className="pt-2" />
         </DrawerHeader>
 
-        <div className="space-y-6 pt-4">
+        <div className="flex flex-col gap-5 pt-4">
           {step === 1 ? (
             <>
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Любимые виды отдыха</Label>
+              <div>
+                <FieldLabel>Любимые виды отдыха</FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   {TRAVEL_TYPES.map((type) => (
-                    <Badge
+                    <PillChip
                       key={type.id}
-                      variant={travelTypes.includes(type.id) ? 'default' : 'outline'}
-                      className="cursor-pointer select-none px-3 py-2 text-sm transition-all active:scale-95"
+                      selected={travelTypes.includes(type.id)}
                       onClick={() => toggleTravelType(type.id)}
+                      icon={type.icon}
                     >
                       {type.label}
-                    </Badge>
+                    </PillChip>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Любимые направления</Label>
+              <div>
+                <FieldLabel>Любимые направления</FieldLabel>
                 <Textarea
-                  placeholder="Например: Италия, Япония, Грузия..."
+                  placeholder="Например: Италия, Япония, Грузия"
                   value={destinations}
                   onChange={(e) => setDestinations(e.target.value)}
-                  className="min-h-[80px] resize-none"
+                  className="min-h-[92px] resize-none rounded-[14px] border-stone-200 bg-stone-100 px-3.5 py-3 text-[15px] placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
                 />
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Валюта</Label>
+              <div>
+                <FieldLabel>Валюта</FieldLabel>
                 <Select value={currency} onValueChange={handleCurrencyChange}>
-                  <SelectTrigger className="h-12 w-full">
+                  <SelectTrigger className="h-[52px] w-full rounded-[14px] border-stone-200 bg-stone-100 text-[15px] font-semibold dark:border-stone-700 dark:bg-stone-800 dark:text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -145,8 +137,16 @@ export const PreferencesEditor = ({
             </>
           ) : (
             <>
-              <div className="space-y-4">
-                <Label className="text-base font-semibold">Средний бюджет поездки</Label>
+              <div>
+                <FieldLabel>Средний бюджет поездки</FieldLabel>
+                <div className="mb-3 flex justify-between">
+                  <span className="text-[15px] font-bold text-stone-900 dark:text-white">
+                    {budgetConfig.format(budgetRange[0])}
+                  </span>
+                  <span className="text-[15px] font-bold text-stone-900 dark:text-white">
+                    {budgetConfig.format(budgetRange[1])}
+                  </span>
+                </div>
                 <div className="px-1">
                   <Slider
                     value={budgetRange}
@@ -157,45 +157,39 @@ export const PreferencesEditor = ({
                     className="w-full"
                   />
                 </div>
-                <div className="flex justify-between text-sm font-medium text-muted-foreground">
-                  <span>{budgetConfig.format(budgetRange[0])}</span>
-                  <span>{budgetConfig.format(budgetRange[1])}</span>
-                </div>
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Обычная длительность поездок</Label>
+              <div>
+                <FieldLabel>Обычная длительность поездок</FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   {TRIP_DURATIONS.map((d) => (
-                    <Badge
+                    <PillChip
                       key={d.id}
-                      variant={tripDuration === d.id ? 'default' : 'outline'}
-                      className="cursor-pointer select-none px-4 py-2 text-sm transition-all active:scale-95"
+                      selected={tripDuration === d.id}
                       onClick={() => setTripDuration(tripDuration === d.id ? null : d.id)}
                     >
                       {d.label}
-                    </Badge>
+                    </PillChip>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Город отправления</Label>
-                <Input
-                  placeholder="Например: Россия, Москва"
+              <div>
+                <FieldLabel>Город отправления</FieldLabel>
+                <AppInput
                   value={departureCity}
                   onChange={(e) => setDepartureCity(e.target.value)}
-                  className="h-12"
+                  placeholder="Например: Москва"
                 />
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Дополнительная информация</Label>
+              <div>
+                <FieldLabel>Дополнительная информация</FieldLabel>
                 <Textarea
                   placeholder="Аллергии, ограничения, пожелания"
                   value={additionalInfo}
                   onChange={(e) => setAdditionalInfo(e.target.value)}
-                  className="min-h-[80px] resize-none"
+                  className="min-h-[92px] resize-none rounded-[14px] border-stone-200 bg-stone-100 px-3.5 py-3 text-[15px] placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
                 />
               </div>
             </>
@@ -207,16 +201,16 @@ export const PreferencesEditor = ({
                 variant="outline"
                 onClick={() => setStep(1)}
                 disabled={isLoading}
-                className="h-12 flex-1"
+                className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ChevronLeft className="h-5 w-5" />
                 Назад
               </Button>
             )}
             <Button
               onClick={step === 1 ? () => setStep(2) : onSubmit}
-              disabled={isLoading || (!isOnline && step === 2)}
-              className="h-12 flex-1"
+              disabled={isLoading}
+              className="h-[52px] flex-1 rounded-2xl shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
             >
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {step === 1 ? 'Далее' : 'Сохранить'}

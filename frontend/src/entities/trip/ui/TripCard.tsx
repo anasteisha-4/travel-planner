@@ -1,61 +1,45 @@
-import { Badge, Card, CardContent } from '@/shared/ui';
-import { Calendar, Users, Wallet } from 'lucide-react';
 import type { Trip } from '../model/types';
-
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }
-> = {
-  planned: { label: 'Запланирована', variant: 'secondary' },
-  active: { label: 'В пути', variant: 'default' },
-  completed: { label: 'Завершена', variant: 'outline' },
-  cancelled: { label: 'Отменена', variant: 'destructive' },
-};
+import { StatusBadge } from '@/shared/ui';
+import { Calendar, Users, Wallet } from 'lucide-react';
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 };
 
-export const TripCard = ({ trip, onClick }: { trip: Trip; onClick: () => void }) => {
-  const statusInfo = STATUS_CONFIG[trip.status] ?? STATUS_CONFIG.planned;
-
-  return (
-    <Card
-      className="cursor-pointer transition-all hover:shadow-md active:scale-[0.98]"
-      onClick={onClick}
-    >
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 space-y-0.5">
-            <h3 className="truncate text-lg font-bold tracking-tight">{trip.destination}</h3>
-            {trip.departure_city && (
-              <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                <span className="truncate">из {trip.departure_city}</span>
-              </p>
-            )}
-          </div>
-          <Badge variant={statusInfo.variant} className="shrink-0 text-xs">
-            {statusInfo.label}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3.5 w-3.5" />
-            {formatDate(trip.start_date)} — {formatDate(trip.end_date)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Users className="h-3.5 w-3.5" />
-            {trip.people_count}
-          </span>
-          {trip.budget && (
-            <span className="flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" />
-              {trip.budget.toLocaleString('ru-RU')} {trip.currency}
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+export const TripCard = ({ trip, onClick }: { trip: Trip; onClick: () => void }) => (
+  <div
+    className="trip-info-card cursor-pointer transition-all active:scale-[0.98]"
+    onClick={onClick}
+  >
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="truncate text-[17px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+          {trip.destination}
+        </h3>
+        {trip.departure_city && (
+          <p className="truncate text-[13px] font-medium text-stone-400 dark:text-stone-500">
+            из {trip.departure_city}
+          </p>
+        )}
+      </div>
+      <StatusBadge status={trip.status} />
+    </div>
+    <div className="flex items-center gap-4 text-[12px] font-medium text-stone-400 dark:text-stone-500">
+      <span className="flex items-center gap-1.5">
+        <Calendar className="h-3.5 w-3.5" />
+        {formatDate(trip.start_date)} — {formatDate(trip.end_date)}
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Users className="h-3.5 w-3.5" />
+        {trip.people_count}
+      </span>
+      {trip.budget && (
+        <span className="flex items-center gap-1.5">
+          <Wallet className="h-3.5 w-3.5" />
+          {trip.budget.toLocaleString('ru-RU')} {trip.currency}
+        </span>
+      )}
+    </div>
+  </div>
+);

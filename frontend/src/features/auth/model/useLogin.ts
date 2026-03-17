@@ -51,7 +51,7 @@ export const useLogin = ({
             }
             toast({
               variant: 'destructive',
-              title: 'Ошибка OAuth',
+              title: 'Ошибка авторизации',
               description: message,
             });
             if (onError) onError();

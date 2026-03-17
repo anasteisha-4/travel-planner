@@ -124,7 +124,6 @@ export const usePreferencesEditor = (initialData: PreferencesData) => {
         departure_city: departureCity || null,
         additional_info: additionalInfo || null,
       });
-      toast({ title: 'Готово', description: 'Предпочтения сохранены' });
       return true;
     } catch {
       toast({

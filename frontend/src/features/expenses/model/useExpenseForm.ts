@@ -67,7 +67,6 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
     setIsLoading(true);
     try {
       const expense = await expenseApi.createExpense(tripId, data);
-      toast({ title: 'Готово', description: 'Расход добавлен' });
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось добавить расход' });
@@ -83,7 +82,6 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
     setIsLoading(true);
     try {
       const expense = await expenseApi.updateExpense(expenseId, data);
-      toast({ title: 'Готово', description: 'Расход обновлён' });
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось обновить расход' });

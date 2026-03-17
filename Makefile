@@ -10,6 +10,9 @@ down:
 build:
 	docker-compose build --no-cache
 
+up-front:
+	docker compose build --no-cache frontend && docker compose up -d frontend
+
 logs:
 	docker-compose logs -f
 

@@ -38,7 +38,6 @@ export const useExpenses = (tripId: string, budgetCurrency: string) => {
     try {
       await expenseApi.deleteExpense(expenseId);
       await fetchAll();
-      toast({ title: 'Готово', description: 'Расход удалён' });
     } catch {
       toast({
         variant: 'destructive',

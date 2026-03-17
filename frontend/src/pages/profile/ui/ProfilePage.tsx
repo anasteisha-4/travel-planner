@@ -1,17 +1,14 @@
 import { useProfile } from '@/entities/user';
 import { LogoutButton, authApi } from '@/features/auth';
 import { PreferencesEditor, PreferencesView, usePreferences } from '@/features/profile';
-import { useIsOnline } from '@/shared/lib';
-import { Button, Card, CardContent, PageHeader, Separator, useToast } from '@/shared/ui';
-import { ClipboardList, Edit, Loader2, Settings, User } from 'lucide-react';
+import { AppPageHeader, Button, EmptyState, PageContent, PageLayout, SectionLabel } from '@/shared/ui';
+import { ClipboardList, Loader2, Pencil } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-  const isOnline = useIsOnline();
-  const { toast } = useToast();
 
   const handleUnauthenticated = useCallback(() => {
     const token = localStorage.getItem('access_token');
@@ -26,17 +23,9 @@ export const ProfilePage = () => {
   const { preferences, hasPreferences, isFetching, refetch } = usePreferences();
 
   const handleLogout = useCallback(async () => {
-    if (!isOnline) {
-      toast({
-        variant: 'destructive',
-        title: 'Офлайн',
-        description: 'Нет интернета',
-      });
-      return;
-    }
     await authApi.logout();
     navigate('/login', { replace: true });
-  }, [navigate, isOnline, toast]);
+  }, [navigate]);
 
   const handleSaved = () => {
     refetch();
@@ -45,82 +34,91 @@ export const ProfilePage = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="mb-4 h-12 w-12 rounded-full bg-primary/20" />
-          <div className="h-4 w-32 rounded bg-primary/20" />
-        </div>
-      </div>
+      <PageLayout>
+        <AppPageHeader pb="pb-3">
+          <div className="h-7 w-24 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+        </AppPageHeader>
+        <PageContent pb="pb-0" className="pt-2">
+          <div className="trip-info-card animate-pulse">
+            <div className="h-4 w-full rounded bg-stone-100 dark:bg-stone-800" />
+          </div>
+        </PageContent>
+      </PageLayout>
     );
   }
 
   if (!profile) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 pb-20">
-      <PageHeader className="justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Профиль</h1>
-        <LogoutButton onLogout={handleLogout} />
-      </PageHeader>
-
-      <div className="flex items-center gap-2">
-        <User className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">Данные</h2>
-      </div>
-      <Card>
-        <CardContent className="space-y-4">
-          <div className="flex justify-between border-b pb-2">
-            <span className="text-sm font-medium text-muted-foreground">Логин</span>
-            <span className="font-semibold text-primary">{profile.login}</span>
-          </div>
-          <div className="flex justify-between pt-2">
-            <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              Почта
-            </span>
-            <span>{profile.email}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Settings className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Предпочтения</h2>
+    <PageLayout>
+      <AppPageHeader pb="pb-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+            Профиль
+          </h1>
+          <LogoutButton onLogout={handleLogout} />
         </div>
-        {hasPreferences && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-10 text-primary"
-            disabled={!isOnline}
-            onClick={() => setIsEditing(true)}
-          >
-            <Edit className="mr-1.5 h-4 w-4" />
-          </Button>
-        )}
-      </div>
+      </AppPageHeader>
 
-      {isFetching ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <PageContent>
+        <div className="flex flex-col gap-6">
+          <div>
+            <SectionLabel className="mb-2">Аккаунт</SectionLabel>
+            <div className="trip-info-card flex flex-col gap-0">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                  Логин
+                </span>
+                <span className="text-[15px] font-bold text-primary">{profile.login}</span>
+              </div>
+              <div className="my-2 h-px bg-stone-100 dark:bg-stone-800" />
+              <div className="flex items-center justify-between py-1">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                  Email
+                </span>
+                <span className="text-[15px] font-semibold text-stone-900 dark:text-white">
+                  {profile.email}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <SectionLabel
+              className="mb-2"
+              action={
+                hasPreferences ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="flex h-[30px] items-center gap-1.5 rounded-xl bg-stone-100 px-3 text-[13px] font-semibold text-stone-600 disabled:opacity-40 dark:bg-stone-800 dark:text-stone-300"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Изменить
+                  </button>
+                ) : undefined
+              }
+            >
+              Предпочтения
+            </SectionLabel>
+
+            {isFetching ? (
+              <div className="trip-info-card flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
+              </div>
+            ) : hasPreferences ? (
+              <PreferencesView preferences={preferences} />
+            ) : (
+              <div className="flex flex-col gap-3">
+                <EmptyState icon={ClipboardList} message="Анкета предпочтений еще не заполнена" />
+                <Button onClick={() => setIsEditing(true)} className="h-[52px] flex-1 rounded-2xl">
+                  Указать предпочтения
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
-      ) : hasPreferences ? (
-        <PreferencesView preferences={preferences} />
-      ) : (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-8">
-            <ClipboardList className="h-10 w-10 text-muted-foreground/50" />
-            <p className="text-center text-sm text-muted-foreground">
-              Анкета предпочтений ещё не заполнена
-            </p>
-            <Button onClick={() => setIsEditing(true)} className="h-11" disabled={!isOnline}>
-              Указать предпочтения
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      </PageContent>
 
       <PreferencesEditor
         open={isEditing}
@@ -128,6 +126,6 @@ export const ProfilePage = () => {
         initialData={preferences}
         onSaved={handleSaved}
       />
-    </div>
+    </PageLayout>
   );
 };

@@ -19,17 +19,33 @@ export const BUDGET_LIMITS: Record<
   CNY: { min: 0, max: 75000, step: 1000, format: (v) => `¥${v}` },
 };
 
-export const TRAVEL_TYPES = [
-  { id: 'beach', label: '🏖️ Пляжный' },
-  { id: 'family', label: '👨‍👩‍👧 Семейный' },
-  { id: 'culture', label: '🏛️ Культура и история' },
-  { id: 'active', label: '🚴 Активный' },
-  { id: 'extreme', label: '🧗 Экстремальный' },
-  { id: 'shopping', label: '🛍️ Шопинг' },
-  { id: 'gastro', label: '🍽️ Гастрономический' },
-  { id: 'nature', label: '🌲 Природа и эко' },
-  { id: 'romantic', label: '💕 Романтический' },
-  { id: 'business', label: '💼 Деловой' },
+import {
+  Activity,
+  Briefcase,
+  ChefHat,
+  Heart,
+  Landmark,
+  Leaf,
+  Mountain,
+  ShoppingBag,
+  Sun,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
+
+export type TravelType = { id: string; label: string; icon: LucideIcon };
+
+export const TRAVEL_TYPES: TravelType[] = [
+  { id: 'beach', label: 'Пляжный', icon: Sun },
+  { id: 'family', label: 'Семейный', icon: Users },
+  { id: 'culture', label: 'Культура', icon: Landmark },
+  { id: 'active', label: 'Активный', icon: Activity },
+  { id: 'extreme', label: 'Экстрим', icon: Mountain },
+  { id: 'shopping', label: 'Шопинг', icon: ShoppingBag },
+  { id: 'gastro', label: 'Гастро', icon: ChefHat },
+  { id: 'nature', label: 'Природа', icon: Leaf },
+  { id: 'romantic', label: 'Романтика', icon: Heart },
+  { id: 'business', label: 'Деловой', icon: Briefcase },
 ];
 
 export const TRIP_DURATIONS = [

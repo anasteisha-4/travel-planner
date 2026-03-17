@@ -1,8 +1,7 @@
 import { useProfile } from '@/entities/user';
 import { TripsPreview } from '@/features/trips';
-import { useIsOnline } from '@/shared/lib';
-import { PageHeader } from '@/shared/ui';
-import { WifiOff } from 'lucide-react';
+import { ActionCard, AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
+import { MapPin } from 'lucide-react';
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,38 +17,43 @@ export const DashboardPage = () => {
     }
   }, [navigate]);
 
-  const isOnline = useIsOnline();
   const { profile, loading } = useProfile(handleUnauthenticated);
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="mb-4 h-12 w-12 rounded-full bg-primary/20" />
-          <div className="h-4 w-32 rounded bg-primary/20" />
-        </div>
-      </div>
+      <PageLayout>
+        <AppPageHeader pb="pb-3">
+          <div className="h-4 w-20 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+          <div className="mt-1.5 h-7 w-40 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+        </AppPageHeader>
+      </PageLayout>
     );
   }
 
   if (!profile) return null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 pb-20">
-      <PageHeader className="justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Привет, {profile.login}!<br />
-          Отправимся в новое путешествие?
+    <PageLayout>
+      <AppPageHeader>
+        <h1 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+          Добро пожаловать, {profile.login}!
         </h1>
-        {!isOnline && (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/50 bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            <WifiOff className="h-3 w-3" />
-            Офлайн
-          </span>
-        )}
-      </PageHeader>
+        <p className="text-[14px] font-medium text-stone-400 dark:text-stone-500">
+          Отправимся в новое путешествие?
+        </p>
+      </AppPageHeader>
 
-      <TripsPreview />
-    </div>
+      <PageContent>
+        <div className="flex flex-col gap-5">
+          <ActionCard
+            icon={MapPin}
+            title="Новая поездка"
+            subtitle="Начните планировать маршрут"
+            onClick={() => navigate('/trips/new')}
+          />
+          <TripsPreview />
+        </div>
+      </PageContent>
+    </PageLayout>
   );
 };
