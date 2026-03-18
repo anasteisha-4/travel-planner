@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 import redis
@@ -15,7 +16,7 @@ def get_redis():
 def is_token_blacklisted(jti: str) -> bool:
     try:
         r = get_redis()
-        return r.exists(f"blacklist:{jti}") > 0
+        return cast(int, r.exists(f"blacklist:{jti}")) > 0
     except redis.ConnectionError:
         return False
 

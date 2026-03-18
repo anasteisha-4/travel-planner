@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import expenses, trips
+from app.routers import expenses, places, trips
 
 app = FastAPI(
     title="Travel Planner Trip Service",
@@ -26,6 +26,7 @@ app.add_middleware(
 
 app.include_router(trips.router, prefix="/api/trips", tags=["Trips"])
 app.include_router(expenses.router, prefix="/api", tags=["Expenses"])
+app.include_router(places.router, prefix="/api", tags=["Places"])
 
 
 @app.exception_handler(AppException)

@@ -1,0 +1,11 @@
+{
+  "pythonVersion": "3.11",
+  "venvPath": "../..",
+  "venv": ".venv",
+  "include": ["app"],
+  "exclude": ["migrations", "tests"],
+  "typeCheckingMode": "basic",
+  "reportGeneralTypeIssues": "error",
+  "reportArgumentType": "error",
+  "reportOperatorIssue": "error"
+}
