@@ -40,3 +40,14 @@ class Expense(BaseModel):
     category = Column(Enum(ExpenseCategory), nullable=False)
     description = Column(Text, nullable=True)
     expense_date = Column(Date, nullable=True)
+
+
+class PlaceVisit(BaseModel):
+    __tablename__ = "place_visits"
+    trip_id = Column(UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    visited_at = Column(Date, nullable=False, index=True)
+    latitude = Column(Numeric(10, 7), nullable=False)
+    longitude = Column(Numeric(10, 7), nullable=False)
+    notes = Column(Text, nullable=True)

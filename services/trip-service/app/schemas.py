@@ -118,3 +118,40 @@ class ConvertedExpenseSummary(BaseModel):
 class ExchangeRatesResponse(BaseModel):
     base: str
     rates: dict[str, float]
+
+
+class PlaceVisitCreate(BaseModel):
+    name: str
+    visited_at: date
+    latitude: Decimal
+    longitude: Decimal
+    notes: str | None = None
+
+
+class PlaceVisitUpdate(BaseModel):
+    name: str | None = None
+    visited_at: date | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    notes: str | None = None
+
+
+class PlaceVisitResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    user_id: UUID
+    name: str
+    visited_at: date
+    latitude: Decimal
+    longitude: Decimal
+    notes: str | None
+    created_at: str
+    updated_at: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class PlaceVisitsByDate(BaseModel):
+    date: date
+    places: list[PlaceVisitResponse]
