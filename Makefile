@@ -1,4 +1,4 @@
-.PHONY: up down build test lint fix dev logs clean migrate migration
+.PHONY: up down build test lint fix typecheck dev logs clean migrate migration
 
 # Docker
 up:
@@ -30,7 +30,11 @@ test-cov:
 	docker-compose run --rm auth-service pytest --cov=app tests/
 	docker-compose run --rm trip-service pytest --cov=app tests/
 
-lint:
+typecheck:
+	cd services/auth-service && ../../.venv/bin/pyright
+	cd services/trip-service && ../../.venv/bin/pyright
+
+lint: typecheck
 	cd services/auth-service && ruff check . --config ruff.toml && cd ../trip-service && ruff check . --config ruff.toml
 
 fix:
@@ -41,7 +45,7 @@ install:
 	cd services/auth-service && pip install -r requirements.txt
 
 install-dev:
-	pip install ruff pytest-cov
+	pip install ruff pytest-cov pyright
 
 # Cleanup
 clean:

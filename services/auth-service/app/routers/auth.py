@@ -227,6 +227,9 @@ def refresh_tokens(request: RefreshRequest, db: Session = Depends(get_db)):
     user_id = payload.get("sub")
     old_jti = payload.get("jti")
 
+    if not user_id or not old_jti:
+        raise AppException(status_code=401, code="UNAUTHORIZED", message="Invalid refresh token")
+
     if not redis_client.validate_refresh_token(user_id, old_jti):
         raise AppException(status_code=401, code="UNAUTHORIZED", message="Refresh token has been revoked")
 
@@ -241,7 +244,7 @@ def refresh_tokens(request: RefreshRequest, db: Session = Depends(get_db)):
     new_refresh_token, new_jti = utils.create_refresh_token(data=token_data)
 
     refresh_ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-    redis_client.store_refresh_token(user_id, new_jti, refresh_ttl)
+    redis_client.store_refresh_token(str(user.id), new_jti, refresh_ttl)
 
     return TokenResponse(access_token=new_access_token, refresh_token=new_refresh_token)
 
@@ -259,6 +262,8 @@ def change_password(
         raise AppException(status_code=400, code="BAD_REQUEST", message="Incorrect old password")
 
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise AppException(status_code=404, code="NOT_FOUND", message="User not found")
     user.password_hash = utils.get_password_hash(request.new_password)
     db.commit()
 

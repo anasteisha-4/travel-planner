@@ -66,7 +66,7 @@ class ResetPasswordRequest(BaseModel):
 class UserProfile(BaseModel):
     id: UUID
     email: str
-    login: str
+    login: str | None
     onboarding_completed: bool
     preferences: UserPreferences | None
 

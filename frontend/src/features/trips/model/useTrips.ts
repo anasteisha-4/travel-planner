@@ -1,34 +1,25 @@
 import type { Trip, TripStatus } from '@/entities/trip';
 import { tripApi } from '@/entities/trip';
 import { useToast } from '@/shared/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 
 export const useTrips = (initialStatus?: TripStatus) => {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TripStatus | undefined>(initialStatus);
   const { toast } = useToast();
 
-  const fetchTrips = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await tripApi.getTrips(statusFilter);
-      setTrips(data);
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Ошибка',
-        description: 'Не удалось загрузить поездки',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, toast]);
+  const query = useQuery<Trip[]>({
+    queryKey: ['trips', statusFilter],
+    queryFn: () => tripApi.getTrips(statusFilter),
+  });
 
   useEffect(() => {
-    fetchTrips();
-  }, [fetchTrips]);
+    if (query.isError) {
+      toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось загрузить поездки' });
+    }
+  }, [query.isError, toast]);
 
+  const trips = query.data ?? [];
   const activeTrips = trips.filter((t) => t.status === 'planned' || t.status === 'active');
   const completedTrips = trips.filter((t) => t.status === 'completed' || t.status === 'cancelled');
 
@@ -36,9 +27,9 @@ export const useTrips = (initialStatus?: TripStatus) => {
     trips,
     activeTrips,
     completedTrips,
-    loading,
+    loading: query.isLoading,
     statusFilter,
     setStatusFilter,
-    refetch: fetchTrips,
+    refetch: query.refetch,
   };
 };

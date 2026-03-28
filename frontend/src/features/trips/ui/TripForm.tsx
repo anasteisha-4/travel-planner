@@ -51,6 +51,7 @@ export const TripForm = ({
     setNotes,
     isLoading,
     isInitialLoading,
+    isConverting,
     errors,
     clearError,
     todayStr,
@@ -179,7 +180,8 @@ export const TripForm = ({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <FieldLabel className="mb-0">Бюджет</FieldLabel>
-          <span className="text-[15px] font-bold text-stone-900 dark:text-white">
+          <span className="flex items-center gap-1.5 text-[15px] font-bold text-stone-900 dark:text-white">
+            {isConverting && <Loader2 className="h-3.5 w-3.5 animate-spin text-stone-400" />}
             {budget > 0 ? `${budget.toLocaleString('ru-RU')} ${currencySymbol}` : 'Без лимита'}
           </span>
         </div>
@@ -203,6 +205,7 @@ export const TripForm = ({
               max={budgetConfig.max}
               step={budgetConfig.step}
               onValueChange={([val]) => setBudget(val)}
+              disabled={isConverting}
             />
           </div>
         </div>

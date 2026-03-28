@@ -42,4 +42,4 @@ class Settings(BaseSettings):
         extra = "allow"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

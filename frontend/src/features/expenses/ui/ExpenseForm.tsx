@@ -79,6 +79,7 @@ const labelClass =
 
 type ExpenseFormProps = {
   tripId: string;
+  tripCurrency?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingExpense?: Expense;
@@ -88,13 +89,14 @@ type ExpenseFormProps = {
 
 export const ExpenseForm = ({
   tripId,
+  tripCurrency,
   open,
   onOpenChange,
   existingExpense,
   onSuccess,
   onDeleteRequest,
 }: ExpenseFormProps) => {
-  const form = useExpenseForm(tripId, existingExpense);
+  const form = useExpenseForm(tripId, existingExpense, tripCurrency);
   const isEdit = !!existingExpense;
 
   const handleSubmit = async () => {

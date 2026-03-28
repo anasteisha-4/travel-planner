@@ -45,6 +45,8 @@ def update_profile(
 ):
     """Update user profile (email, login)"""
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise AppException(status_code=404, code="NOT_FOUND", message="User not found")
 
     if request.email and request.email != user.email:
         existing = db.query(models.User).filter(models.User.email == request.email).first()
@@ -80,6 +82,8 @@ def update_preferences(
 ):
     """Update user preferences and mark onboarding as completed"""
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise AppException(status_code=404, code="NOT_FOUND", message="User not found")
 
     user.preferences = preferences.model_dump()
     user.onboarding_completed = True

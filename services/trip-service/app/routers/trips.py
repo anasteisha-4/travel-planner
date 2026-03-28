@@ -21,7 +21,7 @@ def trip_to_response(trip: models.Trip) -> schemas.TripResponse:
         budget=trip.budget,
         currency=trip.currency,
         people_count=trip.people_count,
-        status=trip.status,
+        status=schemas.TripStatus(trip.status),
         trip_type=trip.trip_type,
         season=trip.season,
         departure_city=trip.departure_city,

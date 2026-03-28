@@ -2,6 +2,8 @@
 Redis client for token management
 """
 
+from typing import cast
+
 import redis
 
 from app.config import settings
@@ -17,7 +19,7 @@ def get_redis() -> redis.Redis:
     return redis_client
 
 
-def store_refresh_token(user_id: str, jti: str, ttl_seconds: int, metadata: dict = None) -> None:
+def store_refresh_token(user_id: str, jti: str, ttl_seconds: int, metadata: dict | None = None) -> None:
     """Store refresh token in Redis"""
     import json
     from datetime import datetime
@@ -32,14 +34,14 @@ def validate_refresh_token(user_id: str, jti: str) -> bool:
     """Check if refresh token exists in Redis"""
     r = get_redis()
     key = f"refresh_token:{user_id}:{jti}"
-    return r.exists(key) == 1
+    return cast(int, r.exists(key)) == 1
 
 
 def revoke_refresh_token(user_id: str, jti: str) -> bool:
     """Revoke (delete) a specific refresh token"""
     r = get_redis()
     key = f"refresh_token:{user_id}:{jti}"
-    return r.delete(key) > 0
+    return cast(int, r.delete(key)) > 0
 
 
 def revoke_all_user_tokens(user_id: str) -> int:
@@ -48,7 +50,7 @@ def revoke_all_user_tokens(user_id: str) -> int:
     pattern = f"refresh_token:{user_id}:*"
     keys = list(r.scan_iter(match=pattern))
     if keys:
-        return r.delete(*keys)
+        return cast(int, r.delete(*keys))
     return 0
 
 
@@ -63,7 +65,7 @@ def is_blacklisted(jti: str) -> bool:
     """Check if access token is blacklisted"""
     r = get_redis()
     key = f"blacklist:{jti}"
-    return r.exists(key) == 1
+    return cast(int, r.exists(key)) == 1
 
 
 def store_reset_token(token: str, user_id: str, ttl_seconds: int = 1200) -> None:
@@ -77,14 +79,14 @@ def get_reset_token_user_id(token: str) -> str | None:
     """Get user_id from reset token, returns None if expired/invalid"""
     r = get_redis()
     key = f"reset_token:{token}"
-    return r.get(key)
+    return cast(str | None, r.get(key))
 
 
 def revoke_reset_token(token: str) -> bool:
     """Delete a reset token (one-time use)"""
     r = get_redis()
     key = f"reset_token:{token}"
-    return r.delete(key) > 0
+    return cast(int, r.delete(key)) > 0
 
 
 def check_redis_connection() -> bool:

@@ -8,6 +8,7 @@ export default defineConfig(({ command }) => {
   const isDev = command === 'serve';
 
   return {
+    envDir: path.resolve(__dirname, '..'),
     plugins: [
       react(),
       VitePWA({
@@ -99,6 +100,21 @@ export default defineConfig(({ command }) => {
       host: true,
       proxy: {
         '/api/trips': {
+          target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/expenses': {
+          target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/places': {
+          target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/exchange-rates': {
           target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
           changeOrigin: true,
           secure: false,
