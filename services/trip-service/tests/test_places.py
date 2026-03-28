@@ -155,6 +155,147 @@ class TestGetPlaces:
         assert resp.json()[0]["trip_id"] == trip_a
 
 
+class TestUpdatePlace:
+    def test_update_name(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"name": "Башня Скайтри"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Башня Скайтри"
+
+    def test_update_visited_at(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"visited_at": "2026-05-01"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["visited_at"] == "2026-05-01"
+
+    def test_update_notes(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"notes": "Обновлённые заметки"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["notes"] == "Обновлённые заметки"
+
+    def test_update_notes_to_null(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"notes": None}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["notes"] is None
+
+    def test_update_both_coordinates(self, client, auth_headers, place_id):
+        resp = client.patch(
+            f"/api/places/{place_id}",
+            json={"latitude": "35.7148", "longitude": "139.7967"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["latitude"] == "35.7148000"
+        assert resp.json()["longitude"] == "139.7967000"
+
+    def test_update_only_latitude(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"latitude": "34.0"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["latitude"] == "34.0000000"
+        assert resp.json()["longitude"] == "139.7454000"
+
+    def test_update_only_longitude(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"longitude": "140.0"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["longitude"] == "140.0000000"
+        assert resp.json()["latitude"] == "35.6586000"
+
+    def test_update_all_fields(self, client, auth_headers, place_id):
+        payload = {
+            "name": "Синдзюку",
+            "visited_at": "2026-04-10",
+            "latitude": "35.6938",
+            "longitude": "139.7036",
+            "notes": "Ночная жизнь",
+        }
+        resp = client.patch(f"/api/places/{place_id}", json=payload, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == payload["name"]
+        assert data["visited_at"] == payload["visited_at"]
+        assert data["latitude"] == "35.6938000"
+        assert data["longitude"] == "139.7036000"
+        assert data["notes"] == payload["notes"]
+
+    def test_update_empty_body_returns_unchanged(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={}, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == PLACE_DATA["name"]
+        assert data["visited_at"] == PLACE_DATA["visited_at"]
+        assert data["notes"] == PLACE_DATA["notes"]
+
+    def test_update_returns_full_response_shape(self, client, auth_headers, trip_id, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"name": "Акихабара"}, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        for field in ("id", "trip_id", "user_id", "name", "visited_at", "latitude", "longitude", "notes", "created_at"):
+            assert field in data
+        assert data["trip_id"] == trip_id
+
+    def test_update_persists(self, client, auth_headers, trip_id, place_id):
+        client.patch(f"/api/places/{place_id}", json={"name": "Гинза"}, headers=auth_headers)
+        places = client.get(f"/api/trips/{trip_id}/places", headers=auth_headers).json()
+        assert places[0]["name"] == "Гинза"
+
+    def test_update_no_auth(self, client, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"name": "X"})
+        assert resp.status_code == 401
+
+    def test_update_not_found(self, client, auth_headers):
+        resp = client.patch(
+            "/api/places/00000000-0000-0000-0000-000000000000",
+            json={"name": "X"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "NOT_FOUND"
+
+    def test_update_other_users_place(self, client, auth_headers, other_user_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"name": "X"}, headers=other_user_headers)
+        assert resp.status_code == 404
+
+    def test_update_invalid_latitude_above_90(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"latitude": "91.0"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_invalid_latitude_below_minus_90(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"latitude": "-90.1"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_invalid_longitude_above_180(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"longitude": "180.1"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_invalid_longitude_below_minus_180(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"longitude": "-181.0"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_boundary_coordinates(self, client, auth_headers, place_id):
+        resp = client.patch(
+            f"/api/places/{place_id}",
+            json={"latitude": "90.0", "longitude": "-180.0"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    def test_update_only_latitude_invalid_uses_existing_longitude(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"latitude": "95.0"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_only_longitude_invalid_uses_existing_latitude(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"longitude": "200.0"}, headers=auth_headers)
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "INVALID_COORDINATES"
+
+    def test_update_no_coordinates_skips_validation(self, client, auth_headers, place_id):
+        resp = client.patch(f"/api/places/{place_id}", json={"name": "Без координат"}, headers=auth_headers)
+        assert resp.status_code == 200
+
+
 class TestDeletePlace:
     def test_delete_success(self, client, auth_headers, trip_id, place_id):
         resp = client.delete(f"/api/places/{place_id}", headers=auth_headers)

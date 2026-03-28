@@ -53,7 +53,8 @@ const RING_SIZE = 128;
 const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const getRingColor = (pct: number, isOver: boolean): string => {
-  if (isOver || pct >= 0.9) return '#EF4444';
+  if (isOver) return '#EF4444';
+  if (pct >= 0.9) return '#F97316';
   if (pct >= 0.5) return '#F59E0B';
   return '#22C55E';
 };

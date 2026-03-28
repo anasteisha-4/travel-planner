@@ -1,51 +1,57 @@
 import type { ConvertedExpenseSummary, Expense } from '@/entities/expense';
 import { expenseApi } from '@/entities/expense';
 import { useToast } from '@/shared/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
 
 export const useExpenses = (tripId: string, budgetCurrency: string) => {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [convertedSummary, setConvertedSummary] = useState<ConvertedExpenseSummary | null>(null);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchAll = useCallback(async () => {
-    if (!tripId) return;
-    setLoading(true);
-    try {
-      const [expensesData, summaryData] = await Promise.all([
-        expenseApi.getExpenses(tripId),
-        expenseApi.getConvertedSummary(tripId, budgetCurrency),
-      ]);
-      setExpenses(expensesData);
-      setConvertedSummary(summaryData);
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Ошибка',
-        description: 'Не удалось загрузить расходы',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [tripId, budgetCurrency, toast]);
+  const expensesQuery = useQuery<Expense[]>({
+    queryKey: ['expenses', tripId],
+    queryFn: () => expenseApi.getExpenses(tripId),
+    enabled: !!tripId,
+  });
+
+  const summaryQuery = useQuery<ConvertedExpenseSummary>({
+    queryKey: ['expenses-summary', tripId, budgetCurrency],
+    queryFn: () => expenseApi.getConvertedSummary(tripId, budgetCurrency),
+    enabled: !!tripId,
+  });
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  const removeExpense = async (expenseId: string) => {
-    try {
-      await expenseApi.deleteExpense(expenseId);
-      await fetchAll();
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Ошибка',
-        description: 'Не удалось удалить расход',
-      });
+    if (expensesQuery.isError || summaryQuery.isError) {
+      toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось загрузить расходы' });
     }
-  };
+  }, [expensesQuery.isError, summaryQuery.isError, toast]);
 
-  return { expenses, convertedSummary, loading, refetch: fetchAll, removeExpense };
+  const removeMutation = useMutation({
+    mutationFn: (expenseId: string) => expenseApi.deleteExpense(expenseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
+    },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось удалить расход' });
+    },
+  });
+
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
+    queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
+  }, [queryClient, tripId]);
+
+  const removeExpense = useCallback(
+    (expenseId: string) => removeMutation.mutateAsync(expenseId).catch(() => {}),
+    [removeMutation],
+  );
+
+  return {
+    expenses: expensesQuery.data ?? [],
+    convertedSummary: summaryQuery.data ?? null,
+    loading: expensesQuery.isLoading || summaryQuery.isLoading,
+    refetch,
+    removeExpense,
+  };
 };

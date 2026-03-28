@@ -42,7 +42,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_expenses_trip_id"), "expenses", ["trip_id"], unique=False)
     op.create_index(op.f("ix_expenses_user_id"), "expenses", ["user_id"], unique=False)
-    op.drop_table("auth_alembic_version")
     # ### end Alembic commands ###
 
 

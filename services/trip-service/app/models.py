@@ -59,3 +59,4 @@ class PlaceVisit(BaseModel):
     latitude: Mapped[Decimal] = mapped_column(Numeric(10, 7), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(10, 7), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    order: Mapped[int | None] = mapped_column(Integer, nullable=True)

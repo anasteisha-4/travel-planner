@@ -1,5 +1,6 @@
 import { BUDGET_LIMITS } from '@/shared/config';
 import { useToast } from '@/shared/ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { profileApi } from '../api/profile.api';
 
@@ -35,39 +36,31 @@ const checkHasPreferences = (data: PreferencesData) =>
   !!data.additional_info;
 
 export const usePreferences = () => {
-  const [preferences, setPreferences] = useState<PreferencesData>(EMPTY_PREFERENCES);
-  const [isFetching, setIsFetching] = useState(true);
   const { toast } = useToast();
 
-  const refetch = useCallback(async () => {
-    setIsFetching(true);
-    try {
-      const data = await profileApi.getPreferences();
-      setPreferences(data);
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Ошибка',
-        description: 'Не удалось загрузить предпочтения',
-      });
-    } finally {
-      setIsFetching(false);
-    }
-  }, [toast]);
+  const query = useQuery<PreferencesData>({
+    queryKey: ['preferences'],
+    queryFn: () => profileApi.getPreferences(),
+  });
 
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (query.isError) {
+      toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось загрузить предпочтения' });
+    }
+  }, [query.isError, toast]);
+
+  const preferences = query.data ?? EMPTY_PREFERENCES;
 
   return {
     preferences,
     hasPreferences: checkHasPreferences(preferences),
-    isFetching,
-    refetch,
+    isFetching: query.isLoading,
+    refetch: query.refetch,
   };
 };
 
 export const usePreferencesEditor = (initialData: PreferencesData) => {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [travelTypes, setTravelTypes] = useState<string[]>(initialData.travel_types);
   const [destinations, setDestinations] = useState(initialData.favorite_destinations ?? '');
@@ -124,6 +117,8 @@ export const usePreferencesEditor = (initialData: PreferencesData) => {
         departure_city: departureCity || null,
         additional_info: additionalInfo || null,
       });
+      queryClient.invalidateQueries({ queryKey: ['preferences'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       return true;
     } catch {
       toast({

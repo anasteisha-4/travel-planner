@@ -6,11 +6,14 @@ import { ProfilePage } from '@/pages/profile';
 import { RegisterPage } from '@/pages/register';
 import { ResetPasswordPage } from '@/pages/reset-password';
 import { TripCreatePage } from '@/pages/trip-create';
-import { TripDetailPage } from '@/pages/trip-detail';
+import { TripAnalyticsTab, TripDetailPage, TripDiaryTab, TripExpensesTab, TripInfoTab } from '@/pages/trip-detail';
 import { TripsPage } from '@/pages/trips';
+import { queryClient } from '@/shared/lib';
 import { ThemeProvider } from '@/shared/ui';
 import { BottomNav } from '@/widgets/bottom-nav';
 import { Layout } from '@/widgets/layout';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useNavigate } from 'react-router-dom';
 
@@ -46,8 +49,9 @@ const AppEffects = () => {
 
 export const App = () => {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      <Router>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+        <Router>
         <AppEffects />
         <Routes>
           <Route element={<Layout bottomNav={<BottomNav />} />}>
@@ -116,7 +120,12 @@ export const App = () => {
                   <TripDetailPage />
                 </PrivateRoute>
               }
-            />
+            >
+              <Route path="analytics" element={<TripAnalyticsTab />} />
+              <Route path="info" element={<TripInfoTab />} />
+              <Route path="expenses" element={<TripExpensesTab />} />
+              <Route path="diary" element={<TripDiaryTab />} />
+            </Route>
             <Route
               path="/profile"
               element={
@@ -129,7 +138,9 @@ export const App = () => {
             <Route path="/auth/yandex/callback" element={<OAuthCallbackPage />} />
           </Route>
         </Routes>
-      </Router>
-    </ThemeProvider>
+        </Router>
+      </ThemeProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 };

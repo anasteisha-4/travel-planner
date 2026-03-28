@@ -21,6 +21,7 @@ def _place_to_response(place) -> schemas.PlaceVisitResponse:
         latitude=place.latitude,
         longitude=place.longitude,
         notes=place.notes,
+        order=place.order,
         created_at=place.created_at.isoformat() if place.created_at else "",
         updated_at=place.updated_at.isoformat() if place.updated_at else None,
     )
@@ -44,6 +45,28 @@ def get_places(
     db: Session = Depends(get_db),
 ):
     places = place_service.get_places_by_trip(db, user_id, trip_id)
+    return [_place_to_response(p) for p in places]
+
+
+@router.patch("/places/{place_id}", response_model=schemas.PlaceVisitResponse)
+def update_place(
+    place_id: UUID,
+    data: schemas.PlaceVisitUpdate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    place = place_service.update_place(db, user_id, place_id, data)
+    return _place_to_response(place)
+
+
+@router.patch("/trips/{trip_id}/places/reorder", response_model=list[schemas.PlaceVisitResponse])
+def reorder_places(
+    trip_id: UUID,
+    data: schemas.PlaceVisitReorder,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    places = place_service.reorder_places(db, user_id, trip_id, data)
     return [_place_to_response(p) for p in places]
 
 

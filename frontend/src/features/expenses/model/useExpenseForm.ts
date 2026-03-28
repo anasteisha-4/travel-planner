@@ -1,13 +1,15 @@
 import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { expenseApi, ExpenseCreateSchema } from '@/entities/expense';
 import { useToast } from '@/shared/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
+export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaultCurrency = 'EUR') => {
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState(
     existingExpense?.amount ? String(existingExpense.amount) : ''
   );
-  const [currency, setCurrency] = useState(existingExpense?.currency ?? 'EUR');
+  const [currency, setCurrency] = useState(existingExpense?.currency ?? defaultCurrency);
   const [category, setCategory] = useState<ExpenseCategory>(existingExpense?.category ?? 'food');
   const [description, setDescription] = useState(existingExpense?.description ?? '');
   const [expenseDate, setExpenseDate] = useState(
@@ -67,6 +69,8 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
     setIsLoading(true);
     try {
       const expense = await expenseApi.createExpense(tripId, data);
+      queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось добавить расход' });
@@ -82,6 +86,8 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
     setIsLoading(true);
     try {
       const expense = await expenseApi.updateExpense(expenseId, data);
+      queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось обновить расход' });
@@ -93,7 +99,7 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense) => {
 
   const reset = () => {
     setAmount('');
-    setCurrency('EUR');
+    setCurrency(defaultCurrency);
     setCategory('food');
     setDescription('');
     setExpenseDate(new Date().toISOString().slice(0, 10));

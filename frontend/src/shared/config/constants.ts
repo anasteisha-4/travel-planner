@@ -11,12 +11,12 @@ export const BUDGET_LIMITS: Record<
   string,
   { min: number; max: number; step: number; format: (v: number) => string }
 > = {
-  RUB: { min: 0, max: 1000000, step: 10000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₽` },
-  USD: { min: 0, max: 10000, step: 100, format: (v) => `$${v}` },
-  EUR: { min: 0, max: 10000, step: 100, format: (v) => `€${v}` },
-  GBP: { min: 0, max: 8000, step: 100, format: (v) => `£${v}` },
-  TRY: { min: 0, max: 350000, step: 5000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₺` },
-  CNY: { min: 0, max: 75000, step: 1000, format: (v) => `¥${v}` },
+  RUB: { min: 0, max: 2000000, step: 10000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₽` },
+  USD: { min: 0, max: 24000, step: 100, format: (v) => `$${v}` },
+  EUR: { min: 0, max: 21000, step: 100, format: (v) => `€${v}` },
+  GBP: { min: 0, max: 18000, step: 100, format: (v) => `£${v}` },
+  TRY: { min: 0, max: 800000, step: 5000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₺` },
+  CNY: { min: 0, max: 160000, step: 1000, format: (v) => `¥${v}` },
 };
 
 import {

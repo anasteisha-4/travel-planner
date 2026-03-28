@@ -1,6 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -86,7 +87,66 @@ def get_places_by_trip(
             models.PlaceVisit.trip_id == trip_id,
             models.PlaceVisit.user_id == user_id,
         )
-        .order_by(models.PlaceVisit.visited_at.asc(), models.PlaceVisit.created_at.asc())
+        .order_by(
+            models.PlaceVisit.visited_at.asc(),
+            nulls_last(models.PlaceVisit.order.asc()),
+            models.PlaceVisit.created_at.asc(),
+        )
+        .all()
+    )
+
+
+def update_place(
+    db: Session,
+    user_id: UUID,
+    place_id: UUID,
+    data: schemas.PlaceVisitUpdate,
+) -> models.PlaceVisit:
+    place = _verify_place_ownership(db, place_id, user_id)
+
+    if data.latitude is not None or data.longitude is not None:
+        lat = data.latitude if data.latitude is not None else place.latitude
+        lon = data.longitude if data.longitude is not None else place.longitude
+        _validate_coordinates(lat, lon)
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(place, field, value)
+
+    db.commit()
+    db.refresh(place)
+    return place
+
+
+def reorder_places(
+    db: Session,
+    user_id: UUID,
+    trip_id: UUID,
+    data: schemas.PlaceVisitReorder,
+) -> list[models.PlaceVisit]:
+    _verify_trip_ownership(db, trip_id, user_id)
+    places_by_id = {
+        p.id: p
+        for p in db.query(models.PlaceVisit)
+        .filter(
+            models.PlaceVisit.trip_id == trip_id,
+            models.PlaceVisit.user_id == user_id,
+            models.PlaceVisit.visited_at == data.date,
+        )
+        .all()
+    }
+    for idx, place_id in enumerate(data.place_ids):
+        place = places_by_id.get(place_id)
+        if place:
+            place.order = idx
+    db.commit()
+    return (
+        db.query(models.PlaceVisit)
+        .filter(
+            models.PlaceVisit.trip_id == trip_id,
+            models.PlaceVisit.user_id == user_id,
+            models.PlaceVisit.visited_at == data.date,
+        )
+        .order_by(nulls_last(models.PlaceVisit.order.asc()), models.PlaceVisit.created_at.asc())
         .all()
     )
 

@@ -1,14 +1,17 @@
 import type { Trip, TripCreate, TripUpdate } from '@/entities/trip';
 import { tripApi, TripCreateSchema } from '@/entities/trip';
+import { expenseApi } from '@/entities/expense';
 import { useProfile } from '@/entities/user';
-import { CURRENCIES } from '@/shared/config';
+import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import { useToast } from '@/shared/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
 
 export const useTripForm = (existingTrip?: Trip) => {
   const { profile } = useProfile();
+  const queryClient = useQueryClient();
   const [destination, setDestination] = useState(existingTrip?.destination ?? '');
   const [startDate, setStartDate] = useState(existingTrip?.start_date ?? '');
   const [endDate, setEndDate] = useState(existingTrip?.end_date ?? '');
@@ -19,7 +22,9 @@ export const useTripForm = (existingTrip?: Trip) => {
   const [notes, setNotes] = useState(existingTrip?.notes ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(!existingTrip);
+  const [isConverting, setIsConverting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const prevCurrencyRef = useRef(existingTrip?.currency ?? 'RUB');
   const { toast } = useToast();
 
   const hasInitializedFromPrefs = useRef(false);
@@ -38,7 +43,7 @@ export const useTripForm = (existingTrip?: Trip) => {
       }
       hasInitializedFromPrefs.current = true;
       setIsInitialLoading(false);
-    } else if (existingTrip || !profile) {
+    } else if (existingTrip || profile) {
       setIsInitialLoading(false);
     }
   }, [profile, existingTrip]);
@@ -55,8 +60,30 @@ export const useTripForm = (existingTrip?: Trip) => {
     }
   };
 
-  const handleCurrencyChange = (value: string) => {
-    setCurrency(value);
+  const handleCurrencyChange = async (newCurrency: string) => {
+    const prevCurrency = prevCurrencyRef.current;
+    setCurrency(newCurrency);
+    prevCurrencyRef.current = newCurrency;
+
+    if (budget > 0 && prevCurrency !== newCurrency) {
+      setIsConverting(true);
+      try {
+        const rates = await queryClient.fetchQuery({
+          queryKey: ['exchange-rates', prevCurrency],
+          queryFn: () => expenseApi.getExchangeRates(prevCurrency),
+          staleTime: 60 * 60 * 1000,
+        });
+        const rate = rates.rates[newCurrency];
+        if (rate) {
+          const maxForCurrency = BUDGET_LIMITS[newCurrency]?.max ?? BUDGET_LIMITS['USD'].max;
+          setBudget(Math.min(Math.round(budget * rate), maxForCurrency));
+        }
+      } catch {
+        // keep original budget on error
+      } finally {
+        setIsConverting(false);
+      }
+    }
   };
 
   const incrementPeople = () => setPeopleCount((p) => Math.min(p + 1, 20));
@@ -122,6 +149,7 @@ export const useTripForm = (existingTrip?: Trip) => {
     setIsLoading(true);
     try {
       const trip = await tripApi.createTrip(data);
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
       return trip;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось создать поездку' });
@@ -140,6 +168,8 @@ export const useTripForm = (existingTrip?: Trip) => {
     setIsLoading(true);
     try {
       const trip = await tripApi.updateTrip(id, updateData);
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+      queryClient.invalidateQueries({ queryKey: ['trip', id] });
       return trip;
     } catch {
       toast({
@@ -174,6 +204,7 @@ export const useTripForm = (existingTrip?: Trip) => {
     setNotes,
     isLoading,
     isInitialLoading,
+    isConverting,
     errors,
     clearError: (field: string) =>
       setErrors((prev) => {

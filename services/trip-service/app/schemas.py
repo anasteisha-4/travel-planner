@@ -145,11 +145,17 @@ class PlaceVisitResponse(BaseModel):
     latitude: Decimal
     longitude: Decimal
     notes: str | None
+    order: int | None
     created_at: str
     updated_at: str | None
 
     class Config:
         from_attributes = True
+
+
+class PlaceVisitReorder(BaseModel):
+    date: date
+    place_ids: list[UUID]
 
 
 class PlaceVisitsByDate(BaseModel):
