@@ -24,7 +24,6 @@ yarn-error.log*
 .stylelintcache
 tsconfig.tsbuildinfo
 .vite
-.playwright-mcp/*
 
 # Backend (Python/FastAPI)
 __pycache__/
@@ -43,3 +42,5 @@ htmlcov/
 .ruff_cache/
 pip-log.txt
 pip-delete-this-directory.txt
+
+travel_planner_dump_20260419.dump

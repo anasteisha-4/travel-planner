@@ -63,6 +63,25 @@ services:
       redis:
         condition: service_healthy
 
+  data-service:
+    build:
+      context: ./services/data-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-data
+    ports:
+      - "8003:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/data-service/data:/app/data
+
   frontend:
     build:
       context: ./frontend

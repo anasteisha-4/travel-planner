@@ -1,4 +1,4 @@
-.PHONY: up down build test lint fix typecheck dev logs clean migrate migration
+.PHONY: up down build test lint fix typecheck dev logs clean migrate migration seed-data fetch-poi-osm fetch-poi-otm compute-activities refresh-seasonality
 
 # Docker
 up:
@@ -62,3 +62,19 @@ migration:
 	@read -p "Migration message: " msg; \
 	docker-compose run --rm -v $$(pwd)/services/auth-service:/app auth-service alembic revision --autogenerate -m "$$msg"; \
 	docker-compose run --rm -v $$(pwd)/services/trip-service:/app trip-service alembic revision --autogenerate -m "$$msg"
+
+# Data ETL
+seed-data:
+	docker-compose run --rm data-service python -m etl.pipeline --seed
+
+fetch-poi-osm:
+	docker-compose run --rm data-service python -m etl.pipeline --jobs poi_osm $(if $(LIMIT),--limit $(LIMIT),)
+
+fetch-poi-otm:
+	docker-compose run --rm data-service python -m etl.pipeline --jobs poi_opentripmap $(if $(LIMIT),--limit $(LIMIT),)
+
+compute-activities:
+	docker-compose run --rm data-service python -m etl.pipeline --jobs activities,trajectories
+
+refresh-seasonality:
+	docker-compose run --rm data-service python -m etl.pipeline --jobs seasonality

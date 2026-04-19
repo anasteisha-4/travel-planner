@@ -14,6 +14,7 @@ class Trip(BaseModel):
     __tablename__ = "trips"
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     destination: Mapped[str] = mapped_column(String, nullable=False)
+    destination_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     budget: Mapped[float | None] = mapped_column(Float, nullable=True)

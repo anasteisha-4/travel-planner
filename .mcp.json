@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["@upstash/context7-mcp@latest"]
+    },
+    "paper": {
+      "type": "http",
+      "url": "http://127.0.0.1:29979/mcp"
+    },
+    "shadcn": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "@jpisnice/shadcn-ui-mcp-server"]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["@playwright/mcp@latest", "--viewport-size", "390,844"]
+    }
+  }
+}
