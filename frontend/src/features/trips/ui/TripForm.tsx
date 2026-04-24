@@ -17,7 +17,6 @@ import {
 } from '@/shared/ui';
 import { Loader2, MapPin, Minus, Plus } from 'lucide-react';
 import { useTripForm } from '../model/useTripForm';
-import { TripFormSkeleton } from './TripFormSkeleton';
 
 export const TripForm = ({
   existingTrip,
@@ -50,7 +49,6 @@ export const TripForm = ({
     notes,
     setNotes,
     isLoading,
-    isInitialLoading,
     isConverting,
     errors,
     clearError,
@@ -60,8 +58,6 @@ export const TripForm = ({
   } = useTripForm(existingTrip);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
-
-  if (isInitialLoading) return <TripFormSkeleton />;
 
   const handleSubmit = async () => {
     const trip = existingTrip ? await handleUpdate(existingTrip.id) : await handleCreate();

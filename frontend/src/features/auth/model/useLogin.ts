@@ -1,4 +1,4 @@
-import { userApi } from '@/entities/user';
+import { queryClient } from '@/shared/lib/query-client';
 import { useToast } from '@/shared/ui';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -15,7 +15,7 @@ export const useLogin = ({
   onError,
 }: {
   oauthCallback?: boolean;
-  onSuccess: (onboardingCompleted?: boolean) => void;
+  onSuccess: () => void;
   onError?: () => void;
 }) => {
   const [identifier, setIdentifier] = useState('');
@@ -42,8 +42,8 @@ export const useLogin = ({
             });
             localStorage.setItem('access_token', res.access_token);
             localStorage.setItem('refresh_token', res.refresh_token);
-            const profile = await userApi.getProfile();
-            onSuccess(profile.onboarding_completed);
+            queryClient.clear();
+            onSuccess();
           } catch (e: unknown) {
             let message = 'Не удалось авторизоваться через Яндекс';
             if (axios.isAxiosError(e)) {
@@ -93,8 +93,8 @@ export const useLogin = ({
       const res = await authApi.login(parsedData);
       localStorage.setItem('access_token', res.access_token);
       localStorage.setItem('refresh_token', res.refresh_token);
-      const profile = await userApi.getProfile();
-      onSuccess(profile.onboarding_completed);
+      queryClient.clear();
+      onSuccess();
     } catch (err) {
       if (err instanceof z.ZodError) {
         const errors: FieldErrors = {};

@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 export const OAuthCallbackPage = () => {
   const navigate = useNavigate();
 
-  const handleSuccess = (onboardingCompleted?: boolean) => {
-    navigate(onboardingCompleted ? '/dashboard' : '/onboarding', { replace: true });
+  const handleSuccess = () => {
+    navigate('/onboarding', { replace: true });
   };
 
   return (

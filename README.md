@@ -1,103 +1,90 @@
 # Triply — Travel Planner
 
-Мобильная платформа (PWA) для персонализированного планирования путешествий.
+Мобильная платформа (PWA) для персонализированного планирования путешествий с ML-рекомендациями направлений.
 
 ## ✨ Основные возможности
 
-*   **Дневник поездки с интерактивной картой**: Добавление посещённых мест на карту Яндекс с геокодингом, заметками, датой и временем визита. Карточки мест, детальный просмотр, удаление. Переключение между режимом карты и списком мест.
-*   **Аналитика завершённых поездок (Итоги)**: Отдельный таб для завершённых поездок — общая сумма расходов, средний расход в день, количество посещённых мест, длительность, соответствие бюджету (с цветовыми тирами), разбивка по категориям. Конфетти-анимация при завершении поездки.
-*   **Анкетирование предпочтений при первом входе**: Двухэтапная анкета онбординга для новых пользователей (интересы, направления, бюджет, длительность и город отправления).
-*   **Гибкий профиль**: Настройка предпочтений в любой момент через интуитивно понятный интерфейс.
-*   **Учёт расходов (Expense Tracker)**: Полноценная система учёта расходов в поездке с автоматической конвертацией валют через внешнее API (FXRatesAPI.com). Добавление трат в любой валюте, автоматическая конвертация в валюту бюджета поездки. Сводка расходов с прогресс-баром бюджета и разбивкой по категориям. Фильтрация по категории и диапазону дат. Валюта расхода по умолчанию совпадает с валютой поездки.
-*   **Управление поездками**: Создание, просмотр, редактирование и удаление поездок с отслеживанием статуса (Планируется, В процессе, Завершено). Автоматическая конвертация бюджета при смене валюты в форме.
-*   **Унифицированный UI/UX**: Единый адаптивный дизайн с эффектами размытия фона (glassmorphism), фиксированными шапками (sticky headers) и кастомными компонентами (степперы, удобные календари с проверками при вводе).
-*   **PWA-Ready & iOS First**:
-    *   Полная поддержка Safe Areas (отступы под вырезы и home indicator) как в портретной, так и в ландшафтной (Landscape) ориентации мобильных устройств.
-    *   Адаптивный интерфейс без горизонтальных скроллов.
-    *   Автоматическое применение класса `pwa-standalone` для запущенных на домашнем экране приложений.
-*   **Валидация форм**: Продвинутая инлайн-валидация на базе Zod (минимальные проверки при входе, строгие правила при регистрации и создании поездок).
-*   **Авторизация**: Быстрая авторизация через логин/пароль и Яндекс ID (OAuth).
-*   **Сброс пароля через Email**: Безопасный флоу сброса пароля с использованием одноразовых токенов и стилизованных HTML-писем (на базе Jinja2).
+- **Персонализированные рекомендации направлений**: Content-based ML-scorer ранжирует 1 096 направлений по профилю пользователя — предпочтениям отдыха, бюджету, визовым ограничениям, климату, риск-толерантности и городу вылета. Каждая рекомендация содержит разбивку факторов (score_breakdown) и теги-объяснения.
+- **Расширенная анкета предпочтений**: 6-экранный онбординг с 12 вопросами. Ранжирование видов отдыха с порядком выбора (tap-to-order), autocomplete города вылета, multi-select любимых направлений, слайдеры риска и людности, фильтры визового режима и климата.
+- **Прогноз бюджета поездки**: Оценка стоимости по направлению, длительности, количеству человек и месяцу. Учитывает стоимость жилья, питания, транспорта и категорию путешественника.
+- **Дневник поездки с интерактивной картой**: Добавление посещённых мест на карту Яндекс с геокодингом, заметками, датой и временем визита. Переключение между режимом карты и списком мест.
+- **Аналитика завершённых поездок (Итоги)**: Общая сумма расходов, средний расход в день, количество мест, длительность, соответствие бюджету, разбивка по категориям, конфетти-анимация при завершении.
+- **Учёт расходов**: Добавление трат в любой валюте с автоматической конвертацией через FXRatesAPI. Прогресс-бар бюджета, фильтрация по категории и дате.
+- **Управление поездками**: Создание, редактирование, удаление, статусы (Планируется / В процессе / Завершено).
+- **Отзывы о поездках**: Форма обратной связи после завершения поездки (оценки направления, соотношения цена/качество, фактические расходы, готовность вернуться).
+- **Авторизация**: Логин/пароль и Яндекс ID (OAuth). Сброс пароля через email.
+- **PWA-Ready & iOS First**: Safe Areas, bottom drawers вместо модалок, нативные тач-паттерны, standalone-режим.
 
 ---
 
 ## 🚀 Быстрый старт
 
 ### 1. Подготовка окружения
+
 Для работы проекта необходим **Docker**.
 
 ```bash
-
-# 1. Настройте переменные окружения
-# Для локального запуска (БД в Docker, код локально)
+# Настройте переменные окружения
 cp .env.example .env
-# Для запуска всего проекта в Docker
 cp .env.example .env.docker
-
-# ВАЖНО: Добавьте API ключ для валют в .env.docker
-# FXR_API_KEY=fxr_live_... (получить на fxratesapi.com)
 ```
 
 > [!IMPORTANT]
-> В `.env.docker` убедитесь, что хосты баз данных и Redis указаны как имена сервисов (`db` и `redis`), а не `localhost`.
-> Для работы дневника с картой укажите `VITE_YANDEX_MAPS_API_KEY` (Яндекс Карты JS API v3) и `VITE_GEOAPIFY_API_KEY` (геокодинг).
+> В `.env.docker` хосты БД и Redis указывайте как имена сервисов Docker (`postgres`, `redis`), а не `localhost`.
+> Для карты укажите `VITE_YANDEX_MAPS_API_KEY` (Яндекс Карты JS API v3) и `VITE_GEOAPIFY_API_KEY` (геокодинг).
+> Для валют: `FXR_API_KEY` (fxratesapi.com).
 
-### 2. Запуск проекта (Docker Compose)
+### 2. Запуск (Docker Compose)
 
 ```bash
-# Сборка и запуск
 make build up
-
-# Применение миграций (выполняется автоматически при старте, но можно запустить вручную)
-make migrate
 ```
 
-*   **Frontend**: [http://localhost](http://localhost)
-*   **Auth Service**: [http://localhost:8001/docs](http://localhost:8001/docs)
-*   **Trip Service**: [http://localhost:8002/docs](http://localhost:8002/docs)
+| Сервис                | URL                        |
+| --------------------- | -------------------------- |
+| Frontend              | http://localhost           |
+| Auth Service API      | http://localhost:8001/docs |
+| Trip Service API      | http://localhost:8002/docs |
+| ML Service API        | http://localhost:8004/docs |
+| Analytics Service API | http://localhost:8005/docs |
 
 ### 3. Локальная разработка (Hybrid)
-Для изменений в код бэкенда с hot-reload:
 
 ```bash
-# 1. Запустите инфраструктуру (БД и Redis)
-docker-compose up -d db redis
+# Инфраструктура в Docker
+docker-compose up -d postgres redis
 
-# 2. Установите зависимости и запустите интересующий сервис
-cd services/auth-service
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+# Каждый сервис локально
+cd services/auth-service && uvicorn app.main:app --reload --port 8001
+cd services/trip-service && uvicorn app.main:app --reload --port 8002
+cd services/ml-service && uvicorn app.main:app --reload --port 8004
+cd services/analytics-service && uvicorn app.main:app --reload --port 8005
 
-# 3. В другом терминале запустите фронтенд
-cd frontend
-npm install
-npm run dev
+# Фронтенд
+cd frontend && npm run dev
 ```
 
 ---
 
 ## 🔐 Безопасность и Валидация
 
-### Требования к данным (Регистрация):
-*   **Логин**: Минимум 3 символа, латиница, цифры и подчеркивание.
-*   **Пароль**: Минимум 8 символов, должен содержать строчные и заглавные буквы, цифры и спецсимволы.
-*   **Email**: Обязательная проверка формата.
-
-Интерфейс использует «умную» валидацию: ошибки обязательного заполнения имеют приоритет, а формат проверяется при попытке отправки.
+- **Логин**: минимум 3 символа, латиница, цифры, подчеркивание
+- **Пароль**: минимум 8 символов, строчные + заглавные + цифры + спецсимволы
+- **Email**: обязательная проверка формата
 
 ---
 
 ## 🧪 Тестирование и Линтинг
 
 ```bash
-# Бэкенд тесты (внутри Docker)
+# Бэкенд тесты
 make test
 make test-cov
 
 # Линтинг (ruff)
 make lint
 
-# Фронтенд: Проверка архитектуры (Steiger), линтинг (ESLint) и типы (TSC)
+# Фронтенд
 cd frontend && npm run lint && npm run typecheck
 ```
 
@@ -105,81 +92,126 @@ cd frontend && npm run lint && npm run typecheck
 
 ## 🗃 Миграции базы данных (Alembic)
 
-Проект использует **Alembic** для управления миграциями. Каждый сервис имеет собственный набор миграций.
+Каждый сервис имеет свою версионную таблицу в общей БД.
 
 ```bash
-# Создать новую миграцию (после изменения models.py)
-docker-compose run --rm auth-service alembic revision --autogenerate -m "описание"
+# Создать миграцию
 docker-compose run --rm trip-service alembic revision --autogenerate -m "описание"
 
-# Применить миграции
+# Применить
 docker-compose run --rm auth-service alembic upgrade head
 docker-compose run --rm trip-service alembic upgrade head
 
-# Откатить последнюю миграцию
-docker-compose run --rm auth-service alembic downgrade -1
+# Откатить
+docker-compose run --rm trip-service alembic downgrade -1
 ```
 
-> **Примечание**: При запуске Docker-контейнеров миграции применяются автоматически (`alembic upgrade head` в CMD).
+> Миграции применяются автоматически при старте контейнеров.
 
 ---
 
 ## 📂 Структура проекта
 
-### Frontend (Feature-Sliced Design)
-Проект следует методологии **FSD**:
-*   `app/` — Инициализация приложения, глобальные стили и роутинг.
-*   `pages/` — Композиция страниц (Dashboard, Trips, Profile, Onboarding, TripDetail с табами: О поездке / Итоги / Расходы / Дневник).
-*   `widgets/` — Самостоятельные блоки (Layout, BottomNav).
-*   `features/` — Пользовательские сценарии:
-    *   `auth` — авторизация и регистрация.
-    *   `trips` — формы, аналитика, управление поездками.
-    *   `expenses` — учёт расходов.
-    *   `places` — дневник мест с картой (AddPlaceSheet, PlaceDiary, PlaceMap, PlaceList).
-    *   `profile`, `onboarding` — профиль и онбординг.
-*   `entities/` — Бизнес-сущности (trip, expense, place, user).
-*   `shared/` — Переиспользуемый код:
-    *   `lib/geocoder/` — геокодинг через Яндекс Карты (useGeocode, useReverseGeocode).
-    *   `lib/yandex-maps/` — загрузчик SDK Яндекс Карт.
-    *   `lib/query-client/` — глобальный инстанс TanStack Query.
-    *   `ui/` — UI-kit на базе Shadcn, `confirm-drawer`.
-    *   `api/` — типизированный Axios-клиент.
+### Backend (микросервисы)
 
-### Backend
-*   `services/auth-service/` — Микросервис авторизации на FastAPI.
-*   `services/trip-service/` — Микросервис управления поездок, расходов и мест на FastAPI.
-    *   `app/models.py` — Модели Trip, Expense, PlaceVisit.
-    *   `app/services/` — Сервисный слой (expense_service, place_service).
-    *   `app/routers/` — Роутеры (trips, expenses, places).
+| Сервис              | Порт | Ответственность                                               |
+| ------------------- | ---- | ------------------------------------------------------------- |
+| `auth-service`      | 8001 | JWT (RS256), Yandex OAuth, сброс пароля                       |
+| `trip-service`      | 8002 | Trip/Expense/PlaceVisit CRUD, профиль пользователя, онбординг |
+| `data-service`      | 8003 | Read-only данные направлений, поиск, итинерарии               |
+| `ml-service`        | 8004 | Рекомендации направлений, прогноз бюджета, валидация          |
+| `analytics-service` | 8005 | Event tracking, post-trip feedback, user features             |
+
+**Общий PostgreSQL 15**, **Redis 7** для blacklist JWT и кэша.
+
+Nginx проксирует все запросы с фронтенда на нужные сервисы по prefix-match.
+
+### ML Service — как работает рекомендация
+
+1. Загружает профиль пользователя из trip-service (12 полей)
+2. Загружает feature-матрицу из data-service (safety, costs, seasonality, activities, visa, popularity, attributes, language, connectivity, infrastructure)
+3. Content-based scorer выставляет score каждому из 1 096 направлений по 10 факторам с весами
+4. Возвращает топ-N с `score_breakdown` и `explanation_tags`
+
+Модель поддерживает fallback: если LightGBM не обучен — используется content-based scorer.
+
+### Analytics Service — как работает трекинг
+
+Фронтенд батчит события (flush каждые 5 сек или при выходе) и отправляет в `/api/v1/events`. Агрегированные фичи пользователя (просмотренные/кликнутые направления, сессии, история поездок) доступны через `/api/v1/users/{id}/features` и используются ML-сервисом как дополнительный слой сигналов.
+
+### Frontend (Feature-Sliced Design)
+
+```
+app/          — роутинг, провайдеры, глобальные стили
+pages/        — Dashboard, Login, Register, Onboarding, Profile,
+                Trips, TripDetail (О поездке / Итоги / Расходы / Дневник),
+                Recommendations
+widgets/      — Layout, BottomNav
+features/
+  auth            — авторизация, регистрация, OAuth callback
+  trips           — формы, аналитика, управление
+  expenses        — учёт расходов
+  places          — дневник мест с картой
+  onboarding-v2   — 6-экранная анкета с прогрессивным сохранением
+  profile         — просмотр и редактирование профиля
+  recommendations — карточки рекомендаций, фильтры, detail sheet
+  feedback        — форма отзыва после поездки
+entities/     — trip, expense, place, user
+shared/
+  api/        — типизированный Axios-клиент + analytics.ts (sendEvent)
+  lib/        — geocoder, yandex-maps, query-client
+  ui/         — UI-kit (Shadcn-based)
+  config/     — константы (валюты, типы поездок, предпочтения)
+```
+
+---
+
+## 🗄 Данные (data-service)
+
+| Таблица                 | Покрытие          | Содержимое                                                                                       |
+| ----------------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| destinations            | 1 096 активных    | Города и курорты: координаты, регион, население                                                  |
+| poi                     | 2 102 960 записей | OTM + OSM Overpass + Heritage; рейтинги, часы работы, категории                                  |
+| destination_safety      | 1 096/1 096       | GPI-индекс → safety_score 0–1                                                                    |
+| destination_costs       | 1 096/1 096       | Numbeo cost_index + regional defaults                                                            |
+| destination_seasonality | 13 152 строк      | 12 месяцев × 1 096 направлений; temp + precip + humidity                                         |
+| destination_activities  | 1 092/1 096       | 10 типов (beach, culture, nature, adventure, food, nightlife, wellness, shopping, family, urban) |
+| destination_popularity  | 1 056/1 096       | Wikipedia pageviews, crowd_index (сезонный индекс)                                               |
+| visa_rules              | 220 492 правил    | Passport Index Jan 2025, 199 гражданств                                                          |
+| destination_attributes  | 1 096/1 096       | is_coastal, has_ski, has_thermal, has_mountains и др.                                            |
+| language                | 1 096/1 096       | russian/english_speaking_score, script_difficulty                                                |
+| connectivity            | 1 096/1 096       | connectivity_score, mir_card_accepted                                                            |
+| infrastructure          | 1 096/1 096       | has_metro, internet speed, healthcare score, taxi_app                                            |
+
+Синтетические обучающие данные: 10k профилей пользователей, 100k бюджетных записей, 50k траекторий.
 
 ---
 
 ## 🛠 Технологии
 
-| Компонент | Технологии |
-|-----------|------------|
-| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic V2, Alembic, Jinja2 |
-| Database | PostgreSQL 15 |
-| Cache/Tokens | Redis 7 |
-| Auth | JWT, OAuth 2.0 (Yandex) |
-| Frontend Architecture | Feature-Sliced Design (FSD) |
-| Frontend | React 19, TypeScript, Vite 7, TanStack Query v5 |
-| UI-kit | Shadcn UI, TailwindCSS, Lucide Icons, Framer Motion, canvas-confetti |
-| Карты | Яндекс Карты JS API v3 |
-| PWA | Vite PWA Plugin, Service Workers |
+| Компонент             | Технологии                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| Backend               | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic V2, Alembic |
+| ML                    | scikit-learn, LightGBM, numpy, pandas, rapidfuzz           |
+| Database              | PostgreSQL 15                                              |
+| Cache                 | Redis 7                                                    |
+| Auth                  | JWT RS256, OAuth 2.0 (Yandex)                              |
+| Frontend              | React 19, TypeScript, Vite 7, TanStack Query v5            |
+| Frontend Architecture | Feature-Sliced Design (FSD)                                |
+| UI-kit                | Shadcn UI, TailwindCSS, Lucide Icons, canvas-confetti      |
+| Карты                 | Яндекс Карты JS API v3, Geoapify                           |
+| PWA                   | Vite PWA Plugin, Service Workers                           |
 
 ---
 
 ## 🔧 Makefile команды
 
-| Команда | Описание |
-|---------|----------|
-| `make dev` | Локальный запуск БД, Redis и Auth Service без Docker фронтенда |
-| `make up` | Запустить весь проект в Docker |
-| `make build` | Собрать Docker образы |
-| `make down` | Остановить и очистить volumes |
-| `make test` | Тесты auth-service и trip-service (Docker) |
-| `make test-cov` | Тесты с покрытием (Docker) |
-| `make lint` | Линтинг auth-service |
-| `make install` | Установка зависимостей auth-service |
-
+| Команда         | Описание                                            |
+| --------------- | --------------------------------------------------- |
+| `make up`       | Запустить весь проект в Docker                      |
+| `make build`    | Собрать Docker образы                               |
+| `make down`     | Остановить контейнеры                               |
+| `make migrate`  | Применить миграции всех сервисов                    |
+| `make test`     | Тесты auth-service, trip-service, analytics-service |
+| `make test-cov` | Тесты с покрытием                                   |
+| `make lint`     | Линтинг бэкенда (ruff)                              |

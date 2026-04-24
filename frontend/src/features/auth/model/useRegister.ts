@@ -1,3 +1,4 @@
+import { queryClient } from '@/shared/lib/query-client';
 import { useToast } from '@/shared/ui';
 import axios from 'axios';
 import { useState } from 'react';
@@ -44,6 +45,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
       const res = await authApi.register(apiData);
       localStorage.setItem('access_token', res.access_token);
       localStorage.setItem('refresh_token', res.refresh_token);
+      queryClient.clear();
       onSuccess();
     } catch (err) {
       if (err instanceof z.ZodError) {

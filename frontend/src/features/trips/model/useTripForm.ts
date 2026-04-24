@@ -1,16 +1,15 @@
 import type { Trip, TripCreate, TripUpdate } from '@/entities/trip';
 import { tripApi, TripCreateSchema } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
-import { useProfile } from '@/entities/user';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
+import { sendEvent } from '@/shared/api';
 import { useToast } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
 
 export const useTripForm = (existingTrip?: Trip) => {
-  const { profile } = useProfile();
   const queryClient = useQueryClient();
   const [destination, setDestination] = useState(existingTrip?.destination ?? '');
   const [startDate, setStartDate] = useState(existingTrip?.start_date ?? '');
@@ -21,32 +20,10 @@ export const useTripForm = (existingTrip?: Trip) => {
   const [peopleCount, setPeopleCount] = useState(existingTrip?.people_count ?? 1);
   const [notes, setNotes] = useState(existingTrip?.notes ?? '');
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(!existingTrip);
   const [isConverting, setIsConverting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const prevCurrencyRef = useRef(existingTrip?.currency ?? 'RUB');
   const { toast } = useToast();
-
-  const hasInitializedFromPrefs = useRef(false);
-
-  useEffect(() => {
-    if (!existingTrip && profile?.preferences && !hasInitializedFromPrefs.current) {
-      const { currency: prefCurrency, budget_max, departure_city } = profile.preferences;
-      if (prefCurrency) {
-        setCurrency(prefCurrency);
-      }
-      if (budget_max !== undefined && budget_max !== null) {
-        setBudget(budget_max);
-      }
-      if (departure_city) {
-        setDepartureCity(departure_city);
-      }
-      hasInitializedFromPrefs.current = true;
-      setIsInitialLoading(false);
-    } else if (existingTrip || profile) {
-      setIsInitialLoading(false);
-    }
-  }, [profile, existingTrip]);
 
   const todayStr = useMemo(getTodayStr, []);
 
@@ -150,6 +127,7 @@ export const useTripForm = (existingTrip?: Trip) => {
     try {
       const trip = await tripApi.createTrip(data);
       queryClient.invalidateQueries({ queryKey: ['trips'] });
+      sendEvent('trip_created', { destination: data.destination, currency: data.currency, people_count: data.people_count }, 'trip', trip.id);
       return trip;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось создать поездку' });
@@ -203,7 +181,6 @@ export const useTripForm = (existingTrip?: Trip) => {
     notes,
     setNotes,
     isLoading,
-    isInitialLoading,
     isConverting,
     errors,
     clearError: (field: string) =>

@@ -10,7 +10,7 @@ export const LoginForm = ({
   onError,
 }: {
   oauthCallback?: boolean;
-  onSuccess: (onboardingCompleted?: boolean) => void;
+  onSuccess: () => void;
   onRegisterClick: () => void;
   onForgotPasswordClick: () => void;
   onError?: () => void;

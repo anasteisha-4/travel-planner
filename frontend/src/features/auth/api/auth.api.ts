@@ -1,3 +1,4 @@
+import { queryClient } from '@/shared/lib/query-client';
 import { apiClient } from '@/shared/api';
 import type { AuthCredentials, RegisterCredentials } from '../model/types';
 import { AuthResponseSchema } from '../model/types';
@@ -18,6 +19,7 @@ export const authApi = {
     }
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    queryClient.clear();
   },
   yandexCallback: async (data: { code: string; redirect_uri: string }) => {
     const response = await apiClient.post('/api/auth/yandex/callback', data);

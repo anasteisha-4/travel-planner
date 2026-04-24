@@ -19,22 +19,10 @@ def validate_password_strength(v: str) -> str:
     return v
 
 
-class UserPreferences(BaseModel):
-    travel_types: list[str] = []
-    favorite_destinations: str | None = None
-    currency: str = "RUB"
-    budget_min: int | None = None
-    budget_max: int | None = None
-    trip_duration: str | None = None
-    departure_city: str | None = None
-    additional_info: str | None = None
-
-
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     login: str
-    preferences: UserPreferences | None = None
 
     @field_validator("password")
     @classmethod
@@ -68,7 +56,29 @@ class UserProfile(BaseModel):
     email: str
     login: str | None
     onboarding_completed: bool
-    preferences: UserPreferences | None
 
     class Config:
         from_attributes = True
+
+
+class UserPreferencesResponse(BaseModel):
+    travel_types: list[str] = []
+    favorite_destinations: str | None = None
+    currency: str = "RUB"
+    budget_min: int | None = None
+    budget_max: int | None = None
+    trip_duration: str | None = None
+    additional_info: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserPreferencesUpdate(BaseModel):
+    travel_types: list[str] | None = None
+    favorite_destinations: str | None = None
+    currency: str | None = None
+    budget_min: int | None = None
+    budget_max: int | None = None
+    trip_duration: str | None = None
+    additional_info: str | None = None

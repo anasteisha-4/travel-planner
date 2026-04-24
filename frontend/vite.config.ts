@@ -119,6 +119,36 @@ export default defineConfig(({ command }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/api/profile': {
+          target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/destinations': {
+          target: isDev ? 'http://localhost:8003' : 'http://data-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/v1/events': {
+          target: isDev ? 'http://localhost:8005' : 'http://analytics-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/v1/feedback': {
+          target: isDev ? 'http://localhost:8005' : 'http://analytics-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/v1/users': {
+          target: isDev ? 'http://localhost:8005' : 'http://analytics-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/v1': {
+          target: isDev ? 'http://localhost:8004' : 'http://ml-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
         '/api': {
           target: isDev ? 'http://localhost:8001' : 'http://auth-service:8000',
           changeOrigin: true,

@@ -1,7 +1,3 @@
-"""
-Users router - profile and preferences management
-"""
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -20,22 +16,16 @@ class ProfileUpdateRequest(BaseModel):
 
 
 def user_to_profile(user: models.User) -> schemas.UserProfile:
-    """Convert User model to UserProfile schema"""
-    preferences = None
-    if user.preferences:
-        preferences = schemas.UserPreferences(**user.preferences)
     return schemas.UserProfile(
         id=user.id,
         email=user.email,
         login=user.login,
         onboarding_completed=user.onboarding_completed,
-        preferences=preferences,
     )
 
 
 @router.get("/me", response_model=schemas.UserProfile)
 def get_profile(current_user: models.User = Depends(get_current_user)):
-    """Get current user profile"""
     return user_to_profile(current_user)
 
 
@@ -43,7 +33,6 @@ def get_profile(current_user: models.User = Depends(get_current_user)):
 def update_profile(
     request: ProfileUpdateRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Update user profile (email, login)"""
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
     if not user:
         raise AppException(status_code=404, code="NOT_FOUND", message="User not found")
@@ -66,28 +55,53 @@ def update_profile(
     return user_to_profile(user)
 
 
-@router.get("/me/preferences", response_model=schemas.UserPreferences)
-def get_preferences(current_user: models.User = Depends(get_current_user)):
-    """Get user preferences"""
-    if current_user.preferences:
-        return schemas.UserPreferences(**current_user.preferences)
-    return schemas.UserPreferences()
-
-
-@router.put("/me/preferences", response_model=schemas.UserPreferences)
-def update_preferences(
-    preferences: schemas.UserPreferences,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Update user preferences and mark onboarding as completed"""
+@router.delete("/me", status_code=204)
+def delete_account(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == current_user.id).first()
     if not user:
         raise AppException(status_code=404, code="NOT_FOUND", message="User not found")
-
-    user.preferences = preferences.model_dump()
-    user.onboarding_completed = True
-
+    db.delete(user)
     db.commit()
 
-    return preferences
+
+@router.get("/me/preferences", response_model=schemas.UserPreferencesResponse)
+def get_preferences(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    prefs = db.query(models.UserPreferences).filter(models.UserPreferences.user_id == current_user.id).first()
+    if not prefs:
+        return schemas.UserPreferencesResponse()
+    return prefs
+
+
+@router.put("/me/preferences", response_model=schemas.UserPreferencesResponse)
+def update_preferences(
+    request: schemas.UserPreferencesUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prefs = db.query(models.UserPreferences).filter(models.UserPreferences.user_id == current_user.id).first()
+    if not prefs:
+        prefs = models.UserPreferences(user_id=current_user.id)
+        db.add(prefs)
+
+    if request.travel_types is not None:
+        prefs.travel_types = request.travel_types
+    if request.favorite_destinations is not None:
+        prefs.favorite_destinations = request.favorite_destinations
+    if request.currency is not None:
+        prefs.currency = request.currency
+    if request.budget_min is not None:
+        prefs.budget_min = request.budget_min
+    if request.budget_max is not None:
+        prefs.budget_max = request.budget_max
+    if request.trip_duration is not None:
+        prefs.trip_duration = request.trip_duration
+    if request.additional_info is not None:
+        prefs.additional_info = request.additional_info
+
+    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if user:
+        user.onboarding_completed = True
+
+    db.commit()
+    db.refresh(prefs)
+    return prefs
