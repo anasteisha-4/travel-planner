@@ -82,6 +82,40 @@ services:
     volumes:
       - ./services/data-service/data:/app/data
 
+  ml-service:
+    build:
+      context: ./services/ml-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-ml
+    ports:
+      - "8004:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-analytics
+    ports:
+      - "8005:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

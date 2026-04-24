@@ -1,4 +1,4 @@
-.PHONY: up down build test lint fix typecheck dev logs clean migrate migration seed-data fetch-poi-osm fetch-poi-otm compute-activities refresh-seasonality
+.PHONY: up down build test lint fix typecheck dev logs clean migrate migration seed-data fetch-poi-osm fetch-poi-otm compute-activities refresh-seasonality train-ranker train-budget build-features
 
 # Docker
 up:
@@ -21,24 +21,30 @@ dev:
 	docker-compose up -d postgres redis
 	cd services/auth-service && uvicorn app.main:app --reload --port 8001
 
-# Auth Service
+# Backend tests
 test:
 	docker-compose run --rm auth-service pytest tests/ -v
 	docker-compose run --rm trip-service pytest tests/ -v
+	docker-compose run --rm ml-service pytest tests/ -v
+	docker-compose run --rm analytics-service pytest tests/ -v
 
 test-cov:
 	docker-compose run --rm auth-service pytest --cov=app tests/
 	docker-compose run --rm trip-service pytest --cov=app tests/
+	docker-compose run --rm ml-service pytest --cov=app tests/
+	docker-compose run --rm analytics-service pytest --cov=app tests/
 
 typecheck:
 	cd services/auth-service && ../../.venv/bin/pyright
 	cd services/trip-service && ../../.venv/bin/pyright
+	cd services/ml-service && ../../.venv/bin/pyright
+	cd services/analytics-service && ../../.venv/bin/pyright
 
 lint: typecheck
-	cd services/auth-service && ruff check . --config ruff.toml && cd ../trip-service && ruff check . --config ruff.toml
+	cd services/auth-service && ruff check . --config ruff.toml && cd ../trip-service && ruff check . --config ruff.toml && cd ../ml-service && ruff check . --config ruff.toml && cd ../analytics-service && ruff check . --config ruff.toml
 
 fix:
-	cd services/auth-service && ruff check . --config ruff.toml --fix && cd ../trip-service && ruff check . --config ruff.toml --fix
+	cd services/auth-service && ruff check . --config ruff.toml --fix && cd ../trip-service && ruff check . --config ruff.toml --fix && cd ../ml-service && ruff check . --config ruff.toml --fix && cd ../analytics-service && ruff check . --config ruff.toml --fix
 
 # Install
 install:
@@ -57,6 +63,8 @@ clean:
 migrate:
 	docker-compose run --rm auth-service alembic upgrade head
 	docker-compose run --rm trip-service alembic upgrade head
+	docker-compose run --rm ml-service alembic upgrade head
+	docker-compose run --rm analytics-service alembic upgrade head
 
 migration:
 	@read -p "Migration message: " msg; \
