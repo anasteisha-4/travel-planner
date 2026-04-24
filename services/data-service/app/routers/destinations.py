@@ -1,10 +1,57 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from rapidfuzz import fuzz, process
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db
 from app.models import Destination
 
 router = APIRouter(prefix="/destinations", tags=["destinations"])
+
+
+@router.get("/search")
+def search_destinations(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_internal_db),
+):
+    destinations = (
+        db.query(Destination)
+        .filter(Destination.is_active == True)  # noqa: E712
+        .all()
+    )
+
+    candidates: list[tuple[str, str]] = []
+    dest_map: dict[str, Destination] = {}
+    for d in destinations:
+        key_en = f"{d.name}|{d.id}"
+        candidates.append((d.name, key_en))
+        dest_map[key_en] = d
+
+    results = process.extract(q, [c[0] for c in candidates], scorer=fuzz.WRatio, limit=limit * 3)
+
+    seen: set[str] = set()
+    output = []
+    for match_name, score, idx in results:
+        if score < 40:
+            continue
+        key = candidates[idx][1]
+        if key in seen:
+            continue
+        seen.add(key)
+        d = dest_map[key]
+        output.append(
+            {
+                "id": str(d.id),
+                "name": d.name,
+                "country_code": d.country_code,
+                "lat": d.lat,
+                "lng": d.lng,
+            }
+        )
+        if len(output) >= limit:
+            break
+
+    return output
 
 
 @router.get("")
@@ -34,6 +81,29 @@ def list_destinations(
             "capital": d.capital,
         }
         for d in destinations
+    ]
+
+
+@router.post("/by-ids")
+def get_destinations_by_ids(
+    ids: list[str],
+    db: Session = Depends(get_internal_db),
+):
+    from uuid import UUID as _UUID
+    try:
+        uuid_ids = [_UUID(i) for i in ids]
+    except ValueError:
+        return []
+    destinations = (
+        db.query(Destination)
+        .filter(Destination.id.in_(uuid_ids))
+        .all()
+    )
+    dest_map = {str(d.id): d for d in destinations}
+    return [
+        {"id": i, "name": dest_map[i].name, "country_code": dest_map[i].country_code}
+        for i in ids
+        if i in dest_map
     ]
 
 

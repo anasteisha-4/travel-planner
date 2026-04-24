@@ -1,9 +1,22 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Date, Enum, Float, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    Date,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,6 +60,38 @@ class Expense(BaseModel):
     category: Mapped[ExpenseCategory] = mapped_column(Enum(ExpenseCategory), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class UserProfile(BaseModel):
+    __tablename__ = "user_profiles"
+    __table_args__ = (
+        Index("ix_user_profiles_liked_destination_ids", "liked_destination_ids", postgresql_using="gin"),
+        Index("ix_user_profiles_vacation_preferences_ranked", "vacation_preferences_ranked", postgresql_using="gin"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    vacation_preferences_ranked: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    preferred_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
+    budget_min: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    budget_max: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    budget_min_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    budget_max_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    typical_duration: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    typical_duration_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    origin_city_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    origin_city_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    origin_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liked_destination_ids: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    liked_destination_names: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    risk_tolerance: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    visa_tolerance: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    language_comfort: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    crowd_preference: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    climate_preferences: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    free_text_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    onboarding_step: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class PlaceVisit(BaseModel):

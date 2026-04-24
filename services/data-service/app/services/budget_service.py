@@ -37,10 +37,11 @@ def predict_trip_budget(
     if not costs:
         return {"error": "No cost data available for this destination."}
 
-    if people_count in PEOPLE_FACTOR:
-        factor = PEOPLE_FACTOR[people_count]
-    else:
-        factor = 2.8 + (people_count - 4) * 0.5
+    factor = (
+        PEOPLE_FACTOR[people_count]
+        if people_count in PEOPLE_FACTOR
+        else 2.8 + (people_count - 4) * 0.5
+    )
 
     # Seasonal multiplier: crowd_index-derived per-month scalar [0.7, 1.4]
     seasonal = 1.0
