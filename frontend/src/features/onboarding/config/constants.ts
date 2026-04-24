@@ -1,1 +1,0 @@
-export { BUDGET_LIMITS, CURRENCIES, TRAVEL_TYPES, TRIP_DURATIONS } from '@/shared/config';

@@ -26,7 +26,7 @@ import {
   Heart,
   Landmark,
   Leaf,
-  Mountain,
+  Moon,
   ShoppingBag,
   Sun,
   Users,
@@ -40,7 +40,7 @@ export const TRAVEL_TYPES: TravelType[] = [
   { id: 'family', label: 'Семейный', icon: Users },
   { id: 'culture', label: 'Культура', icon: Landmark },
   { id: 'active', label: 'Активный', icon: Activity },
-  { id: 'extreme', label: 'Экстрим', icon: Mountain },
+  { id: 'nightlife', label: 'Ночная жизнь', icon: Moon },
   { id: 'shopping', label: 'Шопинг', icon: ShoppingBag },
   { id: 'gastro', label: 'Гастро', icon: ChefHat },
   { id: 'nature', label: 'Природа', icon: Leaf },
@@ -50,7 +50,53 @@ export const TRAVEL_TYPES: TravelType[] = [
 
 export const TRIP_DURATIONS = [
   { id: 'weekend', label: 'Выходные' },
-  { id: 'week', label: 'Неделя' },
-  { id: 'two_weeks', label: '2 недели' },
-  { id: 'month', label: 'Месяц+' },
+  { id: 'short', label: 'Короткая (до недели)' },
+  { id: 'standard', label: 'Стандартная (10 дней)' },
+  { id: 'long', label: 'Длинная (3 недели)' },
+  { id: 'extended', label: 'Долгая (месяц+)' },
 ];
+
+export const RISK_TOLERANCE_LABELS: Record<number, string> = {
+  1: 'Проверенные безопасные',
+  2: 'В основном безопасные',
+  3: 'Умеренный риск',
+  4: 'Готов к приключениям',
+  5: 'Экзотика и приключения',
+};
+
+export const VISA_OPTIONS = [
+  { id: 'visa_free_only', label: 'Только безвиз', description: 'Страны без визы для моего паспорта' },
+  { id: 'evisa_ok', label: 'Электронная виза', description: 'Безвиз + e-visa и визы по прилёту' },
+  { id: 'any_visa', label: 'Любая виза', description: 'Готов оформить любую визу' },
+] as const;
+
+export const CLIMATE_OPTIONS = [
+  { id: 'tropical_warm', label: 'Тропический', emoji: '🌴' },
+  { id: 'mediterranean', label: 'Средиземноморский', emoji: '☀️' },
+  { id: 'continental_mild', label: 'Умеренный', emoji: '🌿' },
+  { id: 'cold_snow', label: 'Холодный / снег', emoji: '❄️' },
+  { id: 'dry_desert', label: 'Сухой / пустыня', emoji: '🏜️' },
+  { id: 'any', label: 'Любой климат', emoji: '🌍' },
+] as const;
+
+export const CROWD_LABELS: Record<number, string> = {
+  1: 'Тихие нетуристические',
+  2: 'Спокойные',
+  3: 'Умеренные',
+  4: 'Популярные',
+  5: 'Оживлённые центры',
+};
+
+export const LANGUAGE_OPTIONS = [
+  { id: 'ru', label: 'Русскоязычные' },
+  { id: 'en', label: 'Англоязычные' },
+  { id: 'any', label: 'Любые' },
+] as const;
+
+export const DURATION_OPTIONS = [
+  { id: 'weekend', label: 'Выходные', days: 2 },
+  { id: 'short', label: 'Короткая (до недели)', days: 5 },
+  { id: 'standard', label: 'Стандартная (10 дней)', days: 10 },
+  { id: 'long', label: 'Длинная (3 недели)', days: 21 },
+  { id: 'extended', label: 'Долгая (месяц+)', days: 45 },
+] as const;

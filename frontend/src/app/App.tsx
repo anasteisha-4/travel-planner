@@ -1,4 +1,5 @@
 import { DashboardPage } from '@/pages/dashboard';
+import { RecommendationsPage } from '@/pages/recommendations';
 import { ForgotPasswordPage } from '@/pages/forgot-password';
 import { LoginPage, OAuthCallbackPage } from '@/pages/login';
 import { OnboardingPage } from '@/pages/onboarding';
@@ -126,6 +127,14 @@ export const App = () => {
               <Route path="expenses" element={<TripExpensesTab />} />
               <Route path="diary" element={<TripDiaryTab />} />
             </Route>
+            <Route
+              path="/recommendations"
+              element={
+                <PrivateRoute>
+                  <RecommendationsPage />
+                </PrivateRoute>
+              }
+            />
             <Route
               path="/profile"
               element={
