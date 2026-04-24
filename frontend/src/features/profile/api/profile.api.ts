@@ -1,24 +1,19 @@
 import { apiClient } from '@/shared/api';
-
-type PreferencesData = {
-  travel_types: string[];
-  favorite_destinations: string | null;
-  currency: string;
-  budget_min: number | null;
-  budget_max: number | null;
-  trip_duration: string | null;
-  departure_city: string | null;
-  additional_info: string | null;
-};
+import type { UserProfileV2 } from '@/entities/user';
 
 export const profileApi = {
-  getPreferences: async (): Promise<PreferencesData> => {
-    const response = await apiClient.get('/api/users/me/preferences');
+  getProfile: async (): Promise<UserProfileV2> => {
+    const response = await apiClient.get('/api/profile/');
     return response.data;
   },
 
-  updatePreferences: async (data: PreferencesData): Promise<PreferencesData> => {
-    const response = await apiClient.put('/api/users/me/preferences', data);
+  updateProfile: async (data: Partial<UserProfileV2>): Promise<UserProfileV2> => {
+    const response = await apiClient.put('/api/profile/', data);
+    return response.data;
+  },
+
+  patchProfile: async (data: Partial<UserProfileV2>): Promise<UserProfileV2> => {
+    const response = await apiClient.patch('/api/profile/', data);
     return response.data;
   },
 };

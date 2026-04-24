@@ -1,11 +1,12 @@
 import { cn } from '@/shared/lib/utils';
 import { motion } from 'framer-motion';
-import { Home, MapPin, User } from 'lucide-react';
+import { Compass, Home, MapPin, User } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { name: 'Главная', path: '/dashboard', icon: Home },
   { name: 'Поездки', path: '/trips', icon: MapPin },
+  { name: 'Куда', path: '/recommendations', icon: Compass },
   { name: 'Профиль', path: '/profile', icon: User },
 ] as const;
 

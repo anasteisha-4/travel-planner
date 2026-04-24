@@ -1,4 +1,5 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
+import { useFeedback } from '@/features/feedback';
 import { Button } from '@/shared/ui';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
@@ -50,6 +51,13 @@ export const TripInfoTab = () => {
   const isCompleted = trip.status === 'completed';
   const isActive = trip.status === 'active';
   const isPlanned = trip.status === 'planned';
+
+  const { deleteFeedback } = useFeedback(trip.id, trip.destination);
+
+  const handleContinueTrip = async () => {
+    await deleteFeedback();
+    await onStatusChange('active');
+  };
 
   const cardBase = isCancelled ? 'trip-info-card-muted' : 'trip-info-card';
 
@@ -176,7 +184,7 @@ export const TripInfoTab = () => {
           {isCompleted && (
             <Button
               className="h-[52px] w-full rounded-2xl shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
-              onClick={() => onStatusChange('active')}
+              onClick={handleContinueTrip}
               disabled={isStatusChanging}
             >
               {isStatusChanging && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

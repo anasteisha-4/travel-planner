@@ -13,10 +13,9 @@ export const useProfile = (onUnauthenticated?: () => void) => {
   }, [onUnauthenticated]);
 
   const query = useQuery<UserProfile | null>({
-    queryKey: ['profile'],
+    queryKey: ['auth-profile'],
     queryFn: async () => {
       const data = await userApi.getProfile();
-      if (data.onboarding_completed === false) return null;
       return data;
     },
     enabled: !!localStorage.getItem('access_token'),

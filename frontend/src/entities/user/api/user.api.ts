@@ -7,4 +7,7 @@ export const userApi = {
     const response = await apiClient.get('/api/users/me');
     return UserProfileSchema.parse(response.data);
   },
+  deleteAccount: async (): Promise<void> => {
+    await apiClient.delete('/api/users/me');
+  },
 };

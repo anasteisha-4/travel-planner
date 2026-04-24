@@ -1,8 +1,9 @@
 import { CATEGORY_META } from '@/entities/expense';
+import { PostTripFeedbackSheet, useFeedback } from '@/features/feedback';
 import { useTripAnalytics } from '@/features/trips';
 import confetti from 'canvas-confetti';
-import { AlertTriangle, Loader2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { AlertTriangle, Loader2, MessageSquarePlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useOutletContext } from 'react-router-dom';
 import type { TripDetailOutletContext } from './TripDetailPage';
 
@@ -33,6 +34,8 @@ export const TripAnalyticsTab = () => {
   const { trip } = useOutletContext<TripDetailOutletContext>();
   const location = useLocation();
   const fired = useRef(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const { alreadySubmitted } = useFeedback(trip.id, trip.destination);
 
   useEffect(() => {
     if (!isJustCompleted(location.state) || fired.current) return;
@@ -58,6 +61,8 @@ export const TripAnalyticsTab = () => {
 
     fire(125, 0.2, -0.2);
     fire(55, 0.8, 0.2);
+
+    setTimeout(() => setShowFeedback(true), 1200);
   }, [location.state]);
 
   const {
@@ -114,6 +119,15 @@ export const TripAnalyticsTab = () => {
           <p className="relative mt-2 text-[14px] font-medium text-blue-400/90 dark:text-blue-400">
             {trip.destination}
           </p>
+
+          <button
+            type="button"
+            onClick={() => setShowFeedback(true)}
+            className="relative mx-auto mt-4 flex items-center gap-2 rounded-[10px] border border-blue-200/70 bg-white/60 px-4 py-2 text-[13px] font-semibold text-blue-600 transition-all active:scale-95 dark:border-blue-700/50 dark:bg-blue-950/30 dark:text-blue-400"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+            {alreadySubmitted ? 'Редактировать отзыв' : 'Оставить отзыв'}
+          </button>
         </div>
 
         {/* Stats grid */}
@@ -269,6 +283,13 @@ export const TripAnalyticsTab = () => {
           </div>
         )}
       </div>
+
+      <PostTripFeedbackSheet
+        open={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        tripId={trip.id}
+        destination={trip.destination}
+      />
     </div>
   );
 };

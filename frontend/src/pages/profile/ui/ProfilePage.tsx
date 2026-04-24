@@ -1,36 +1,52 @@
-import { useProfile } from '@/entities/user';
+import { useDeleteAccount, useProfile } from '@/entities/user';
 import { LogoutButton, authApi } from '@/features/auth';
-import { PreferencesEditor, PreferencesView, usePreferences } from '@/features/profile';
-import { AppPageHeader, Button, EmptyState, PageContent, PageLayout, SectionLabel } from '@/shared/ui';
-import { ClipboardList, Loader2, Pencil } from 'lucide-react';
+import { PreferencesView, usePreferences } from '@/features/profile';
+import {
+  AppPageHeader,
+  Button,
+  ConfirmDrawer,
+  EmptyState,
+  PageContent,
+  PageLayout,
+  SectionLabel,
+  useToast,
+} from '@/shared/ui';
+import { ProfileEditWizard } from '@/widgets/profile-edit-wizard';
+import { ClipboardList, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
+  const [isDeleteDrawerOpen, setIsDeleteDrawerOpen] = useState(false);
+  const { toast } = useToast();
 
   const handleUnauthenticated = useCallback(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      navigate('/login', { replace: true });
-    } else {
-      navigate('/onboarding', { replace: true });
-    }
+    navigate('/login', { replace: true });
   }, [navigate]);
 
-  const { profile, loading } = useProfile(handleUnauthenticated);
-  const { preferences, hasPreferences, isFetching, refetch } = usePreferences();
+  const { profile: authProfile, loading } = useProfile(handleUnauthenticated);
+  const { profile, hasPreferences, isFetching } = usePreferences();
+
+  const { deleteAccount, isLoading: isDeleting } = useDeleteAccount(
+    () => navigate('/login', { replace: true }),
+    () => {
+      setIsDeleteDrawerOpen(false);
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка',
+        description: 'Не удалось удалить аккаунт. Попробуйте позже.',
+      });
+    }
+  );
 
   const handleLogout = useCallback(async () => {
     await authApi.logout();
     navigate('/login', { replace: true });
   }, [navigate]);
 
-  const handleSaved = () => {
-    refetch();
-    setIsEditing(false);
-  };
+  const handleSaved = () => setIsEditing(false);
 
   if (loading) {
     return (
@@ -47,7 +63,7 @@ export const ProfilePage = () => {
     );
   }
 
-  if (!profile) return null;
+  if (!authProfile) return null;
 
   return (
     <PageLayout>
@@ -69,7 +85,7 @@ export const ProfilePage = () => {
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
                   Логин
                 </span>
-                <span className="text-[15px] font-bold text-primary">{profile.login}</span>
+                <span className="text-[15px] font-bold text-primary">{authProfile.login}</span>
               </div>
               <div className="my-2 h-px bg-stone-100 dark:bg-stone-800" />
               <div className="flex items-center justify-between py-1">
@@ -77,7 +93,7 @@ export const ProfilePage = () => {
                   Email
                 </span>
                 <span className="text-[15px] font-semibold text-stone-900 dark:text-white">
-                  {profile.email}
+                  {authProfile.email}
                 </span>
               </div>
             </div>
@@ -106,25 +122,57 @@ export const ProfilePage = () => {
               <div className="trip-info-card flex items-center justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
               </div>
-            ) : hasPreferences ? (
-              <PreferencesView preferences={preferences} />
+            ) : hasPreferences && profile ? (
+              <PreferencesView preferences={profile} />
             ) : (
               <div className="flex flex-col gap-3">
                 <EmptyState icon={ClipboardList} message="Анкета предпочтений еще не заполнена" />
-                <Button onClick={() => setIsEditing(true)} className="h-[52px] flex-1 rounded-2xl">
-                  Указать предпочтения
+                <Button
+                  onClick={() => navigate('/onboarding')}
+                  className="h-[52px] flex-1 rounded-2xl"
+                >
+                  Заполнить анкету
                 </Button>
               </div>
             )}
           </div>
+
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setIsDeleteDrawerOpen(true)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3.5 text-left transition-colors active:bg-red-100/80 dark:border-red-900/40 dark:bg-red-900/10"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100/80 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20">
+                <Trash2 className="h-4 w-4 text-red-500" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[15px] font-semibold text-red-600 dark:text-red-400">
+                  Удалить аккаунт
+                </span>
+              </div>
+            </button>
+          </div>
         </div>
       </PageContent>
 
-      <PreferencesEditor
+      <ProfileEditWizard
         open={isEditing}
         onOpenChange={setIsEditing}
-        initialData={preferences}
+        initialData={profile ?? {}}
         onSaved={handleSaved}
+      />
+
+      <ConfirmDrawer
+        open={isDeleteDrawerOpen}
+        onOpenChange={setIsDeleteDrawerOpen}
+        variant="delete"
+        title="Удалить аккаунт?"
+        description="Все данные профиля, поездки и расходы будут удалены безвозвратно."
+        confirmLabel="Удалить аккаунт"
+        cancelLabel="Отмена"
+        onConfirm={deleteAccount}
+        loading={isDeleting}
       />
     </PageLayout>
   );
