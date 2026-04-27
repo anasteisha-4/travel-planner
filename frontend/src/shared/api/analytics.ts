@@ -9,16 +9,17 @@ type EventType =
   | 'onboarding_step_completed'
   | 'onboarding_completed';
 
-type AnalyticsEvent = {
+type QueuedEvent = {
   event_type: EventType;
   entity_type?: string;
   entity_id?: string;
   context?: Record<string, unknown>;
 };
 
+type EventPayload = QueuedEvent & { session_id: string };
+
 type BatchPayload = {
-  events: AnalyticsEvent[];
-  session_id: string;
+  events: EventPayload[];
 };
 
 const SESSION_KEY = 'analytics_session_id';
@@ -32,15 +33,15 @@ const getSessionId = (): string => {
   return id;
 };
 
-const queue: AnalyticsEvent[] = [];
+const queue: QueuedEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 const flush = () => {
   if (queue.length === 0) return;
 
+  const sessionId = getSessionId();
   const payload: BatchPayload = {
-    events: queue,
-    session_id: getSessionId(),
+    events: queue.map((e) => ({ ...e, session_id: sessionId })),
   };
   queue.splice(0, queue.length);
 
