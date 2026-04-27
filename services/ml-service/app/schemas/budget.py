@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -23,3 +24,14 @@ class BudgetPredictResponse(BaseModel):
     daily_cost_usd: float
     breakdown: dict[str, float]
     model_version: str
+
+
+class ModelVersionResponse(BaseModel):
+    id: str
+    name: str
+    version: str
+    model_type: str
+    is_active: bool
+    metrics: dict | None
+    trained_at: datetime | None
+    created_at: datetime
