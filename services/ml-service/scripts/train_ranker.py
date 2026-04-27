@@ -174,8 +174,7 @@ def _build_pair_features(
     avg_daily = float(dest_row.get("avg_daily_cost_usd", 80.0))
     budget_min_usd = float(profile_snapshot.get("budget_min_usd") or 200)
     budget_max_usd = float(profile_snapshot.get("budget_max_usd") or 2000)
-    typical_duration = str(profile_snapshot.get("typical_duration", "standard"))
-    duration_days = {"weekend": 2, "short": 5, "standard": 10, "long": 21, "extended": 45}.get(typical_duration, 10)
+    duration_days = int(profile_snapshot.get("typical_duration_days") or 10)
     trip_cost = avg_daily * duration_days
     if budget_min_usd <= trip_cost <= budget_max_usd:
         trip_budget_fit = 1.0

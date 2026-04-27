@@ -28,6 +28,7 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             "vacation_preferences_ranked": [],
             "budget_min_usd": None,
             "budget_max_usd": None,
+            "typical_duration_days": 10,
             "typical_duration": None,
             "risk_tolerance": None,
             "visa_tolerance": "any_visa",
@@ -40,11 +41,18 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
         }
 
     m = dict(row._mapping)
+    _enum_to_days = {"weekend": 2, "short": 5, "standard": 10, "long": 21, "extended": 45}
+    typical_duration_days = m.get("typical_duration_days")
+    if typical_duration_days is None:
+        typical_duration_days = _enum_to_days.get(m.get("typical_duration") or "standard", 10)
+    else:
+        typical_duration_days = int(float(typical_duration_days))
     return {
         "onboarding_completed": bool(m.get("onboarding_completed", False)),
         "vacation_preferences_ranked": m.get("vacation_preferences_ranked") or [],
         "budget_min_usd": float(m["budget_min_usd"]) if m.get("budget_min_usd") else None,
         "budget_max_usd": float(m["budget_max_usd"]) if m.get("budget_max_usd") else None,
+        "typical_duration_days": typical_duration_days,
         "typical_duration": m.get("typical_duration"),
         "risk_tolerance": m.get("risk_tolerance"),
         "visa_tolerance": m.get("visa_tolerance") or "any_visa",

@@ -10,7 +10,6 @@ from app.services.content_scorer import (
     _crowd_score,
     _explanation_tags,
     _language_score,
-    _percentile_rank,
     _region_boost,
     _safety_score,
 )
@@ -18,43 +17,33 @@ from app.services.content_scorer import (
 # --- Unit tests for scorer functions ---
 
 
-def test_percentile_rank_empty():
-    assert _percentile_rank(0.5, []) == 0.5
-
-
-def test_percentile_rank_all_lower():
-    assert _percentile_rank(1.0, [0.1, 0.2, 0.3]) == pytest.approx(1.0)
-
-
-def test_percentile_rank_all_higher():
-    assert _percentile_rank(0.0, [0.5, 0.6, 0.7]) == pytest.approx(0.0)
-
-
-def test_percentile_rank_mid():
-    result = _percentile_rank(0.5, [0.0, 0.25, 0.5, 0.75, 1.0])
-    # 2 values < 0.5 → 2/5 = 0.4
-    assert result == pytest.approx(0.4)
-
-
 def test_activity_match_empty_prefs():
-    score = _activity_match_score([], {"beach": 0.9}, [0.5])
+    score = _activity_match_score([], {"beach": 0.9})
     assert score == 0.5
 
 
 def test_activity_match_empty_activities():
-    score = _activity_match_score(["beach"], {}, [0.5])
+    score = _activity_match_score(["beach"], {})
     assert score == 0.5
 
 
 def test_activity_match_perfect():
     # beach gets weight 5, score 1.0 → raw = 1.0
-    score = _activity_match_score(["beach"], {"beach": 1.0}, [0.0, 0.5, 0.9])
-    assert score > 0.5  # should be in upper half
+    score = _activity_match_score(["beach"], {"beach": 1.0})
+    assert score == pytest.approx(1.0)
 
 
-def test_activity_match_no_global():
-    score = _activity_match_score(["beach"], {"beach": 0.8}, [])
-    assert score == pytest.approx(0.8)
+def test_activity_match_rank_weighted():
+    # rank-1 pref: weight 5; rank-2 pref: weight 4; total_weight=9
+    # culture=0.8 (w5), shopping=0.6 (w4) → (5*0.8 + 4*0.6) / 9 = 6.4/9 ≈ 0.711
+    score = _activity_match_score(["culture", "shopping"], {"culture": 0.8, "shopping": 0.6})
+    assert score == pytest.approx((5 * 0.8 + 4 * 0.6) / 9, rel=1e-4)
+
+
+def test_activity_match_no_match():
+    # pref is beach but destination has none
+    score = _activity_match_score(["beach"], {"culture": 0.9})
+    assert score == pytest.approx(0.0)
 
 
 def test_budget_fit_no_budget():
@@ -70,21 +59,21 @@ def test_budget_fit_no_budget_extreme_cost():
 
 
 def test_budget_fit_within_range():
-    # cost fits exactly in budget
-    score = _budget_fit_score(500, 2000, 0.3, 100.0, "standard")  # 100*10=1000 within [500,2000]
+    # cost fits exactly in budget: 100 * 10 = 1000, within [500, 2000]
+    score = _budget_fit_score(500, 2000, 0.3, 100.0, 10)
     assert score == pytest.approx(1.0)
 
 
 def test_budget_fit_too_expensive():
     # daily=500, duration=10 → 5000, budget max=1000
-    score = _budget_fit_score(500, 1000, 0.8, 500.0, "standard")
+    score = _budget_fit_score(500, 1000, 0.8, 500.0, 10)
     assert score < 1.0
     assert score >= 0.0
 
 
 def test_budget_fit_too_cheap():
     # daily=5, duration=10 → 50, budget min=500
-    score = _budget_fit_score(500, 1000, 0.1, 5.0, "standard")
+    score = _budget_fit_score(500, 1000, 0.1, 5.0, 10)
     assert score < 1.0
 
 

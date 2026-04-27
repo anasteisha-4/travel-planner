@@ -92,6 +92,7 @@ def make_profile() -> dict:
     budget_max = budget_min + rng.uniform(budget_min * 0.3, budget_min * 1.2)
 
     typical_duration = rng.choices(DURATION_OPTIONS, weights=[10, 30, 35, 20, 5])[0]
+    typical_duration_days = {"weekend": 2, "short": 5, "standard": 10, "long": 21, "extended": 45}[typical_duration]
 
     risk_tolerance = rng.choices([1, 2, 3, 4, 5], weights=[10, 20, 35, 25, 10])[0]
     visa_tolerance = rng.choices(VISA_OPTIONS, weights=[25, 30, 30, 15])[0]
@@ -127,6 +128,7 @@ def make_profile() -> dict:
         "budget_max_usd": round(budget_max, 2),
         "budget_tier": budget_tier,
         "typical_duration": typical_duration,
+        "typical_duration_days": typical_duration_days,
         "risk_tolerance": risk_tolerance,
         "visa_tolerance": visa_tolerance,
         "language_comfort": language_comfort,
@@ -186,9 +188,7 @@ def independent_quality_score(
     avg_daily = float(dest_features.get("avg_daily_cost_usd") or 80.0)
     budget_min = float(profile.get("budget_min_usd") or 200)
     budget_max = float(profile.get("budget_max_usd") or 2000)
-    duration_days = {"weekend": 2, "short": 5, "standard": 10, "long": 21, "extended": 45}.get(
-        str(profile.get("typical_duration", "standard")), 10
-    )
+    duration_days = int(profile.get("typical_duration_days") or 10)
     trip_cost = avg_daily * duration_days
     if budget_min <= trip_cost <= budget_max:
         budget_fit = 1.0

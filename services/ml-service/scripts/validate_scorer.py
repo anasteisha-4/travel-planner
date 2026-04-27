@@ -31,6 +31,7 @@ TEST_PROFILES = [
         "budget_min_usd": 500,
         "budget_max_usd": 1500,
         "typical_duration": "short",
+        "typical_duration_days": 5,
         "risk_tolerance": 3,
         "visa_tolerance": "visa_free_only",
         "language_comfort": ["ru"],
@@ -47,6 +48,7 @@ TEST_PROFILES = [
         "budget_min_usd": 2000,
         "budget_max_usd": 6000,
         "typical_duration": "standard",
+        "typical_duration_days": 10,
         "risk_tolerance": 4,
         "visa_tolerance": "evisa_ok",
         "language_comfort": ["ru", "en"],
@@ -63,6 +65,7 @@ TEST_PROFILES = [
         "budget_min_usd": 3000,
         "budget_max_usd": 10000,
         "typical_duration": "standard",
+        "typical_duration_days": 10,
         "risk_tolerance": 2,
         "visa_tolerance": "any_visa",
         "language_comfort": ["en"],
@@ -79,6 +82,7 @@ TEST_PROFILES = [
         "budget_min_usd": 800,
         "budget_max_usd": 2500,
         "typical_duration": "short",
+        "typical_duration_days": 5,
         "risk_tolerance": 2,
         "visa_tolerance": "visa_free_only",
         "language_comfort": ["ru"],
@@ -95,6 +99,7 @@ TEST_PROFILES = [
         "budget_min_usd": 1500,
         "budget_max_usd": 5000,
         "typical_duration": "weekend",
+        "typical_duration_days": 2,
         "risk_tolerance": 3,
         "visa_tolerance": "evisa_ok",
         "language_comfort": ["any"],
@@ -226,6 +231,21 @@ def main() -> None:
         else:
             print("  ✗ Low NDCG — review scoring weights or data coverage")
 
+    # Liked similarity acceptance tests
+    print("\n" + "─" * 72)
+    print("Liked similarity acceptance tests:")
+    _run_liked_similarity_checks(scorer, destinations, dest_features, TRAVEL_MONTH)
+
+    # Origin proximity acceptance tests
+    print("\n" + "─" * 72)
+    print("Origin proximity acceptance tests:")
+    _run_origin_proximity_checks(scorer, destinations, dest_features, TRAVEL_MONTH)
+
+    # Language penalty acceptance tests
+    print("\n" + "─" * 72)
+    print("Language penalty acceptance tests:")
+    _run_language_penalty_checks(scorer, destinations, dest_features, TRAVEL_MONTH)
+
     # Sanity checks
     print("\n" + "─" * 72)
     print("Sanity checks:")
@@ -233,6 +253,181 @@ def main() -> None:
     _run_sanity_checks(scorer, destinations, dest_features, TRAVEL_MONTH)
 
     db.close()
+
+
+# SPb: lat=59.95, lng=30.32 → Santiago CL ~13400km, Hawaii US ~9700km, Bangkok ~7600km
+SPB_LAT, SPB_LNG = 59.95, 30.32
+# within 5000km from SPb: Turkey, Caucasus, Balkans, Central Asia
+NEAR_SPB_COUNTRIES = {"TR", "GE", "AM", "AZ", "UZ", "KZ", "KG", "TJ", "RS", "ME", "BA", "MK", "AL", "BG", "RO", "HR", "SI", "HU", "SK", "CZ", "AT", "DE", "PL", "FI", "SE", "NO", "DK", "EE", "LV", "LT", "BY", "UA", "MD", "EG", "TN", "MA", "IL", "JO", "LB", "CY", "GR", "MT", "IT", "ES", "PT", "FR", "BE", "NL", "LU", "CH", "LI", "IS", "IE", "GB", "RU"}
+FAR_SPB_COUNTRIES = {"CL", "US", "AU", "NZ", "JP", "KR", "CN", "BR", "AR", "PE", "MX", "ZA", "NG"}
+
+
+def _run_origin_proximity_checks(scorer, destinations, dest_features, travel_month) -> None:
+    base_profile = {
+        "vacation_preferences_ranked": ["beach", "culture", "food", "nature", "urban"],
+        "budget_min_usd": 500,
+        "budget_max_usd": 5000,
+        "typical_duration_days": 10,
+        "risk_tolerance": 3,
+        "visa_tolerance": "any_visa",
+        "language_comfort": ["any"],
+        "crowd_preference": 3,
+        "climate_preferences": ["any"],
+        "liked_destination_ids": [],
+        "onboarding_completed": True,
+    }
+    filters = {"citizenship_code": "RU", "exclude_destination_ids": [], "region": None}
+
+    # Test 1: origin=СПб → far destinations (Santiago, Hawaii) not in top-20
+    profile_spb = {**base_profile, "origin_lat": SPB_LAT, "origin_lng": SPB_LNG}
+    results_spb = scorer.score(profile_spb, destinations, dest_features, travel_month, filters)
+    top20_spb = results_spb[:20]
+    far_in_top20 = [(r.name, r.country_code) for r in top20_spb if r.country_code in FAR_SPB_COUNTRIES]
+    status = "✓" if not far_in_top20 else f"✗ far destinations leaked: {far_in_top20}"
+    print(f"  origin=SPb → no far (>10k km) in top-20:    {status}")
+
+    # Test 2: origin=СПб → at least 5 within 5000km in top-10
+    near_in_top10 = sum(1 for r in top20_spb[:10] if r.country_code in NEAR_SPB_COUNTRIES)
+    status = "✓" if near_in_top10 >= 5 else f"✗ only {near_in_top10}/10"
+    print(f"  origin=SPb → ≥5 within 5000km in top-10:    {status} ({near_in_top10}/10)")
+    if near_in_top10 < 5:
+        print(f"    Top-10: {[(r.name, r.country_code) for r in top20_spb[:10]]}")
+    else:
+        near = [(r.name, r.country_code) for r in top20_spb[:10] if r.country_code in NEAR_SPB_COUNTRIES]
+        print(f"    Near matches: {near}")
+
+    # Test 3: no origin → breakdown has no origin_proximity key
+    profile_no_origin = {**base_profile, "origin_lat": None, "origin_lng": None}
+    results_no_origin = scorer.score(profile_no_origin, destinations, dest_features, travel_month, filters)
+    has_prox_key = any("origin_proximity" in r.score_breakdown for r in results_no_origin[:5])
+    status = "✓ (no origin_proximity key)" if not has_prox_key else "✗ unexpected origin_proximity in breakdown"
+    print(f"  no origin → no origin_proximity in breakdown: {status}")
+
+    # Show breakdown for top SPb result
+    if results_spb:
+        top = results_spb[0]
+        prox = top.score_breakdown.get("origin_proximity", "N/A")
+        print(f"  Top result for SPb: {top.name} ({top.country_code}), origin_proximity={prox}, score={top.score}")
+
+
+MOROCCAN_CITIES = {"Fes", "Marrakech", "Casablanca", "Rabat", "Tangier", "Agadir", "Fez"}
+# EN-speaking cities — either native-EN or high english_speaking_score
+ENGLISH_CITIES = {"London", "Paris", "Amsterdam", "Berlin", "Barcelona", "Rome", "Vienna", "Prague", "Budapest",
+                  "Brisbane", "Sydney", "Melbourne", "Dublin", "Edinburgh", "Cape Town", "Toronto", "Auckland"}
+
+
+def _run_language_penalty_checks(scorer, destinations, dest_features, travel_month) -> None:
+    base_profile = {
+        "vacation_preferences_ranked": ["culture", "urban", "food", "nature", "beach"],
+        "budget_min_usd": 500,
+        "budget_max_usd": 5000,
+        "typical_duration_days": 10,
+        "risk_tolerance": 3,
+        "visa_tolerance": "any_visa",
+        "crowd_preference": 3,
+        "climate_preferences": ["any"],
+        "liked_destination_ids": [],
+        "origin_lat": None,
+        "origin_lng": None,
+        "onboarding_completed": True,
+    }
+    filters = {"citizenship_code": "RU", "exclude_destination_ids": [], "region": None}
+
+    # Test 1: language=["ru"] → Moroccan cities not in top-30
+    profile_ru = {**base_profile, "language_comfort": ["ru"]}
+    results_ru = scorer.score(profile_ru, destinations, dest_features, travel_month, filters)
+    top30_names_ru = {r.name for r in results_ru[:30]}
+    leaked = MOROCCAN_CITIES & top30_names_ru
+    status = "✓" if not leaked else f"✗ leaked: {leaked}"
+    print(f"  lang=[ru] → Moroccan cities not in top-30:    {status}")
+
+    # Test 2: language=["ru","en"] → at least one major European city in top-20
+    profile_ru_en = {**base_profile, "language_comfort": ["ru", "en"]}
+    results_ru_en = scorer.score(profile_ru_en, destinations, dest_features, travel_month, filters)
+    top20_names_en = {r.name for r in results_ru_en[:20]}
+    en_hits = ENGLISH_CITIES & top20_names_en
+    status = "✓" if en_hits else "✗ no major EN city in top-20"
+    print(f"  lang=[ru,en] → EN cities in top-20:           {status} ({en_hits})")
+
+    # Test 3: language=["any"] → no language_penalty key in breakdown
+    profile_any = {**base_profile, "language_comfort": ["any"]}
+    results_any = scorer.score(profile_any, destinations, dest_features, travel_month, filters)
+    has_penalty_key = any("language_penalty" in r.score_breakdown for r in results_any[:10])
+    status = "✓ (no penalty key)" if not has_penalty_key else "✗ unexpected penalty in breakdown"
+    print(f"  lang=[any] → no language_penalty in breakdown: {status}")
+
+    # Show Fes score for ru profile (should be heavily penalised)
+    fes = next((r for r in results_ru if r.name in ("Fes", "Fez")), None)
+    if fes:
+        pen = fes.score_breakdown.get("language_penalty", 0)
+        rank = next(i for i, r in enumerate(results_ru, 1) if r.destination_id == fes.destination_id)
+        print(f"  Fes rank for lang=[ru]: #{rank}, score={fes.score}, penalty={pen}")
+
+
+NIZHNY_NOVGOROD_ID = "a0b28ab3-0a05-42ce-a7c6-2cdbc133a1d2"
+BALI_ID = "e751b485-190e-4f93-9620-9e486bfc92b2"
+
+# Destinations expected in top-10 when liked=Nizhny Novgorod (RU + CIS Russian-speaking)
+LIKED_NN_EXPECTED_COUNTRIES = {"RU", "BY", "KZ", "UZ", "KG", "GE", "AM", "AZ", "MD", "TJ"}
+# Destinations expected in top-10 when liked=Bali (tropical South/SE Asia)
+LIKED_BALI_EXPECTED = {"TH", "VN", "PH", "LK", "MY", "KH", "MM", "ID", "MV"}
+
+
+def _run_liked_similarity_checks(scorer, destinations, dest_features, travel_month) -> None:
+    base_profile = {
+        "vacation_preferences_ranked": ["beach", "culture", "food", "nature", "urban"],
+        "budget_min_usd": 500,
+        "budget_max_usd": 3000,
+        "typical_duration_days": 10,
+        "risk_tolerance": 3,
+        "visa_tolerance": "any_visa",
+        "language_comfort": ["any"],
+        "crowd_preference": 3,
+        "climate_preferences": ["any"],
+        "origin_lat": None,
+        "origin_lng": None,
+        "onboarding_completed": True,
+    }
+    filters = {"citizenship_code": "RU", "exclude_destination_ids": [], "region": None}
+
+    # Test 1: liked=Nizhny Novgorod → expect CIS/post-Soviet cities in top-10
+    profile_nn = {**base_profile, "liked_destination_ids": [NIZHNY_NOVGOROD_ID]}
+    results_nn = scorer.score(profile_nn, destinations, dest_features, travel_month, filters)
+    top10_nn = results_nn[:10]
+    cis_in_top10 = sum(1 for r in top10_nn if r.country_code in LIKED_NN_EXPECTED_COUNTRIES)
+    status = "✓" if cis_in_top10 >= 2 else f"✗ only {cis_in_top10}"
+    print(f"  liked=Nizhny Novgorod → CIS/RU-speaking in top-10: {status} ({cis_in_top10}/10)")
+    if cis_in_top10 < 2:
+        print(f"    Top-10: {[(r.name, r.country_code) for r in top10_nn]}")
+    else:
+        matches = [(r.name, r.country_code) for r in top10_nn if r.country_code in LIKED_NN_EXPECTED_COUNTRIES]
+        print(f"    Matches: {matches}")
+
+    # Test 2: liked=Bali → expect SE/S Asian tropical destinations in top-10
+    profile_bali = {**base_profile, "liked_destination_ids": [BALI_ID]}
+    results_bali = scorer.score(profile_bali, destinations, dest_features, travel_month, filters)
+    top10_bali = results_bali[:10]
+    asia_in_top10 = sum(1 for r in top10_bali if r.country_code in LIKED_BALI_EXPECTED)
+    status = "✓" if asia_in_top10 >= 2 else f"✗ only {asia_in_top10}"
+    print(f"  liked=Bali → SE/S Asian tropical in top-10:        {status} ({asia_in_top10}/10)")
+    if asia_in_top10 < 2:
+        print(f"    Top-10: {[(r.name, r.country_code) for r in top10_bali]}")
+    else:
+        matches = [(r.name, r.country_code) for r in top10_bali if r.country_code in LIKED_BALI_EXPECTED]
+        print(f"    Matches: {matches}")
+
+    # Test 3: no liked → results should exist and be well-distributed
+    profile_no_liked = {**base_profile, "liked_destination_ids": []}
+    results_no_liked = scorer.score(profile_no_liked, destinations, dest_features, travel_month, filters)
+    has_liked_breakdown = any("liked_similarity" in r.score_breakdown for r in results_no_liked[:5])
+    status = "✓ (no liked_similarity key)" if not has_liked_breakdown else "✗ unexpected liked_similarity in breakdown"
+    print(f"  no liked → no liked_similarity in breakdown:        {status}")
+
+    # Show liked_similarity breakdown for top result
+    if results_nn:
+        top = results_nn[0]
+        sim_val = top.score_breakdown.get("liked_similarity", "N/A")
+        print(f"  Top result for liked=NN: {top.name} ({top.country_code}), liked_similarity={sim_val}, score={top.score}")
 
 
 def _run_sanity_checks(scorer, destinations, dest_features, travel_month):

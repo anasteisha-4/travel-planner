@@ -3,19 +3,35 @@
 Accepts a full UserProfile (12 onboarding fields) and returns ranked
 ScoredDestination list with score_breakdown and explanation_tags.
 
-Scoring factors and weights:
-  activity_match   0.28  — ranked vacation_preferences vs activity scores
-  budget_fit       0.18  — band matching budget vs cost_index
-  season           0.18  — season_score for travel_month
-  visa             0.12  — hard-filtered + soft score
-  safety           0.10  — safety_score vs risk_tolerance
-  language         0.06  — ru/en speaking score vs language_comfort
-  crowd            0.04  — crowd_preference vs crowd_index
-  climate          0.04  — attribute match vs climate_preferences
+Hard filters (applied before composite, disqualify destination entirely):
+  visa_tolerance      — minimum visa_score threshold (VISA_FILTER)
+  risk_tolerance      — minimum safety_score threshold (RISK_SAFETY_THRESHOLD)
+
+Soft factors (weighted composite, sum = 1.0 when all signals present):
+  activity_match        0.22  — rank-weighted vacation_preferences vs activity scores
+  liked_dest_similarity 0.15  — cosine similarity to mean activity vector of liked dests
+  budget_fit            0.13  — band matching budget vs cost_index
+  origin_proximity      0.10  — haversine distance decay from origin city
+  season_fit            0.10  — season_score for travel_month
+  safety_modulation     0.08  — safety_score vs risk_tolerance (above threshold = modulation)
+  language_match        0.07  — ru/en speaking score vs language_comfort
+  visa_effort           0.05  — soft visa score (after hard filter)
+  climate_match         0.05  — attribute match vs climate_preferences
+  crowd_fit             0.05  — crowd_preference vs crowd_index
+
+Optional signals (liked_similarity, origin_proximity): when absent (None),
+their weight is redistributed proportionally across remaining factors via
+dynamic weight normalisation (divide by total_weight of present factors).
+
+Soft penalties (additive, applied after composite):
+  language_hard_penalty   -0.25  when dest non-ru-friendly and user ru-only
+  liked_dest_visited       -0.10  when dest is in liked_destination_ids (already known)
 """
 
 import uuid
 from typing import Any, Protocol, runtime_checkable
+
+import numpy as np
 
 from app.schemas.recommendation import ScoredDestination
 
@@ -33,6 +49,20 @@ class BaseScorer(Protocol):
 
 
 ACTIVITY_WEIGHT_BY_RANK = {1: 5, 2: 4, 3: 3, 4: 2, 5: 1}
+
+# Base weights when all signals present (sum = 1.0)
+COMPOSITE_WEIGHTS: dict[str, float] = {
+    "activity_match":        0.22,
+    "liked_dest_similarity": 0.15,
+    "budget_fit":            0.13,
+    "origin_proximity":      0.10,
+    "season_fit":            0.10,
+    "safety_modulation":     0.08,
+    "language_match":        0.07,
+    "visa_effort":           0.05,
+    "climate_match":         0.05,
+    "crowd_fit":             0.05,
+}
 
 # risk_tolerance 1-5 → minimum safety_score required
 RISK_SAFETY_THRESHOLD = {1: 0.70, 2: 0.55, 3: 0.40, 4: 0.20, 5: 0.0}
@@ -64,20 +94,85 @@ CLIMATE_ATTRIBUTE_MAP: dict[str, list[str]] = {
 }
 
 
-def _percentile_rank(value: float, all_values: list[float]) -> float:
-    if not all_values:
-        return 0.5
-    return sum(1 for v in all_values if v < value) / len(all_values)
+ACTIVITY_TYPES = [
+    "beach", "culture", "nature", "adventure", "food",
+    "nightlife", "wellness", "shopping", "family", "urban",
+]
+
+
+def _activity_vector(activities: dict[str, float]) -> np.ndarray:
+    return np.array([activities.get(a, 0.0) for a in ACTIVITY_TYPES], dtype=np.float64)
+
+
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
+
+
+def _liked_destinations_similarity(
+    liked_dest_ids: list,
+    dest_id: uuid.UUID,
+    dest_region: str | None,
+    dest_subregion: str | None,
+    dest_activities: dict[str, float],
+    dest_lookup: dict[str, dict],
+) -> float | None:
+    """Cosine similarity between dest and mean activity vector of liked destinations.
+
+    Returns None when no liked destinations are found in the lookup
+    (signal absent — do not penalise).
+    """
+    if not liked_dest_ids:
+        return None
+
+    liked_vecs: list[np.ndarray] = []
+    liked_regions: list[str | None] = []
+    liked_subregions: list[str | None] = []
+
+    for lid in liked_dest_ids:
+        key = str(lid)
+        if key == str(dest_id):
+            continue
+        entry = dest_lookup.get(key)
+        if entry is None:
+            continue
+        liked_vecs.append(_activity_vector(entry.get("activities", {})))
+        liked_regions.append(entry.get("region"))
+        liked_subregions.append(entry.get("subregion"))
+
+    if not liked_vecs:
+        return None
+
+    mean_vec = np.mean(liked_vecs, axis=0)
+    dest_vec = _activity_vector(dest_activities)
+    sim_activity = _cosine_similarity(mean_vec, dest_vec)
+
+    same_subregion = dest_subregion and any(s == dest_subregion for s in liked_subregions)
+    same_region = dest_region and any(r == dest_region for r in liked_regions)
+
+    score = 0.6 * sim_activity
+    if same_subregion:
+        score += 0.3
+    elif same_region:
+        score += 0.15
+
+    return min(1.0, score)
 
 
 def _activity_match_score(
     vacation_prefs_ranked: list[str],
     activities: dict[str, float],
-    all_activity_avgs: list[float],
 ) -> float:
     """Weighted match: rank-1 pref gets weight 5, rank-5 gets weight 1.
-    Raw score = sum(weight * activity_score) / max_possible.
-    Then percentile-ranked globally to stretch the range.
+    Raw score = sum(weight * activity_score) / total_weight.
+
+    Percentile ranking was removed: when all destinations score similarly
+    (e.g. 0.74–0.81 range), percentile collapses small real differences into
+    arbitrary discrete jumps (0.0 vs 0.33 vs 0.67), causing the lowest raw
+    scorer to receive 0.0 even when it is a strong match.
     """
     if not vacation_prefs_ranked or not activities:
         return 0.5
@@ -90,8 +185,7 @@ def _activity_match_score(
         weighted_sum += weight * score
         total_weight += weight
 
-    raw = weighted_sum / total_weight if total_weight > 0 else 0.0
-    return _percentile_rank(raw, all_activity_avgs) if all_activity_avgs else raw
+    return weighted_sum / total_weight if total_weight > 0 else 0.0
 
 
 def _budget_fit_score(
@@ -99,7 +193,7 @@ def _budget_fit_score(
     budget_max_usd: float | None,
     cost_index: float,
     avg_daily_cost_usd: float | None,
-    typical_duration: str | None,
+    typical_duration_days: int,
 ) -> float:
     """Band matching: check if avg_daily_cost_usd × duration fits within budget range.
     Falls back to cost_index distance if budget not set.
@@ -107,7 +201,7 @@ def _budget_fit_score(
     if budget_min_usd is None or budget_max_usd is None:
         return 1.0 - abs(cost_index - 0.5)
 
-    duration_days = DURATION_DAYS.get(typical_duration or "standard", 10)
+    duration_days = typical_duration_days
     daily_cost = avg_daily_cost_usd or (cost_index * 300)
     trip_cost = daily_cost * duration_days
 
@@ -151,6 +245,42 @@ def _language_score(
     return min(1.0, score * (1 - script * 0.2))
 
 
+def _language_penalty(features: dict[str, Any], language_comfort: list[str]) -> float:
+    """Hard-ish penalty (-0.25) when destination language doesn't match user comfort.
+
+    Only applies when comfort is explicit (not ["any"] or empty).
+    ru-only: penalise if russian_speaking_score < 0.3.
+    ru+en:   penalise only if BOTH ru < 0.3 AND en < 0.3.
+    """
+    if not language_comfort or "any" in language_comfort:
+        return 0.0
+
+    ru = float(features.get("russian_speaking_score", 0.0))
+    en = float(features.get("english_speaking_score", 0.0))
+
+    wants_ru = "ru" in language_comfort
+    wants_en = "en" in language_comfort
+
+    if wants_ru and not wants_en:
+        return -0.25 if ru < 0.3 else 0.0
+
+    if wants_ru and wants_en:
+        return -0.25 if ru < 0.3 and en < 0.3 else 0.0
+
+    # en-only: penalise if english_speaking_score < 0.3
+    return -0.25 if en < 0.3 else 0.0
+
+
+def _liked_visited_penalty(dest_id: uuid.UUID, liked_dest_ids: list) -> float:
+    """Return -0.10 if this destination is already in the user's liked list.
+
+    We want to recommend new destinations, not repeat what the user already knows.
+    """
+    if not liked_dest_ids:
+        return 0.0
+    return -0.10 if any(str(lid) == str(dest_id) for lid in liked_dest_ids) else 0.0
+
+
 def _crowd_score(crowd_index: float, crowd_preference: int | None) -> float:
     """crowd_preference: 1=wants quiet, 5=wants lively."""
     pref = (crowd_preference or 3) / 5.0
@@ -181,7 +311,7 @@ def _region_boost(
     dest_subregion: str | None,
     liked_dest_features: list[dict],
 ) -> float:
-    """Small boost (up to 0.15) for destinations in same region/subregion as liked ones."""
+    """Kept for backward compatibility — superseded by _liked_destinations_similarity."""
     if not liked_dest_features:
         return 0.0
     same_subregion = sum(1 for f in liked_dest_features if f.get("subregion") == dest_subregion and dest_subregion)
@@ -189,11 +319,39 @@ def _region_boost(
     return min(0.15, same_subregion * 0.08 + same_region * 0.04)
 
 
-def _connectivity_boost(connectivity_score: float, origin_lat: float | None) -> float:
-    """Weight connectivity by whether user has a known origin (lat set)."""
-    if origin_lat is None:
-        return connectivity_score * 0.6
-    return connectivity_score
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    import math
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _origin_proximity_score(
+    origin_lat: float | None,
+    origin_lng: float | None,
+    dest_lat: float | None,
+    dest_lng: float | None,
+) -> float | None:
+    """Distance-based score with smooth decay. Returns None when origin is unknown."""
+    if origin_lat is None or origin_lng is None or dest_lat is None or dest_lng is None:
+        return None
+    d = _haversine_km(origin_lat, origin_lng, float(dest_lat), float(dest_lng))
+    if d < 500:
+        return 1.00
+    elif d < 1500:
+        return 0.90
+    elif d < 3000:
+        return 0.75
+    elif d < 5000:
+        return 0.60
+    elif d < 8000:
+        return 0.45
+    elif d < 12000:
+        return 0.30
+    else:
+        return 0.20
 
 
 def _explanation_tags(
@@ -223,7 +381,7 @@ def _explanation_tags(
             tags.append("affordable")
         elif cost_usd > 200:
             tags.append("premium")
-    if breakdown.get("season", 0) >= 0.75:
+    if breakdown.get("season_fit", 0) >= 0.75:
         tags.append("perfect_season")
     if breakdown.get("activity_match", 0) >= 0.75:
         tags.append("great_match")
@@ -242,14 +400,15 @@ class ContentScorer:
         vacation_prefs: list[str] = user_profile.get("vacation_preferences_ranked") or []
         budget_min_usd: float | None = user_profile.get("budget_min_usd")
         budget_max_usd: float | None = user_profile.get("budget_max_usd")
-        typical_duration: str | None = user_profile.get("typical_duration")
+        typical_duration_days: int = int(user_profile.get("typical_duration_days") or 10)
         risk_tolerance: int | None = user_profile.get("risk_tolerance")
         visa_tolerance: str = user_profile.get("visa_tolerance") or "any_visa"
         language_comfort: list[str] = user_profile.get("language_comfort") or ["any"]
         crowd_preference: int | None = user_profile.get("crowd_preference")
         climate_prefs: list[str] = user_profile.get("climate_preferences") or []
-        liked_dest_ids: list[int] = user_profile.get("liked_destination_ids") or []
+        liked_dest_ids: list = user_profile.get("liked_destination_ids") or []
         origin_lat: float | None = user_profile.get("origin_lat")
+        origin_lng: float | None = user_profile.get("origin_lng")
 
         # Citizenship is handled at the data-loading layer — visa_score in dest_features
         # already reflects the correct citizenship passed to get_destination_features().
@@ -258,31 +417,20 @@ class ContentScorer:
 
         visa_threshold = VISA_FILTER.get(visa_tolerance, 0.0)
 
-        # Pre-compute liked destination metadata for region boost
-        liked_features = [
-            {
-                "region": dest_features.get(uuid.UUID(str(d)), {}).get("region"),
-                "subregion": dest_features.get(uuid.UUID(str(d)), {}).get("subregion"),
+        # Build lookup: dest_id_str → {region, subregion, activities} for liked similarity
+        dest_lookup: dict[str, dict] = {}
+        for dest in destinations:
+            dest_id_str = str(dest["id"])
+            f = dest_features.get(uuid.UUID(dest_id_str), {})
+            dest_lookup[dest_id_str] = {
+                "region": dest.get("region"),
+                "subregion": dest.get("subregion"),
+                "activities": f.get("activities", {}),
             }
-            for d in liked_dest_ids
-        ]
 
-        # Build global distribution of weighted activity averages for percentile ranking
-        all_activity_avgs: list[float] = []
-        if vacation_prefs:
-            for dest in destinations:
-                dest_id = uuid.UUID(str(dest["id"]))
-                f = dest_features.get(dest_id, {})
-                activities: dict[str, float] = f.get("activities", {})
-                if activities:
-                    total_w = 0.0
-                    total_s = 0.0
-                    for i, pref in enumerate(vacation_prefs[:5]):
-                        w = ACTIVITY_WEIGHT_BY_RANK.get(i + 1, 1)
-                        total_s += w * activities.get(pref, 0.0)
-                        total_w += w
-                    if total_w > 0:
-                        all_activity_avgs.append(total_s / total_w)
+        has_liked_signal = bool(liked_dest_ids) and any(
+            str(lid) in dest_lookup for lid in liked_dest_ids
+        )
 
         results: list[ScoredDestination] = []
 
@@ -302,49 +450,80 @@ class ContentScorer:
                 continue  # hard filter
 
             safety = float(f.get("safety_score", 0.5))
+            safety_threshold = RISK_SAFETY_THRESHOLD.get(risk_tolerance or 3, 0.40)
+            if safety < safety_threshold:
+                continue  # hard filter
             season = f.get("seasonality", {}).get(travel_month, 0.5)
             cost_index = float(f.get("cost_index", 0.5))
             avg_daily_cost_usd = f.get("avg_daily_cost_usd")
             crowd_index = f.get("crowd_by_month", {}).get(travel_month, 0.5)
-            connectivity = float(f.get("connectivity_score", 0.0))
             activities: dict[str, float] = f.get("activities", {})
 
-            act_score = _activity_match_score(vacation_prefs, activities, all_activity_avgs)
+            act_score = _activity_match_score(vacation_prefs, activities)
             budget_score = _budget_fit_score(
-                budget_min_usd, budget_max_usd, cost_index, avg_daily_cost_usd, typical_duration
+                budget_min_usd, budget_max_usd, cost_index, avg_daily_cost_usd, typical_duration_days
             )
             safety_sc = _safety_score(safety, risk_tolerance)
             lang_sc = _language_score(f, language_comfort)
             crowd_sc = _crowd_score(crowd_index, crowd_preference)
             climate_sc = _climate_match(f, climate_prefs)
-            conn_sc = _connectivity_boost(connectivity, origin_lat)
-            region_boost = _region_boost(dest.get("region"), dest.get("subregion"), liked_features)
 
-            breakdown = {
+            origin_prox = _origin_proximity_score(
+                origin_lat, origin_lng, dest.get("lat"), dest.get("lng")
+            )
+            liked_sim = _liked_destinations_similarity(
+                liked_dest_ids,
+                dest_id,
+                dest.get("region"),
+                dest.get("subregion"),
+                activities,
+                dest_lookup,
+            )
+
+            lang_penalty = _language_penalty(f, language_comfort)
+            visited_penalty = _liked_visited_penalty(dest_id, liked_dest_ids)
+
+            breakdown: dict[str, float] = {
                 "activity_match": round(act_score, 4),
                 "budget_fit": round(budget_score, 4),
-                "season": round(float(season), 4),
-                "visa": round(visa_score, 4),
-                "safety": round(safety_sc, 4),
-                "language": round(lang_sc, 4),
-                "crowd": round(crowd_sc, 4),
-                "climate": round(climate_sc, 4),
-                "connectivity": round(conn_sc, 4),
-                "region_boost": round(region_boost, 4),
+                "season_fit": round(float(season), 4),
+                "visa_effort": round(visa_score, 4),
+                "safety_modulation": round(safety_sc, 4),
+                "language_match": round(lang_sc, 4),
+                "crowd_fit": round(crowd_sc, 4),
+                "climate_match": round(climate_sc, 4),
+            }
+            if lang_penalty < 0:
+                breakdown["language_penalty"] = round(lang_penalty, 4)
+            if visited_penalty < 0:
+                breakdown["liked_visited_penalty"] = round(visited_penalty, 4)
+            if origin_prox is not None:
+                breakdown["origin_proximity"] = round(origin_prox, 4)
+            if liked_sim is not None:
+                breakdown["liked_similarity"] = round(liked_sim, 4)
+
+            # Dynamic weight normalisation: optional signals get their weight only when present
+            factors: dict[str, float | None] = {
+                "activity_match":        act_score,
+                "liked_dest_similarity": liked_sim if (has_liked_signal and liked_sim is not None) else None,
+                "budget_fit":            budget_score,
+                "origin_proximity":      origin_prox,
+                "season_fit":            float(season),
+                "safety_modulation":     safety_sc,
+                "language_match":        lang_sc,
+                "visa_effort":           visa_score,
+                "climate_match":         climate_sc,
+                "crowd_fit":             crowd_sc,
             }
 
-            composite = (
-                0.28 * act_score
-                + 0.18 * budget_score
-                + 0.18 * float(season)
-                + 0.12 * visa_score
-                + 0.10 * safety_sc
-                + 0.06 * lang_sc
-                + 0.04 * crowd_sc
-                + 0.04 * climate_sc
-            )
-            # Connectivity and region boost are additive on top (capped at 1.0)
-            composite = min(1.0, composite + 0.04 * conn_sc + region_boost * 0.05)
+            total_weight = sum(COMPOSITE_WEIGHTS[k] for k, v in factors.items() if v is not None)
+            composite = sum(
+                COMPOSITE_WEIGHTS[k] * v
+                for k, v in factors.items()
+                if v is not None
+            ) / total_weight
+
+            composite = max(0.0, min(1.0, composite + lang_penalty + visited_penalty))
 
             tags = _explanation_tags(breakdown, f, visa_score, safety)
 

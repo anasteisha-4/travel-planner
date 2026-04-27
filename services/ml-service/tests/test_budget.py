@@ -22,6 +22,7 @@ def seed_costs(db: Session):
                 budget_usd NUMERIC,
                 mid_usd NUMERIC,
                 luxury_usd NUMERIC,
+                cost_index NUMERIC,
                 seasonal_multiplier JSONB
             )
         """)
@@ -32,9 +33,9 @@ def seed_costs(db: Session):
             INSERT INTO destination_costs (
                 destination_id, avg_meal_cost_usd, avg_transport_cost_usd,
                 avg_hotel_cost_usd, avg_daily_cost_usd,
-                hostel_usd, budget_usd, mid_usd, luxury_usd, seasonal_multiplier
+                hostel_usd, budget_usd, mid_usd, luxury_usd, cost_index, seasonal_multiplier
             ) VALUES (
-                :did, 20, 10, 80, 110, 25, 50, 80, 200,
+                :did, 20, 10, 80, 110, 25, 50, 80, 200, 0.4,
                 '{"6": 1.3, "12": 0.8}'
             )
         """),

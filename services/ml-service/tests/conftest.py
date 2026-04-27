@@ -92,3 +92,118 @@ def _setup_overrides():
 def client(_setup_overrides) -> Generator[TestClient, None, None]:
     with TestClient(app) as c:
         yield c
+
+
+_ML_FEATURE_TABLES = [
+    "destination_safety",
+    "destination_costs",
+    "destination_seasonality",
+    "destination_activities",
+    "visa_rules",
+    "destination_popularity",
+    "destination_connectivity",
+    "destination_attributes",
+    "destination_language_accessibility",
+    "destination_infrastructure",
+]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def create_ml_feature_tables(create_test_schema):
+    """Drop and recreate stub ML feature tables used by get_destination_features / budget router."""
+    with engine.connect() as conn:
+        for tbl in reversed(_ML_FEATURE_TABLES):
+            conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
+        conn.execute(text("""
+            CREATE TABLE destination_safety (
+                destination_id UUID PRIMARY KEY,
+                safety_score NUMERIC
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_costs (
+                destination_id UUID PRIMARY KEY,
+                cost_index NUMERIC,
+                avg_daily_cost_usd NUMERIC,
+                avg_meal_cost_usd NUMERIC,
+                avg_transport_cost_usd NUMERIC,
+                avg_hotel_cost_usd NUMERIC,
+                hostel_usd NUMERIC,
+                budget_usd NUMERIC,
+                mid_usd NUMERIC,
+                luxury_usd NUMERIC,
+                seasonal_multiplier JSONB
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_seasonality (
+                destination_id UUID,
+                month INTEGER,
+                season_score NUMERIC,
+                avg_temp_c NUMERIC,
+                avg_precipitation_mm NUMERIC,
+                avg_humidity_pct NUMERIC,
+                PRIMARY KEY (destination_id, month)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_activities (
+                destination_id UUID,
+                activity_type TEXT,
+                score NUMERIC,
+                PRIMARY KEY (destination_id, activity_type)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE visa_rules (
+                citizenship_code TEXT,
+                destination_id UUID,
+                visa_type TEXT,
+                visa_score NUMERIC,
+                max_stay_days INTEGER,
+                PRIMARY KEY (citizenship_code, destination_id)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_popularity (
+                destination_id UUID,
+                month INTEGER,
+                crowd_index NUMERIC,
+                avg_pageviews NUMERIC,
+                PRIMARY KEY (destination_id, month)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_connectivity (
+                destination_id UUID PRIMARY KEY,
+                connectivity_score NUMERIC,
+                mir_card_accepted BOOLEAN
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_attributes (
+                destination_id UUID PRIMARY KEY,
+                is_coastal BOOLEAN,
+                has_ski BOOLEAN,
+                has_thermal BOOLEAN,
+                landscape TEXT,
+                altitude_m NUMERIC
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_language_accessibility (
+                destination_id UUID PRIMARY KEY,
+                russian_speaking_score NUMERIC,
+                english_speaking_score NUMERIC,
+                script_difficulty NUMERIC
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE destination_infrastructure (
+                destination_id UUID PRIMARY KEY,
+                has_metro BOOLEAN,
+                healthcare_score NUMERIC,
+                avg_internet_mbps NUMERIC
+            )
+        """))
+        conn.commit()
