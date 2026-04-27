@@ -1,0 +1,128 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: travel-planner-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-travel_planner}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: travel-planner-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-auth
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  trip-service:
+    build:
+      context: ./services/trip-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-trips
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  data-service:
+    build:
+      context: ./services/data-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-data
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ml-service:
+    build:
+      context: ./services/ml-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-ml
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    container_name: travel-planner-analytics
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_YANDEX_MAPS_API_TOKEN
+        - VITE_GEOAPIFY_API_KEY
+        - VITE_YANDEX_GEOSUGGEST_API_KEY
+    container_name: travel-planner-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-service
+      - trip-service
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

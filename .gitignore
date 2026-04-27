@@ -8,6 +8,7 @@
 .env
 .env.local
 .env.docker
+.env.prod
 .env.development.local
 .env.test.local
 .env.production.local
@@ -43,4 +44,6 @@ htmlcov/
 pip-log.txt
 pip-delete-this-directory.txt
 
-travel_planner_dump_20260419.dump
+*.dump
+dump.rdb
+travel_planner_dump_*.dump
