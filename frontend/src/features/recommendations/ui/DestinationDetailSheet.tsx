@@ -4,9 +4,18 @@ import {
   DrawerOverlay,
   DrawerPortal,
 } from '@/shared/ui';
+import type { UserProfileV2 } from '@/entities/user';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useBudgetPrediction } from '../model/useBudgetPrediction';
 import type { ScoreBreakdown, ScoredDestination } from '../model/types';
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', RUB: '₽', GBP: '£', TRY: '₺',
+  THB: '฿', AED: 'AED', KZT: '₸', GEL: '₾', AMD: '֏',
+  JPY: '¥', CNY: '¥',
+};
 
 const COUNTRY_FLAGS: Record<string, string> = {
   AF: '🇦🇫', AL: '🇦🇱', DZ: '🇩🇿', AD: '🇦🇩', AO: '🇦🇴', AR: '🇦🇷', AM: '🇦🇲',
@@ -39,6 +48,29 @@ const BREAKDOWN_META: Record<
   crowd:          { label: 'Людность',    icon: '👥', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
   climate:        { label: 'Климат',      icon: '🌡', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
   connectivity:   { label: 'Доступность', icon: '✈️', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
+};
+
+const DURATION_OPTIONS = [
+  { value: 3, label: '3 дня' },
+  { value: 5, label: '5 дней' },
+  { value: 7, label: '7 ночей' },
+  { value: 10, label: '10 дней' },
+  { value: 14, label: '2 недели' },
+  { value: 21, label: '3 недели' },
+];
+
+const TIER_OPTIONS: { value: 'budget' | 'mid' | 'luxury'; label: string }[] = [
+  { value: 'budget', label: 'Эконом' },
+  { value: 'mid', label: 'Комфорт' },
+  { value: 'luxury', label: 'Люкс' },
+];
+
+const TYPICAL_DURATION_MAP: Record<string, number> = {
+  weekend: 3,
+  short: 5,
+  standard: 7,
+  long: 14,
+  extended: 21,
 };
 
 const ScoreRow = ({
@@ -77,37 +109,14 @@ const ScoreRow = ({
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#1C1917',
-              fontFamily: 'Manrope, sans-serif',
-            }}
-          >
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
             {label}
           </span>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: textColor,
-              fontFamily: 'Manrope, sans-serif',
-              minWidth: 32,
-              textAlign: 'right',
-            }}
-          >
+          <span style={{ fontSize: 12, fontWeight: 800, color: textColor, fontFamily: 'Manrope, sans-serif', minWidth: 32, textAlign: 'right' }}>
             {pct}%
           </span>
         </div>
-        <div
-          style={{
-            height: 4,
-            borderRadius: 2,
-            background: 'rgba(28,25,23,0.07)',
-            overflow: 'hidden',
-          }}
-        >
+        <div style={{ height: 4, borderRadius: 2, background: 'rgba(28,25,23,0.07)', overflow: 'hidden' }}>
           <div
             style={{
               height: '100%',
@@ -126,18 +135,159 @@ const ScoreRow = ({
   );
 };
 
+type TripParams = {
+  duration_days: number;
+  people_count: number;
+  accommodation_tier: 'budget' | 'mid' | 'luxury';
+};
+
+const TripParamsControls = ({
+  params,
+  onChange,
+}: {
+  params: TripParams;
+  onChange: (p: TripParams) => void;
+}) => {
+  const btnBase: React.CSSProperties = {
+    height: 30,
+    borderRadius: 8,
+    border: '1px solid #E7E5E4',
+    background: '#F5F5F4',
+    color: '#1C1917',
+    fontSize: 12,
+    fontWeight: 600,
+    fontFamily: 'Manrope, sans-serif',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 10px',
+    transition: 'all 0.15s',
+    whiteSpace: 'nowrap' as const,
+  };
+  const btnActive: React.CSSProperties = {
+    ...btnBase,
+    background: '#2563EB',
+    border: '1px solid #2563EB',
+    color: '#fff',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Duration */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
+          СРОК
+        </span>
+        <div style={{ display: 'flex', gap: 5, overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {DURATION_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              style={params.duration_days === opt.value ? btnActive : btnBase}
+              onClick={() => onChange({ ...params, duration_days: opt.value })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* People */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
+          ЛЮДЕЙ
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => onChange({ ...params, people_count: Math.max(1, params.people_count - 1) })}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              border: '1px solid #E7E5E4',
+              background: '#fff',
+              color: '#1C1917',
+              fontSize: 16,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            −
+          </button>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#1C1917', fontFamily: 'Manrope, sans-serif', minWidth: 20, textAlign: 'center' }}>
+            {params.people_count}
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange({ ...params, people_count: Math.min(8, params.people_count + 1) })}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              border: '1px solid #2563EB',
+              background: '#2563EB',
+              color: '#fff',
+              fontSize: 16,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* Tier */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
+          КЛАСС
+        </span>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {TIER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              style={params.accommodation_tier === opt.value ? btnActive : btnBase}
+              onClick={() => onChange({ ...params, accommodation_tier: opt.value })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BudgetBlock = ({
   destination,
   month,
+  tripParams,
 }: {
   destination: ScoredDestination;
   month: number;
+  tripParams: TripParams;
 }) => {
+  const qc = useQueryClient();
+  const profileCached = qc.getQueryData<UserProfileV2>(['profile']);
+  const currency = profileCached?.preferred_currency ?? 'RUB';
+  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
+
   const { data, isLoading } = useBudgetPrediction({
     destination_id: destination.destination_id,
-    duration_days: 7,
-    people_count: 2,
+    duration_days: tripParams.duration_days,
+    people_count: tripParams.people_count,
     travel_month: month,
+    accommodation_tier: tripParams.accommodation_tier,
+    currency,
   });
 
   if (isLoading) {
@@ -174,7 +324,7 @@ const BudgetBlock = ({
       >
         <div>
           <p style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', marginBottom: 2 }}>
-            В ДЕНЬ
+            В ДЕНЬ / ЧЕЛ
           </p>
           <p style={{ fontSize: 26, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif', letterSpacing: '-0.02em' }}>
             ~${Math.round(destination.avg_daily_cost_usd)}
@@ -200,63 +350,46 @@ const BudgetBlock = ({
   }
 
   const tiers = [
-    { label: 'ЭКОНОМ', value: data.total_min, color: '#16A34A', bg: 'rgba(22,163,74,0.07)', border: 'rgba(22,163,74,0.18)' },
-    { label: 'КОМФОРТ', value: data.total_mid, color: '#2563EB', bg: 'rgba(37,99,235,0.07)', border: 'rgba(37,99,235,0.18)' },
-    { label: 'ПРЕМИУМ', value: data.total_max, color: '#7C3AED', bg: 'rgba(124,58,237,0.06)', border: 'rgba(124,58,237,0.18)' },
+    { label: 'ОПТИМИСТ', sublabel: 'лучший сценарий', value: data.total_min, color: '#16A34A', bg: 'rgba(22,163,74,0.07)', border: 'rgba(22,163,74,0.18)' },
+    { label: 'РЕАЛИСТ', sublabel: 'типичная поездка', value: data.total_mid, color: '#2563EB', bg: 'rgba(37,99,235,0.07)', border: 'rgba(37,99,235,0.18)' },
+    { label: 'ПЕССИМИСТ', sublabel: 'с запасом', value: data.total_max, color: '#7C3AED', bg: 'rgba(124,58,237,0.06)', border: 'rgba(124,58,237,0.18)' },
   ];
 
+  const tierLabel = TIER_OPTIONS.find((t) => t.value === tripParams.accommodation_tier)?.label ?? '';
+
   return (
-    <div style={{ display: 'flex', gap: 8 }}>
-      {tiers.map((t) => (
-        <div
-          key={t.label}
-          style={{
-            flex: 1,
-            padding: '12px 8px 10px',
-            borderRadius: 16,
-            background: t.bg,
-            border: `1px solid ${t.border}`,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-          }}
-        >
-          <p
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {tiers.map((t) => (
+          <div
+            key={t.label}
             style={{
-              fontSize: 9,
-              fontWeight: 800,
-              color: t.color,
-              letterSpacing: '0.06em',
-              fontFamily: 'Manrope, sans-serif',
+              flex: 1,
+              padding: '12px 8px 10px',
+              borderRadius: 16,
+              background: t.bg,
+              border: `1px solid ${t.border}`,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
             }}
           >
-            {t.label}
-          </p>
-          <p
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: '#1C1917',
-              fontFamily: 'Manrope, sans-serif',
-              letterSpacing: '-0.02em',
-              lineHeight: 1,
-            }}
-          >
-            ${Math.round(t.value)}
-          </p>
-          <p
-            style={{
-              fontSize: 10,
-              fontWeight: 500,
-              color: '#A8A29E',
-              fontFamily: 'Manrope, sans-serif',
-            }}
-          >
-            7н · 2 чел
-          </p>
-        </div>
-      ))}
+            <p style={{ fontSize: 8, fontWeight: 800, color: t.color, letterSpacing: '0.06em', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase' as const }}>
+              {t.label}
+            </p>
+            <p style={{ fontSize: 18, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>
+              {currencySymbol}{Math.round(t.value).toLocaleString('ru-RU')}
+            </p>
+            <p style={{ fontSize: 9, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              {t.sublabel}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 11, color: '#A8A29E', fontFamily: 'Manrope, sans-serif', textAlign: 'center' }}>
+        {tripParams.duration_days} {tripParams.duration_days === 3 ? 'дня' : 'дней'} · {tripParams.people_count} чел · {tierLabel} · {currency}
+      </p>
     </div>
   );
 };
@@ -275,6 +408,22 @@ export const DestinationDetailSheet = ({
   onClose,
 }: DestinationDetailSheetProps) => {
   const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  const profileCached = qc.getQueryData<UserProfileV2>(['profile']);
+  const defaultDuration = TYPICAL_DURATION_MAP[profileCached?.typical_duration ?? 'standard'] ?? 7;
+  const defaultTier: 'budget' | 'mid' | 'luxury' = (() => {
+    const mid = ((profileCached?.budget_min_usd ?? 0) + (profileCached?.budget_max_usd ?? 2000)) / 2;
+    if (mid < 800) return 'budget';
+    if (mid < 5000) return 'mid';
+    return 'luxury';
+  })();
+
+  const [tripParams, setTripParams] = useState<TripParams>({
+    duration_days: defaultDuration,
+    people_count: 2,
+    accommodation_tier: defaultTier,
+  });
 
   const handleCreateTrip = () => {
     if (!destination) return;
@@ -320,14 +469,8 @@ export const DestinationDetailSheet = ({
           }}
         >
           {/* Hero header */}
-          <div
-            style={{
-              padding: '0 20px 18px',
-              flexShrink: 0,
-            }}
-          >
+          <div style={{ padding: '0 20px 18px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              {/* Flag block */}
               <div
                 style={{
                   width: 68,
@@ -345,8 +488,6 @@ export const DestinationDetailSheet = ({
               >
                 {flag}
               </div>
-
-              {/* Name + region */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p
                   style={{
@@ -364,19 +505,10 @@ export const DestinationDetailSheet = ({
                 >
                   {destination.name}
                 </p>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: '#A8A29E',
-                    fontFamily: 'Manrope, sans-serif',
-                  }}
-                >
+                <p style={{ fontSize: 13, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
                   {destination.region}
                 </p>
               </div>
-
-              {/* Match badge */}
               <div
                 style={{
                   flexShrink: 0,
@@ -388,93 +520,55 @@ export const DestinationDetailSheet = ({
                   minWidth: 56,
                 }}
               >
-                <p
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 800,
-                    color: matchColor,
-                    fontFamily: 'Manrope, sans-serif',
-                    lineHeight: 1,
-                    marginBottom: 1,
-                  }}
-                >
+                <p style={{ fontSize: 22, fontWeight: 800, color: matchColor, fontFamily: 'Manrope, sans-serif', lineHeight: 1, marginBottom: 1 }}>
                   {matchPct}
                 </p>
-                <p
-                  style={{
-                    fontSize: 8,
-                    fontWeight: 800,
-                    color: matchColor,
-                    opacity: 0.65,
-                    fontFamily: 'Manrope, sans-serif',
-                    letterSpacing: '0.06em',
-                  }}
-                >
+                <p style={{ fontSize: 8, fontWeight: 800, color: matchColor, opacity: 0.65, fontFamily: 'Manrope, sans-serif', letterSpacing: '0.06em' }}>
                   %СОВП
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Divider */}
           <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 20px', flexShrink: 0 }} />
 
           {/* Scrollable body */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '18px 20px 0',
-            }}
-          >
-            {/* Score breakdown section */}
-            <p
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#A8A29E',
-                letterSpacing: '0.07em',
-                textTransform: 'uppercase' as const,
-                fontFamily: 'Manrope, sans-serif',
-                marginBottom: 12,
-              }}
-            >
+          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 0' }}>
+            {/* Score breakdown */}
+            <p style={{ fontSize: 10, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.07em', textTransform: 'uppercase' as const, fontFamily: 'Manrope, sans-serif', marginBottom: 12 }}>
               Совпадение по критериям
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
               {breakdownEntries.map(([key, value]) => {
                 const meta = BREAKDOWN_META[key];
                 return (
-                  <ScoreRow
-                    key={key}
-                    label={meta.label}
-                    icon={meta.icon}
-                    value={value}
-                    meta={meta}
-                  />
+                  <ScoreRow key={key} label={meta.label} icon={meta.icon} value={value} meta={meta} />
                 );
               })}
             </div>
 
-            {/* Divider */}
             <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 -20px 18px' }} />
 
             {/* Budget section */}
-            <p
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#A8A29E',
-                letterSpacing: '0.07em',
-                textTransform: 'uppercase' as const,
-                fontFamily: 'Manrope, sans-serif',
-                marginBottom: 12,
-              }}
-            >
+            <p style={{ fontSize: 10, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.07em', textTransform: 'uppercase' as const, fontFamily: 'Manrope, sans-serif', marginBottom: 12 }}>
               Прогноз бюджета
             </p>
+
+            {/* Trip params controls */}
+            <div
+              style={{
+                marginBottom: 14,
+                padding: '12px 14px',
+                borderRadius: 14,
+                background: '#F5F5F4',
+                border: '1px solid #E7E5E4',
+              }}
+            >
+              <TripParamsControls params={tripParams} onChange={setTripParams} />
+            </div>
+
             <div style={{ marginBottom: 20 }}>
-              <BudgetBlock destination={destination} month={month} />
+              <BudgetBlock destination={destination} month={month} tripParams={tripParams} />
             </div>
           </div>
 
