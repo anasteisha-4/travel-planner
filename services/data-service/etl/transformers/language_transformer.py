@@ -68,9 +68,7 @@ _RU_BULGARIA: frozenset[str] = frozenset({"BG"})
 _RU_DIASPORA: frozenset[str] = frozenset({"IL"})
 
 # Partial Slavic intelligibility
-_RU_SLAVIC_PARTIAL: frozenset[str] = frozenset(
-    {"RS", "ME", "MK", "BA", "HR", "SI", "SK", "PL", "CZ"}
-)
+_RU_SLAVIC_PARTIAL: frozenset[str] = frozenset({"RS", "ME", "MK", "BA", "HR", "SI", "SK", "PL", "CZ"})
 
 # EU / developed Latin-script countries
 _EU_LATIN: frozenset[str] = frozenset(
@@ -429,9 +427,7 @@ def transform_language_accessibility(
             existing_ids = {str(r[0]) for r in existing}
             before = len(destinations)
             destinations = [d for d in destinations if str(d.id) not in existing_ids]
-            logger.info(
-                f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining."
-            )
+            logger.info(f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining.")
     finally:
         db.close()
 

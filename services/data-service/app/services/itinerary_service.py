@@ -1,6 +1,7 @@
 """Itinerary generation using pre-built trajectory templates."""
 
 from datetime import datetime
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -31,9 +32,7 @@ def generate_itinerary(
 
             def _activity_overlap(t: "Trajectory") -> float:
                 tags = t.activity_tags or []
-                return len(set(tags) & set(preferred_activities)) / max(
-                    len(preferred_activities), 1
-                )
+                return len(set(tags) & set(preferred_activities)) / max(len(preferred_activities), 1)
 
             # Prefer exact duration match among activity-matching templates; fall back to best overlap
             exact = [t for t in trajectories if t.duration_days == duration_days]
@@ -55,14 +54,8 @@ def generate_itinerary(
         }
 
     # Enrich POI data
-    all_poi_ids = [
-        poi_id
-        for day_data in template.sequence_of_poi
-        for poi_id in day_data.get("poi_ids", [])
-    ]
-    poi_map = {
-        str(p.id): p for p in db.query(POI).filter(POI.id.in_(all_poi_ids)).all()
-    }
+    all_poi_ids = [poi_id for day_data in template.sequence_of_poi for poi_id in day_data.get("poi_ids", [])]
+    poi_map = {str(p.id): p for p in db.query(POI).filter(POI.id.in_(all_poi_ids)).all()}
 
     days = []
     for day_idx, day_data in enumerate(template.sequence_of_poi[:duration_days]):

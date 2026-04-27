@@ -18,19 +18,13 @@ def transform_countries(raw: list[dict]) -> list[dict]:
             continue
 
         capital_names = country.get("capital", [])
-        capital_name = (
-            capital_names[0]
-            if capital_names
-            else country.get("name", {}).get("common", "")
-        )
+        capital_name = capital_names[0] if capital_names else country.get("name", {}).get("common", "")
 
         if not capital_name:
             continue
 
         currencies_raw = country.get("currencies", {})
-        currencies = {
-            code: info.get("name", code) for code, info in currencies_raw.items()
-        }
+        currencies = {code: info.get("name", code) for code, info in currencies_raw.items()}
 
         destinations.append(
             {
@@ -67,14 +61,10 @@ def transform_cities(df: pd.DataFrame) -> list[dict]:
                 "region": row.get("region"),
                 "subregion": row.get("subregion"),
                 "capital": False,
-                "population": int(row["population"])
-                if pd.notna(row.get("population"))
-                else None,
+                "population": int(row["population"]) if pd.notna(row.get("population")) else None,
                 "currencies": {},
                 "is_active": True,
-                "radius_m": int(row["radius_m"])
-                if pd.notna(row.get("radius_m"))
-                else 20000,
+                "radius_m": int(row["radius_m"]) if pd.notna(row.get("radius_m")) else 20000,
             }
         )
 

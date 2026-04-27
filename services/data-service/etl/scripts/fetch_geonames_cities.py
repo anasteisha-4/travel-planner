@@ -233,9 +233,7 @@ def fetch_top_cities_geonames(
     start_row = 0
     batch_size = 100  # GeoNames max per request
 
-    logger.info(
-        f"Fetching up to {max_rows} cities from GeoNames (min_pop={min_population})..."
-    )
+    logger.info(f"Fetching up to {max_rows} cities from GeoNames (min_pop={min_population})...")
 
     with httpx.Client(timeout=30) as client:
         while start_row < max_rows:
@@ -264,9 +262,7 @@ def fetch_top_cities_geonames(
             # Filter by min population
             batch = [c for c in batch if c.get("population", 0) >= min_population]
             cities.extend(batch)
-            logger.info(
-                f"  fetched {len(batch)} cities (total: {len(cities)}, start_row={start_row})"
-            )
+            logger.info(f"  fetched {len(batch)} cities (total: {len(cities)}, start_row={start_row})")
 
             if len(data.get("geonames", [])) < rows_left:
                 break
@@ -309,9 +305,7 @@ def geonames_to_csv_row(city: dict) -> dict | None:
         return None
 
     region = CONTINENT_REGION.get(continent_code, "Other")
-    subregion = COUNTRY_SUBREGION.get(
-        country_code, CONTINENT_SUBREGION_FALLBACK.get(continent_code, "Other")
-    )
+    subregion = COUNTRY_SUBREGION.get(country_code, CONTINENT_SUBREGION_FALLBACK.get(continent_code, "Other"))
     radius_m = get_radius_m(int(population))
 
     return {
@@ -327,26 +321,14 @@ def geonames_to_csv_row(city: dict) -> dict | None:
 
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(
-        description="Fetch top global cities from GeoNames"
-    )
-    parser.add_argument(
-        "--max-cities", type=int, default=500, help="Max cities to fetch from API"
-    )
-    parser.add_argument(
-        "--min-population", type=int, default=200_000, help="Min population filter"
-    )
-    parser.add_argument(
-        "--output", type=str, default=str(DATA_DIR / "global_cities_phase2e.csv")
-    )
+    parser = argparse.ArgumentParser(description="Fetch top global cities from GeoNames")
+    parser.add_argument("--max-cities", type=int, default=500, help="Max cities to fetch from API")
+    parser.add_argument("--min-population", type=int, default=200_000, help="Min population filter")
+    parser.add_argument("--output", type=str, default=str(DATA_DIR / "global_cities_phase2e.csv"))
     parser.add_argument("--username", type=str, default=GEONAMES_USERNAME)
-    parser.add_argument(
-        "--no-db-filter", action="store_true", help="Skip DB deduplication"
-    )
+    parser.add_argument("--no-db-filter", action="store_true", help="Skip DB deduplication")
     args = parser.parse_args()
 
     # Fetch from GeoNames
@@ -375,14 +357,8 @@ def main():
             existing = get_existing_destinations()
             logger.info(f"Found {len(existing)} existing destinations in DB")
             before = len(rows)
-            rows = [
-                r
-                for r in rows
-                if (r["name"].lower(), r["country_code"]) not in existing
-            ]
-            logger.info(
-                f"Filtered {before - len(rows)} duplicates → {len(rows)} new cities"
-            )
+            rows = [r for r in rows if (r["name"].lower(), r["country_code"]) not in existing]
+            logger.info(f"Filtered {before - len(rows)} duplicates → {len(rows)} new cities")
         except Exception as e:
             logger.warning(f"Could not filter against DB (proceeding without): {e}")
 
@@ -424,13 +400,7 @@ def main():
     print("\nBy region:")
     print(df.groupby("region").size().to_string())
     print("\nBy country (top 15):")
-    print(
-        df.groupby("country_code")
-        .size()
-        .sort_values(ascending=False)
-        .head(15)
-        .to_string()
-    )
+    print(df.groupby("country_code").size().sort_values(ascending=False).head(15).to_string())
 
 
 if __name__ == "__main__":

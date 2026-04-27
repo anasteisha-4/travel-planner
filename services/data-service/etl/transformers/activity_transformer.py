@@ -47,18 +47,12 @@ _GENERIC_NAMES: frozenset[str] = frozenset(
 )
 _GENERIC_WEIGHT = 0.25  # parks, gardens — low-value unnamed OSM objects
 _BEACH_COASTAL_WEIGHT = 2.0  # generic beach in coastal destination — real sea feature
-_BEACH_INLAND_WEIGHT = (
-    0.1  # generic beach in inland destination — river/lake, minimal credit
-)
-_BEACH_NAMED_INLAND_WEIGHT = (
-    0.3  # named (unique) beach in inland destination — penalised vs coast
-)
+_BEACH_INLAND_WEIGHT = 0.1  # generic beach in inland destination — river/lake, minimal credit
+_BEACH_NAMED_INLAND_WEIGHT = 0.3  # named (unique) beach in inland destination — penalised vs coast
 _HERITAGE_WEIGHT = 10.0  # UNESCO / national park = equivalent to 10 regular POI
 
 _DEFAULT_TANH_DIVISOR = 20.0  # standard saturation point for all categories
-_BEACH_INLAND_TANH_DIVISOR = (
-    60.0  # inland beach saturates 3× slower (vs 20 for coastal)
-)
+_BEACH_INLAND_TANH_DIVISOR = 60.0  # inland beach saturates 3× slower (vs 20 for coastal)
 
 
 def _load_coastal_destinations() -> set[str]:
@@ -105,9 +99,7 @@ def compute_activity_scores() -> list[dict]:
     from app.models import POI, POISource
 
     coastal_ids = _load_coastal_destinations()
-    logger.info(
-        f"Loaded {len(coastal_ids)} coastal destinations for beach weight adjustment."
-    )
+    logger.info(f"Loaded {len(coastal_ids)} coastal destinations for beach weight adjustment.")
 
     db = SessionLocal()
     try:
@@ -129,9 +121,7 @@ def compute_activity_scores() -> list[dict]:
         db.close()
 
     # Group by (destination_id, category)
-    groups: dict[tuple, dict] = defaultdict(
-        lambda: {"scores": [], "count": 0, "eff_count": 0.0}
-    )
+    groups: dict[tuple, dict] = defaultdict(lambda: {"scores": [], "count": 0, "eff_count": 0.0})
 
     for dest_id, category, name, pop_score, source in poi_rows:
         dest_id_str = str(dest_id)
@@ -165,10 +155,7 @@ def compute_activity_scores() -> list[dict]:
         #   inland destination  → 60 (3× slower: London/Berlin 100+ lake POI stay < 0.35)
         # Sintra/Bariloche: marked is_coastal=True in override CSV → gets divisor=20 correctly.
         is_coastal = dest_id in coastal_ids
-        if activity_type == "beach" and not is_coastal:
-            divisor = _BEACH_INLAND_TANH_DIVISOR  # 40 for all inland
-        else:
-            divisor = _DEFAULT_TANH_DIVISOR  # 20 for coastal or non-beach activities
+        divisor = _BEACH_INLAND_TANH_DIVISOR if activity_type == "beach" and not is_coastal else _DEFAULT_TANH_DIVISOR
 
         count_score = math.tanh(eff_count / divisor)
         score = round(0.7 * count_score + 0.3 * avg_pop, 4)

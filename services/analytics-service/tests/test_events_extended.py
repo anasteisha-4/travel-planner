@@ -39,8 +39,17 @@ def test_ingest_event_with_context(client: TestClient, db: Session):
     ctx = {"score": 0.92, "rank": 1, "model": "content-v1"}
     resp = client.post(
         "/api/v1/events",
-        json={"events": [{"session_id": str(uuid.uuid4()), "event_type": "recommendation_clicked",
-                          "entity_type": "destination", "entity_id": "99", "context": ctx}]},
+        json={
+            "events": [
+                {
+                    "session_id": str(uuid.uuid4()),
+                    "event_type": "recommendation_clicked",
+                    "entity_type": "destination",
+                    "entity_id": "99",
+                    "context": ctx,
+                }
+            ]
+        },
     )
     assert resp.status_code == 202
     row = db.query(UserEvent).first()
@@ -69,10 +78,12 @@ def test_multiple_sessions_stored_separately(client: TestClient, db: Session):
     session_b = str(uuid.uuid4())
     resp = client.post(
         "/api/v1/events",
-        json={"events": [
-            {"session_id": session_a, "event_type": "recommendation_shown", "entity_id": "1"},
-            {"session_id": session_b, "event_type": "recommendation_shown", "entity_id": "2"},
-        ]},
+        json={
+            "events": [
+                {"session_id": session_a, "event_type": "recommendation_shown", "entity_id": "1"},
+                {"session_id": session_b, "event_type": "recommendation_shown", "entity_id": "2"},
+            ]
+        },
     )
     assert resp.status_code == 202
     rows = db.query(UserEvent).all()

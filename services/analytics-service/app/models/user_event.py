@@ -20,9 +20,7 @@ class UserEvent(Base):
     entity_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     client_meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         Index("ix_user_events_user_created", "user_id", "created_at"),

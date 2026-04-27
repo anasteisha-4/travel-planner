@@ -37,10 +37,11 @@ def extract_weather_for_all_destinations(skip_existing: bool = True) -> list[dic
         skip_existing: If True (default), skip destinations that already have 12
                        seasonality records. Safe to re-run after adding new destinations.
     """
+    from sqlalchemy import func
+
     from app.database import SessionLocal
     from app.models import Destination
     from app.models.destination import DestinationSeasonality
-    from sqlalchemy import func
 
     db = SessionLocal()
     try:

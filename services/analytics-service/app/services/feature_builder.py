@@ -124,9 +124,7 @@ def _build_layer2(user_id: uuid.UUID, db: Session) -> dict:
     )
 
     session_count = session_stats.session_count or 0
-    avg_session_events = (
-        round(session_stats.total_events / session_count, 2) if session_count > 0 else None
-    )
+    avg_session_events = round(session_stats.total_events / session_count, 2) if session_count > 0 else None
 
     return {
         "viewed_destination_ids": viewed_ids or None,
@@ -137,11 +135,7 @@ def _build_layer2(user_id: uuid.UUID, db: Session) -> dict:
 
 
 def _build_layer3(user_id: uuid.UUID, db: Session) -> dict:
-    feedback_rows = (
-        db.query(PostTripFeedback)
-        .filter(PostTripFeedback.user_id == user_id)
-        .all()
-    )
+    feedback_rows = db.query(PostTripFeedback).filter(PostTripFeedback.user_id == user_id).all()
 
     if not feedback_rows:
         return {
@@ -157,9 +151,7 @@ def _build_layer3(user_id: uuid.UUID, db: Session) -> dict:
     revisit_flags = [r.would_revisit for r in feedback_rows if r.would_revisit is not None]
 
     avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
-    revisit_ratio = (
-        round(sum(1 for v in revisit_flags if v) / len(revisit_flags), 2) if revisit_flags else None
-    )
+    revisit_ratio = round(sum(1 for v in revisit_flags if v) / len(revisit_flags), 2) if revisit_flags else None
 
     return {
         "completed_trips_count": len(feedback_rows),
@@ -177,15 +169,19 @@ async def build_user_features(
 ) -> UserFeatures:
     profile = await _fetch_profile(user_id, auth_header)
 
-    layer1 = _build_layer1(profile) if profile else {
-        "activity_prefs_vector": None,
-        "budget_min_usd": None,
-        "budget_max_usd": None,
-        "preferred_duration_days": None,
-        "origin_lat": None,
-        "origin_lng": None,
-        "onboarding_completed": False,
-    }
+    layer1 = (
+        _build_layer1(profile)
+        if profile
+        else {
+            "activity_prefs_vector": None,
+            "budget_min_usd": None,
+            "budget_max_usd": None,
+            "preferred_duration_days": None,
+            "origin_lat": None,
+            "origin_lng": None,
+            "onboarding_completed": False,
+        }
+    )
 
     layer2 = _build_layer2(user_id, db)
     layer3 = _build_layer3(user_id, db)

@@ -10,9 +10,7 @@ from app.base_model import BaseModel
 class TripBudgetActual(BaseModel):
     __tablename__ = "trip_budget_actuals"
 
-    trip_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    trip_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     destination_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("destinations.id", ondelete="CASCADE"),
@@ -28,6 +26,4 @@ class TripBudgetActual(BaseModel):
     transport_usd: Mapped[float] = mapped_column(Float, nullable=False)
     activities_usd: Mapped[float] = mapped_column(Float, nullable=False)
     accommodation_tier: Mapped[str] = mapped_column(String(20), nullable=False)
-    data_source: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="synthetic"
-    )
+    data_source: Mapped[str] = mapped_column(String(50), nullable=False, default="synthetic")

@@ -15,9 +15,9 @@ IUCN classes fetched:
 import json
 import logging
 import time
+from collections.abc import Generator
 from datetime import date
 from pathlib import Path
-from typing import Generator
 
 import httpx
 
@@ -81,9 +81,7 @@ def fetch_protected_areas_for_destination(
             with httpx.Client(timeout=60) as client:
                 response = client.post(OVERPASS_URL, data={"data": query})
                 if response.status_code == 429:
-                    logger.warning(
-                        f"Overpass 429 (attempt {attempt}), sleeping {SLEEP_ON_RATE_LIMIT}s"
-                    )
+                    logger.warning(f"Overpass 429 (attempt {attempt}), sleeping {SLEEP_ON_RATE_LIMIT}s")
                     time.sleep(SLEEP_ON_RATE_LIMIT)
                     continue
                 if response.status_code == 504:
@@ -95,9 +93,7 @@ def fetch_protected_areas_for_destination(
                 break
         except Exception as e:
             if attempt == MAX_RETRIES:
-                logger.warning(
-                    f"Protected areas fetch failed for {destination_id}: {e}"
-                )
+                logger.warning(f"Protected areas fetch failed for {destination_id}: {e}")
                 return []
             time.sleep(10 * attempt)
     else:

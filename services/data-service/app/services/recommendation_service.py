@@ -37,15 +37,11 @@ def recommend_destinations(
 
     safety_map = {
         r.destination_id: r.safety_score
-        for r in db.query(DestinationSafety)
-        .filter(DestinationSafety.destination_id.in_(dest_ids))
-        .all()
+        for r in db.query(DestinationSafety).filter(DestinationSafety.destination_id.in_(dest_ids)).all()
     }
     costs_map = {
         r.destination_id: r
-        for r in db.query(DestinationCosts)
-        .filter(DestinationCosts.destination_id.in_(dest_ids))
-        .all()
+        for r in db.query(DestinationCosts).filter(DestinationCosts.destination_id.in_(dest_ids)).all()
     }
     season_map = {
         (r.destination_id, r.month): r.season_score
@@ -74,9 +70,7 @@ def recommend_destinations(
         )
         .all()
     }
-    connectivity_map = get_connectivity_scores(
-        db, dest_ids, excluded_hubs=excluded_hubs
-    )
+    connectivity_map = get_connectivity_scores(db, dest_ids, excluded_hubs=excluded_hubs)
 
     # Load activity scores for all destinations (for percentile normalization)
     # When preferred_activities given — use only those types; otherwise use all
@@ -84,11 +78,7 @@ def recommend_destinations(
         db.query(DestinationActivity)
         .filter(
             DestinationActivity.destination_id.in_(dest_ids),
-            *(
-                [DestinationActivity.activity_type.in_(preferred_activities)]
-                if preferred_activities
-                else []
-            ),
+            *([DestinationActivity.activity_type.in_(preferred_activities)] if preferred_activities else []),
         )
         .all()
     )
@@ -97,10 +87,7 @@ def recommend_destinations(
     raw_activity_map: dict = {}
     for r in activity_rows:
         raw_activity_map.setdefault(r.destination_id, []).append(r.score)
-    avg_raw_map = {
-        dest_id: sum(scores) / len(scores)
-        for dest_id, scores in raw_activity_map.items()
-    }
+    avg_raw_map = {dest_id: sum(scores) / len(scores) for dest_id, scores in raw_activity_map.items()}
 
     # Build global distribution for percentile ranking (removes tanh saturation)
     global_activity_values = list(avg_raw_map.values())
@@ -117,16 +104,11 @@ def recommend_destinations(
         crowd = crowd_map.get(dest.id, 0.5)
         connectivity = connectivity_map.get(dest.id, 0.0)
         costs_row = costs_map.get(dest.id)
-        cost_distance = abs(
-            (costs_row.cost_index if costs_row else 0.5) - user_budget_index
-        )
+        cost_distance = abs((costs_row.cost_index if costs_row else 0.5) - user_budget_index)
 
         # Percentile rank replaces raw tanh-saturated score → full [0,1] spread
         raw_activity = avg_raw_map.get(dest.id)
-        if raw_activity is not None:
-            activity = _percentile_rank(raw_activity, global_activity_values)
-        else:
-            activity = 0.5
+        activity = _percentile_rank(raw_activity, global_activity_values) if raw_activity is not None else 0.5
 
         composite = (
             0.22 * season
@@ -150,9 +132,7 @@ def recommend_destinations(
                 "activity_score": round(activity, 4),
                 "connectivity_score": round(connectivity, 4),
                 "crowd_index": round(crowd, 4),
-                "avg_daily_cost_usd": costs_row.avg_daily_cost_usd
-                if costs_row
-                else None,
+                "avg_daily_cost_usd": costs_row.avg_daily_cost_usd if costs_row else None,
             }
         )
 

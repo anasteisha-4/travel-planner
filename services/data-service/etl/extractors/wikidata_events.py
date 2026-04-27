@@ -233,9 +233,7 @@ LIMIT {limit}
             }
         )
 
-    logger.info(
-        f"  {country_code} ({country_qid}): {len(bindings)} raw → {len(results)} valid events"
-    )
+    logger.info(f"  {country_code} ({country_qid}): {len(bindings)} raw → {len(results)} valid events")
     return results
 
 
@@ -264,9 +262,7 @@ def fetch_all_events(
         if i + batch_size < len(country_codes):
             time.sleep(0.5)
 
-    logger.info(
-        f"Phase 2: fetching events for {len(qid_map)} countries with resolved QIDs..."
-    )
+    logger.info(f"Phase 2: fetching events for {len(qid_map)} countries with resolved QIDs...")
 
     all_events: list[dict] = []
     seen_global: set[str] = set()
@@ -281,7 +277,5 @@ def fetch_all_events(
         if idx < len(qid_map) - 1:
             time.sleep(SLEEP_BETWEEN_COUNTRIES)
 
-    logger.info(
-        f"Wikidata total: {len(all_events)} unique events from {len(qid_map)} countries."
-    )
+    logger.info(f"Wikidata total: {len(all_events)} unique events from {len(qid_map)} countries.")
     return all_events

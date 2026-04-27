@@ -14,7 +14,7 @@ import logging
 
 import pandas as pd
 
-from app.models.visa import VisaType, VISA_SCORES
+from app.models.visa import VISA_SCORES, VisaType
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +74,7 @@ def transform_visa(df: pd.DataFrame) -> list[dict]:
                         skipped_unknown += 1
                         continue
                 except ValueError:
-                    logger.debug(
-                        f"Unknown requirement '{requirement}' for {citizenship_code} → {dest_country_code}"
-                    )
+                    logger.debug(f"Unknown requirement '{requirement}' for {citizenship_code} → {dest_country_code}")
                     skipped_unknown += 1
                     continue
 
@@ -94,8 +92,6 @@ def transform_visa(df: pd.DataFrame) -> list[dict]:
             )
 
     if skipped_unknown:
-        logger.debug(
-            f"Skipped {skipped_unknown} rows with unrecognized requirement values."
-        )
+        logger.debug(f"Skipped {skipped_unknown} rows with unrecognized requirement values.")
     logger.info(f"Transformed {len(records)} visa rule records.")
     return records

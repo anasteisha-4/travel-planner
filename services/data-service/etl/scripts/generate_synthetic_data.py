@@ -18,10 +18,8 @@ import random
 import uuid
 from typing import Any
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
-
-from sqlalchemy import text
 
 from app.config import settings
 from app.models.costs import DestinationCosts
@@ -213,9 +211,7 @@ def generate_budgets(
     # Simulates real-world patterns: Tokyo systematically more expensive than
     # Bangkok even at the same cost_index tier. Seed=2024 for reproducibility.
     rng = random.Random(2024)
-    dest_bias: dict[uuid.UUID, float] = {
-        dest_id: rng.gauss(1.0, 0.12) for dest_id in destination_ids
-    }
+    dest_bias: dict[uuid.UUID, float] = {dest_id: rng.gauss(1.0, 0.12) for dest_id in destination_ids}
 
     # Realistic people-count weights: solo/couple most common
     people_weights = [20, 35, 20, 12, 8, 5]
@@ -247,17 +243,11 @@ def generate_budgets(
         effective_daily = avg_daily * bias
 
         # Accommodation is per room (split among people, but min 1 room)
-        rooms = (
-            max(1, (people + 1) // 2)
-            if acc_tier == "hostel"
-            else max(1, (people + 1) // 2)
-        )
+        rooms = max(1, (people + 1) // 2) if acc_tier == "hostel" else max(1, (people + 1) // 2)
         acc_nightly_per_room = _jitter(effective_daily * acc_frac, 0.15) * seasonal_mult
         accommodation_usd = round(acc_nightly_per_room * rooms * duration, 2)
 
-        meals_daily_per_person = (
-            _jitter(effective_daily * meals_frac, 0.15) * seasonal_mult
-        )
+        meals_daily_per_person = _jitter(effective_daily * meals_frac, 0.15) * seasonal_mult
         meals_usd = round(meals_daily_per_person * people * duration, 2)
 
         transport_daily = _jitter(effective_daily * transport_frac, 0.15)
@@ -365,9 +355,7 @@ def main(table: str | None = None) -> None:
 
     with Session(engine) as session:
         logger.info("Loading destination IDs...")
-        destination_ids: list[uuid.UUID] = [
-            row[0] for row in session.execute(select(Destination.id)).all()
-        ]
+        destination_ids: list[uuid.UUID] = [row[0] for row in session.execute(select(Destination.id)).all()]
         if not destination_ids:
             logger.error("No destinations found — run ETL first.")
             return
@@ -377,9 +365,7 @@ def main(table: str | None = None) -> None:
         costs_by_dest: dict[uuid.UUID, float] = {
             row[0]: float(row[1])
             for row in session.execute(
-                select(
-                    DestinationCosts.destination_id, DestinationCosts.avg_daily_cost_usd
-                )
+                select(DestinationCosts.destination_id, DestinationCosts.avg_daily_cost_usd)
             ).all()
         }
         logger.info("  %d cost records loaded.", len(costs_by_dest))
@@ -387,36 +373,26 @@ def main(table: str | None = None) -> None:
         logger.info("Loading safety scores per destination...")
         safety_by_dest: dict[uuid.UUID, float] = {
             row[0]: float(row[1])
-            for row in session.execute(
-                select(DestinationSafety.destination_id, DestinationSafety.safety_score)
-            ).all()
+            for row in session.execute(select(DestinationSafety.destination_id, DestinationSafety.safety_score)).all()
         }
         logger.info("  %d safety records loaded.", len(safety_by_dest))
 
         logger.info("Loading seasonality per destination...")
         seasonality_by_dest: dict[uuid.UUID, dict[int, float]] = {}
-        for row in session.execute(
-            text(
-                "SELECT destination_id, month, season_score FROM destination_seasonality"
-            )
-        ):
+        for row in session.execute(text("SELECT destination_id, month, season_score FROM destination_seasonality")):
             did = row[0]
             seasonality_by_dest.setdefault(did, {})[int(row[1])] = float(row[2])
         logger.info("  %d destinations with seasonality.", len(seasonality_by_dest))
 
         logger.info("Loading trajectory IDs...")
-        trajectory_ids: list[uuid.UUID] = [
-            row[0] for row in session.execute(select(Trajectory.id)).all()
-        ]
+        trajectory_ids: list[uuid.UUID] = [row[0] for row in session.execute(select(Trajectory.id)).all()]
         logger.info("  %d trajectories loaded.", len(trajectory_ids))
 
         if table is None or table == "preferences":
             generate_preferences(session, destination_ids, safety_by_dest)
 
         if table is None or table == "budgets":
-            generate_budgets(
-                session, destination_ids, costs_by_dest, seasonality_by_dest
-            )
+            generate_budgets(session, destination_ids, costs_by_dest, seasonality_by_dest)
 
         if table is None or table == "feedback":
             generate_feedback(session, trajectory_ids)

@@ -47,9 +47,7 @@ def upgrade() -> None:
         "destination_popularity",
         ["destination_id", "month"],
     )
-    op.create_check_constraint(
-        "ck_popularity_month", "destination_popularity", "month >= 1 AND month <= 12"
-    )
+    op.create_check_constraint("ck_popularity_month", "destination_popularity", "month >= 1 AND month <= 12")
     op.create_check_constraint(
         "ck_popularity_crowd_index",
         "destination_popularity",

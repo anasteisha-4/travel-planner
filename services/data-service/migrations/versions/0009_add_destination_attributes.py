@@ -37,9 +37,7 @@ def upgrade() -> None:
         sa.Column("altitude_m", sa.Integer(), nullable=True),
         sa.Column("summer_temp_class", sa.String(10), nullable=True),
         sa.Column("winter_temp_class", sa.String(10), nullable=True),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="osm_inferred"
-        ),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="osm_inferred"),
         sa.Column(
             "updated_at",
             sa.TIMESTAMP(timezone=True),
@@ -55,7 +53,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_destination_attributes_destination_id", table_name="destination_attributes"
-    )
+    op.drop_index("ix_destination_attributes_destination_id", table_name="destination_attributes")
     op.drop_table("destination_attributes")

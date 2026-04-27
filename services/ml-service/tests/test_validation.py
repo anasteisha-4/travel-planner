@@ -11,7 +11,8 @@ DEST_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 @pytest.fixture(autouse=True)
 def seed_tables(db: Session):
     for tbl in ["visa_rules", "destination_seasonality", "destination_safety", "destination_costs"]:
-        db.execute(text(f"""
+        db.execute(
+            text(f"""
             CREATE TABLE IF NOT EXISTS {tbl} (
                 destination_id UUID,
                 {"citizenship_code TEXT," if tbl == "visa_rules" else ""}
@@ -21,38 +22,51 @@ def seed_tables(db: Session):
                 {"avg_daily_cost_usd NUMERIC," if tbl == "destination_costs" else ""}
                 PRIMARY KEY (destination_id {"," + "citizenship_code" if tbl == "visa_rules" else ", month" if tbl == "destination_seasonality" else ""})
             )
-        """))
+        """)
+        )
     db.commit()
 
     # visa: RU visa_free
-    db.execute(text(
-        "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
-        "VALUES (:did, 'RU', 'visa_free', 1.0, 90) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text(
+            "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
+            "VALUES (:did, 'RU', 'visa_free', 1.0, 90) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
 
     # seasonality: month 7 good, month 8 terrible (monsoon)
-    db.execute(text(
-        "INSERT INTO destination_seasonality "
-        "(destination_id, month, season_score, avg_temp_c, avg_precipitation_mm, avg_humidity_pct) "
-        "VALUES (:did, 7, 0.85, 24.0, 30.0, 60.0) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
-    db.execute(text(
-        "INSERT INTO destination_seasonality "
-        "(destination_id, month, season_score, avg_temp_c, avg_precipitation_mm, avg_humidity_pct) "
-        "VALUES (:did, 8, 0.25, 38.0, 280.0, 90.0) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text(
+            "INSERT INTO destination_seasonality "
+            "(destination_id, month, season_score, avg_temp_c, avg_precipitation_mm, avg_humidity_pct) "
+            "VALUES (:did, 7, 0.85, 24.0, 30.0, 60.0) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
+    db.execute(
+        text(
+            "INSERT INTO destination_seasonality "
+            "(destination_id, month, season_score, avg_temp_c, avg_precipitation_mm, avg_humidity_pct) "
+            "VALUES (:did, 8, 0.25, 38.0, 280.0, 90.0) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
 
     # safety: safe
-    db.execute(text(
-        "INSERT INTO destination_safety (destination_id, safety_score) "
-        "VALUES (:did, 0.8) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text("INSERT INTO destination_safety (destination_id, safety_score) VALUES (:did, 0.8) ON CONFLICT DO NOTHING"),
+        {"did": str(DEST_ID)},
+    )
 
     # costs
-    db.execute(text(
-        "INSERT INTO destination_costs (destination_id, avg_daily_cost_usd) "
-        "VALUES (:did, 100.0) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text(
+            "INSERT INTO destination_costs (destination_id, avg_daily_cost_usd) "
+            "VALUES (:did, 100.0) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
 
     db.commit()
     yield
@@ -96,10 +110,13 @@ def test_validate_poor_season_warning(client: TestClient):
 
 def test_validate_visa_required_warning(client: TestClient, db: Session):
     # insert visa_required row for US citizen
-    db.execute(text(
-        "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
-        "VALUES (:did, 'US', 'visa_required', 0.2, NULL) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text(
+            "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
+            "VALUES (:did, 'US', 'visa_required', 0.2, NULL) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
     db.commit()
 
     resp = client.post("/api/v1/validate", json=_payload(citizenship_code="US"))
@@ -111,10 +128,13 @@ def test_validate_visa_required_warning(client: TestClient, db: Session):
 
 
 def test_validate_no_admission_high_severity(client: TestClient, db: Session):
-    db.execute(text(
-        "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
-        "VALUES (:did, 'KP', 'no_admission', 0.0, NULL) ON CONFLICT DO NOTHING"
-    ), {"did": str(DEST_ID)})
+    db.execute(
+        text(
+            "INSERT INTO visa_rules (destination_id, citizenship_code, visa_type, visa_score, max_stay_days) "
+            "VALUES (:did, 'KP', 'no_admission', 0.0, NULL) ON CONFLICT DO NOTHING"
+        ),
+        {"did": str(DEST_ID)},
+    )
     db.commit()
 
     resp = client.post("/api/v1/validate", json=_payload(citizenship_code="KP"))
@@ -134,11 +154,14 @@ def test_validate_unknown_visa_low_warning(client: TestClient):
             ]
         )
     )
-    resp = client.post("/api/v1/validate", json={
-        "destination_id": str(unknown_dest),
-        "citizenship_code": "RU",
-        "travel_month": 7,
-    })
+    resp = client.post(
+        "/api/v1/validate",
+        json={
+            "destination_id": str(unknown_dest),
+            "citizenship_code": "RU",
+            "travel_month": 7,
+        },
+    )
     assert resp.status_code == 200
     warnings = resp.json()["warnings"]
     visa_warn = next((w for w in warnings if w["type"] == "visa"), None)

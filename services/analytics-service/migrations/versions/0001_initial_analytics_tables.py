@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-04-22
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -36,9 +37,7 @@ def upgrade() -> None:
     op.create_index("ix_user_events_event_type", "user_events", ["event_type"])
     op.create_index("ix_user_events_user_created", "user_events", ["user_id", "created_at"])
     op.create_index("ix_user_events_type_created", "user_events", ["event_type", "created_at"])
-    op.create_index(
-        "ix_user_events_context_gin", "user_events", ["context"], postgresql_using="gin"
-    )
+    op.create_index("ix_user_events_context_gin", "user_events", ["context"], postgresql_using="gin")
 
     op.create_table(
         "user_features",

@@ -18,13 +18,13 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OUTPUT_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "raw" / "henley_passport_index.csv"
-)
+OUTPUT_PATH = Path(__file__).resolve().parents[1] / "data" / "raw" / "henley_passport_index.csv"
 
 # Public domain passport index dataset - CC0 license
 # Source: https://github.com/ilyankou/passport-index-dataset
-PASSPORT_INDEX_URL = "https://raw.githubusercontent.com/ilyankou/passport-index-dataset/master/passport-index-matrix-iso2.csv"
+PASSPORT_INDEX_URL = (
+    "https://raw.githubusercontent.com/ilyankou/passport-index-dataset/master/passport-index-matrix-iso2.csv"
+)
 
 
 def fetch_passport_matrix() -> list[list[str]]:
@@ -62,9 +62,7 @@ def convert_value(val: str) -> str:
 
 
 def main():
-    logger.info(
-        "Fetching passport index matrix from GitHub (ilyankou/passport-index-dataset)..."
-    )
+    logger.info("Fetching passport index matrix from GitHub (ilyankou/passport-index-dataset)...")
     raw_csv = fetch_passport_matrix()
 
     if not raw_csv:
@@ -82,9 +80,7 @@ def main():
         return
 
     header = rows[0]  # First row: "", "AF", "AL", "DZ", ...
-    logger.info(
-        f"Matrix dimensions: {len(rows) - 1} citizenships × {len(header) - 1} destinations"
-    )
+    logger.info(f"Matrix dimensions: {len(rows) - 1} citizenships × {len(header) - 1} destinations")
 
     # Convert values and write with our format
     with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:

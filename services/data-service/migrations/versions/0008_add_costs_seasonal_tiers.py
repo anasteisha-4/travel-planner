@@ -5,8 +5,8 @@ Revises: 0007
 Create Date: 2026-04-02
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0008"
@@ -16,19 +16,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "destination_costs", sa.Column("hostel_usd", sa.Float(), nullable=True)
-    )
-    op.add_column(
-        "destination_costs", sa.Column("budget_usd", sa.Float(), nullable=True)
-    )
+    op.add_column("destination_costs", sa.Column("hostel_usd", sa.Float(), nullable=True))
+    op.add_column("destination_costs", sa.Column("budget_usd", sa.Float(), nullable=True))
     op.add_column("destination_costs", sa.Column("mid_usd", sa.Float(), nullable=True))
-    op.add_column(
-        "destination_costs", sa.Column("luxury_usd", sa.Float(), nullable=True)
-    )
-    op.add_column(
-        "destination_costs", sa.Column("seasonal_multiplier", JSONB(), nullable=True)
-    )
+    op.add_column("destination_costs", sa.Column("luxury_usd", sa.Float(), nullable=True))
+    op.add_column("destination_costs", sa.Column("seasonal_multiplier", JSONB(), nullable=True))
 
 
 def downgrade() -> None:

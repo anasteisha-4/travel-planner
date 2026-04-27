@@ -20,7 +20,5 @@ def extract_henley() -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Henley CSV not found: {path}")
     df = pd.read_csv(path, index_col=0)
-    logger.info(
-        f"Loaded Henley index: {df.shape[0]} citizenships × {df.shape[1]} destinations"
-    )
+    logger.info(f"Loaded Henley index: {df.shape[0]} citizenships × {df.shape[1]} destinations")
     return df

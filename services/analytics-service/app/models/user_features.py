@@ -14,9 +14,7 @@ class UserFeatures(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     feature_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    computed_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    computed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Layer 1: from profile

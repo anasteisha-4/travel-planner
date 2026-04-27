@@ -40,20 +40,14 @@ def get_connectivity_scores(
     """
     from app.models.connectivity import DestinationConnectivity
 
-    rows = (
-        db.query(DestinationConnectivity)
-        .filter(DestinationConnectivity.destination_id.in_(destination_ids))
-        .all()
-    )
+    rows = db.query(DestinationConnectivity).filter(DestinationConnectivity.destination_id.in_(destination_ids)).all()
 
     excluded = {h.lower() for h in (excluded_hubs or [])}
 
     # Validate hub names early — fail loudly on typos
     unknown = excluded - set(HUB_FIELDS.keys())
     if unknown:
-        raise ValueError(
-            f"Unknown hub names: {unknown}. Valid hubs: {sorted(HUB_FIELDS.keys())}"
-        )
+        raise ValueError(f"Unknown hub names: {unknown}. Valid hubs: {sorted(HUB_FIELDS.keys())}")
 
     if not excluded:
         # Fast path — use pre-computed score

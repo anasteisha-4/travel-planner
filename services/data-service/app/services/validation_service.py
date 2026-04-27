@@ -89,11 +89,7 @@ def validate_trip_params(
             )
 
     # Safety check
-    safety = (
-        db.query(DestinationSafety)
-        .filter(DestinationSafety.destination_id == destination_id)
-        .first()
-    )
+    safety = db.query(DestinationSafety).filter(DestinationSafety.destination_id == destination_id).first()
     if safety:
         info["safety_score"] = safety.safety_score
         if safety.safety_score < 0.3:

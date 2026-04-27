@@ -110,11 +110,10 @@ TEST_PROFILES = [
 
 def ndcg_at_k(ranked_scores: list[float], ideal_scores: list[float], k: int = 10) -> float:
     """NDCG@k: relevance = synthetic label_score from DB."""
+
     def dcg(scores: list[float]) -> float:
-        return sum(
-            (2 ** s - 1) / math.log2(i + 2)
-            for i, s in enumerate(scores[:k])
-        )
+        return sum((2**s - 1) / math.log2(i + 2) for i, s in enumerate(scores[:k]))
+
     dcg_val = dcg(ranked_scores)
     idcg_val = dcg(sorted(ideal_scores, reverse=True))
     return dcg_val / idcg_val if idcg_val > 0 else 0.0
@@ -165,12 +164,11 @@ def main() -> None:
     all_ndcg: list[float] = []
 
     for profile in TEST_PROFILES:
-        print(f"\n{'─'*72}")
+        print(f"\n{'─' * 72}")
         print(f"  Profile: {profile['name']}")
         print(f"  Prefs: {profile['vacation_preferences_ranked'][:3]}...")
         print(
-            f"  Budget: ${profile['budget_min_usd']}–${profile['budget_max_usd']} USD "
-            f"({profile['typical_duration']})"
+            f"  Budget: ${profile['budget_min_usd']}–${profile['budget_max_usd']} USD ({profile['typical_duration']})"
         )
         print(
             f"  Filters: visa={profile['visa_tolerance']}, "
@@ -193,13 +191,11 @@ def main() -> None:
 
         print(f"\n  Top 10 for July (of {len(results)} candidates):")
         print(f"  {'#':<3} {'Score':<7} {'Name':<30} {'Country':<6} {'Tags'}")
-        print(f"  {'─'*3} {'─'*6} {'─'*29} {'─'*5} {'─'*30}")
+        print(f"  {'─' * 3} {'─' * 6} {'─' * 29} {'─' * 5} {'─' * 30}")
 
         for i, r in enumerate(results[:10], 1):
             tags = ", ".join(r.explanation_tags[:3])
-            print(
-                f"  {i:<3} {r.score:<7.4f} {r.name:<30} {r.country_code:<6} {tags}"
-            )
+            print(f"  {i:<3} {r.score:<7.4f} {r.name:<30} {r.country_code:<6} {tags}")
 
         # Score breakdown for top result
         if results:
@@ -212,10 +208,7 @@ def main() -> None:
 
         # NDCG@10 against synthetic labels
         if synthetic_labels:
-            ranked_relevance = [
-                synthetic_labels.get(str(r.destination_id), 0.0)
-                for r in results[:10]
-            ]
+            ranked_relevance = [synthetic_labels.get(str(r.destination_id), 0.0) for r in results[:10]]
             ideal_relevance = sorted(synthetic_labels.values(), reverse=True)[:10]
             ndcg = ndcg_at_k(ranked_relevance, ideal_relevance, k=10)
             all_ndcg.append(ndcg)
@@ -226,7 +219,7 @@ def main() -> None:
     # Summary
     if all_ndcg:
         print("\n" + "=" * 72)
-        print(f"  Mean NDCG@10 across {len(all_ndcg)} profiles: {sum(all_ndcg)/len(all_ndcg):.4f}")
+        print(f"  Mean NDCG@10 across {len(all_ndcg)} profiles: {sum(all_ndcg) / len(all_ndcg):.4f}")
         print(f"  Min: {min(all_ndcg):.4f}  Max: {max(all_ndcg):.4f}")
         if sum(all_ndcg) / len(all_ndcg) >= 0.35:
             print("  ✓ Content scorer baseline is sane (NDCG@10 ≥ 0.35)")
@@ -255,10 +248,7 @@ def _run_sanity_checks(scorer, destinations, dest_features, travel_month):
         travel_month=travel_month,
         filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": None},
     )
-    non_compliant = [
-        r for r in results_strict
-        if dest_features.get(r.destination_id, {}).get("visa_score", 0) < 0.80
-    ]
+    non_compliant = [r for r in results_strict if dest_features.get(r.destination_id, {}).get("visa_score", 0) < 0.80]
     status = "✓" if not non_compliant else f"✗ {len(non_compliant)} visa violations"
     print(f"  Visa-free hard filter:        {status}")
 
@@ -270,10 +260,7 @@ def _run_sanity_checks(scorer, destinations, dest_features, travel_month):
         travel_month=travel_month,
         filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": None},
     )
-    top5_coastal = sum(
-        1 for r in beach_results[:5]
-        if dest_features.get(r.destination_id, {}).get("is_coastal", False)
-    )
+    top5_coastal = sum(1 for r in beach_results[:5] if dest_features.get(r.destination_id, {}).get("is_coastal", False))
     status = "✓" if top5_coastal >= 2 else f"✗ only {top5_coastal}/5 coastal in top-5"
     print(f"  Beach profile coastal top-5:  {status} ({top5_coastal}/5 coastal)")
 

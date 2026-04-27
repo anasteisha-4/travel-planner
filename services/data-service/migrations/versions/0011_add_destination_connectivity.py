@@ -26,51 +26,27 @@ def upgrade() -> None:
             nullable=False,
             unique=True,
         ),
-        sa.Column(
-            "direct_from_moscow", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "direct_from_spb", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "direct_from_ekb", sa.Boolean(), nullable=False, server_default="false"
-        ),
+        sa.Column("direct_from_moscow", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("direct_from_spb", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("direct_from_ekb", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "direct_from_novosibirsk",
             sa.Boolean(),
             nullable=False,
             server_default="false",
         ),
-        sa.Column(
-            "transit_via_dubai", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "transit_via_istanbul", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "transit_via_yerevan", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "transit_via_tashkent", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "transit_via_tbilisi", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "train_from_moscow", sa.Boolean(), nullable=False, server_default="false"
-        ),
+        sa.Column("transit_via_dubai", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("transit_via_istanbul", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("transit_via_yerevan", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("transit_via_tashkent", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("transit_via_tbilisi", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("train_from_moscow", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("train_hours_from_moscow", sa.Float(), nullable=True),
         sa.Column("flight_hours_from_moscow", sa.Float(), nullable=True),
         sa.Column("min_transit_hours", sa.Float(), nullable=True),
-        sa.Column(
-            "connectivity_score", sa.Float(), nullable=False, server_default="0.0"
-        ),
-        sa.Column(
-            "mir_card_accepted", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="rule_based"
-        ),
+        sa.Column("connectivity_score", sa.Float(), nullable=False, server_default="0.0"),
+        sa.Column("mir_card_accepted", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="rule_based"),
         sa.Column("data_year", sa.Integer(), nullable=False, server_default="2025"),
         sa.Column(
             "updated_at",

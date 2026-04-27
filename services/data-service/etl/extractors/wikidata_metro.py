@@ -52,8 +52,6 @@ if __name__ == "__main__":
 
     _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(message)s")
     index = build_metro_index()
-    print(
-        f"\nMetro index: {sum(len(v) for v in index.values())} cities in {len(index)} countries"
-    )
+    print(f"\nMetro index: {sum(len(v) for v in index.values())} cities in {len(index)} countries")
     for cc in ["DE", "FR", "US", "RU", "JP", "ES", "IT", "GB", "CN", "BR", "IN"]:
         print(f"  {cc}: {sorted(index.get(cc, set()))}")

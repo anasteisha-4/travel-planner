@@ -417,9 +417,7 @@ def fetch_all_altitudes(destinations: list) -> dict[str, int]:
         if i + batch_size < len(coords):
             time.sleep(0.5)  # gentle rate limit
 
-    logger.info(
-        f"Fetched altitudes for {len(result)}/{len(destinations)} destinations."
-    )
+    logger.info(f"Fetched altitudes for {len(result)}/{len(destinations)} destinations.")
     return result
 
 
@@ -428,9 +426,7 @@ def fetch_all_altitudes(destinations: list) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_overpass_attributes(
-    dest_id: str, lat: float, lng: float, radius_m: int
-) -> dict:
+def _fetch_overpass_attributes(dest_id: str, lat: float, lng: float, radius_m: int) -> dict:
     """Return {'is_coastal': bool, 'has_ski': bool} for one destination."""
     query = _OVERPASS_QUERY.format(radius=radius_m, lat=lat, lng=lng)
 
@@ -440,16 +436,12 @@ def _fetch_overpass_attributes(
                 resp = client.post(OVERPASS_URL, data={"data": query})
                 if resp.status_code == 429:
                     wait = _SLEEP_RATE_LIMIT * attempt
-                    logger.warning(
-                        f"Overpass 429 (attempt {attempt}), sleeping {wait}s"
-                    )
+                    logger.warning(f"Overpass 429 (attempt {attempt}), sleeping {wait}s")
                     time.sleep(wait)
                     continue
                 if resp.status_code == 504:
                     wait = _SLEEP_504_BASE * attempt
-                    logger.warning(
-                        f"Overpass 504 (attempt {attempt}), sleeping {wait}s"
-                    )
+                    logger.warning(f"Overpass 504 (attempt {attempt}), sleeping {wait}s")
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()
@@ -469,10 +461,7 @@ def _fetch_overpass_attributes(
         tags = el.get("tags", {})
         if tags.get("natural") == "coastline":
             is_coastal = True
-        if (
-            tags.get("piste:type") == "downhill"
-            or tags.get("landuse") == "winter_sports"
-        ):
+        if tags.get("piste:type") == "downhill" or tags.get("landuse") == "winter_sports":
             has_ski = True
         if is_coastal and has_ski:
             break
@@ -508,9 +497,7 @@ def _load_override_csv() -> dict[tuple[str, str], dict]:
             for jsonb_field in ("dest_type", "vibe", "best_for", "landscape"):
                 val = row.get(jsonb_field, "").strip()
                 if val:
-                    override[jsonb_field] = [
-                        v.strip() for v in val.split("|") if v.strip()
-                    ]
+                    override[jsonb_field] = [v.strip() for v in val.split("|") if v.strip()]
 
             for str_field in (
                 "beach_type",
@@ -530,10 +517,10 @@ def _load_override_csv() -> dict[tuple[str, str], dict]:
             for int_field in ("altitude_m",):
                 val = row.get(int_field, "").strip()
                 if val:
-                    try:
+                    import contextlib
+
+                    with contextlib.suppress(ValueError):
                         override[int_field] = int(float(val))
-                    except ValueError:
-                        pass
 
             if override:
                 overrides[(name.lower(), cc)] = override
@@ -672,9 +659,7 @@ def _build_vibe(
         vibes.append("relaxation")
     if "pilgrimage" in dest_type:
         vibes.append("spiritual")
-    if "luxury" not in vibes and country_code in frozenset(
-        {"AE", "QA", "MC", "LI", "CH"}
-    ):
+    if "luxury" not in vibes and country_code in frozenset({"AE", "QA", "MC", "LI", "CH"}):
         vibes.append("luxury")
 
     # deduplicate preserving order
@@ -736,17 +721,11 @@ def _build_landscape(
         landscape.append("desert")
     elif country_code in _STEPPE_COUNTRIES:
         landscape.append("steppe")
-    elif (
-        activity_scores.get("nature", 0.0) > 0.4
-        and "sea" not in landscape
-        and "mountains" not in landscape
-    ):
+    elif activity_scores.get("nature", 0.0) > 0.4 and "sea" not in landscape and "mountains" not in landscape:
         landscape.append("forest")
 
     if not landscape:
-        landscape.append(
-            "urban"
-        ) if altitude_m is not None and altitude_m < 200 else landscape.append("forest")
+        landscape.append("urban") if altitude_m is not None and altitude_m < 200 else landscape.append("forest")
 
     return landscape
 
@@ -756,9 +735,7 @@ def _build_landscape(
 # ---------------------------------------------------------------------------
 
 
-def transform_attributes(
-    use_overpass: bool = True, skip_existing: bool = True
-) -> list[dict]:
+def transform_attributes(use_overpass: bool = True, skip_existing: bool = True) -> list[dict]:
     """Build destination_attributes records for all active destinations.
 
     Args:
@@ -812,9 +789,7 @@ def transform_attributes(
             key = str(dest_id)
             if key not in activity_map:
                 activity_map[key] = {}
-            activity_map[key][
-                str(act_type.value) if hasattr(act_type, "value") else str(act_type)
-            ] = float(score)
+            activity_map[key][str(act_type.value) if hasattr(act_type, "value") else str(act_type)] = float(score)
 
         # Seasonality: monthly avg_temp per destination
         seasonality_rows = db.query(
@@ -832,11 +807,7 @@ def transform_attributes(
 
         # Thermal POI: destinations that have hot_spring / public_bath / mineral_spring
         thermal_dest_ids: set[str] = set()
-        thermal_poi = (
-            db.query(POI.destination_id, POI.tags)
-            .filter(POI.category.in_(["wellness", "nature"]))
-            .all()
-        )
+        thermal_poi = db.query(POI.destination_id, POI.tags).filter(POI.category.in_(["wellness", "nature"])).all()
         for dest_id, tags in thermal_poi:
             if not tags:
                 continue
@@ -921,9 +892,7 @@ def transform_attributes(
         )
         vibe = _build_vibe(act_scores, dest_type, has_thermal, dest.country_code)
         best_for = _build_best_for(act_scores, dest_type, vibe)
-        landscape = _build_landscape(
-            is_coastal, altitude_m, dest.country_code, dest_type, act_scores
-        )
+        landscape = _build_landscape(is_coastal, altitude_m, dest.country_code, dest_type, act_scores)
 
         beach_type: str | None = None
         if "beach" in dest_type or "island" in dest_type:

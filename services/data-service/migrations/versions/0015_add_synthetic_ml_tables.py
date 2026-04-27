@@ -10,7 +10,6 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-
 revision = "0015"
 down_revision = "0014"
 branch_labels = None
@@ -26,19 +25,13 @@ def upgrade() -> None:
         sa.Column("budget_tier", sa.String(20), nullable=False),
         sa.Column("preferred_activities", JSONB(), nullable=False, server_default="[]"),
         sa.Column("trip_type", sa.String(50), nullable=False),
-        sa.Column(
-            "min_safety_threshold", sa.Float(), nullable=False, server_default="0.0"
-        ),
+        sa.Column("min_safety_threshold", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("profile_type", sa.String(50), nullable=False),
         sa.Column("label_destination_id", UUID(as_uuid=True), nullable=True),
         sa.Column("label_score", sa.Float(), nullable=True),
         sa.Column("source", sa.String(50), nullable=False, server_default="synthetic"),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
     )
     op.create_index(
         "ix_user_preference_profiles_citizenship_code",
@@ -70,19 +63,11 @@ def upgrade() -> None:
         sa.Column("transport_usd", sa.Float(), nullable=False),
         sa.Column("activities_usd", sa.Float(), nullable=False),
         sa.Column("accommodation_tier", sa.String(20), nullable=False),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="synthetic"
-        ),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="synthetic"),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
     )
-    op.create_index(
-        "ix_trip_budget_actuals_trip_id", "trip_budget_actuals", ["trip_id"]
-    )
+    op.create_index("ix_trip_budget_actuals_trip_id", "trip_budget_actuals", ["trip_id"])
     op.create_index(
         "ix_trip_budget_actuals_destination_id",
         "trip_budget_actuals",
@@ -104,16 +89,10 @@ def upgrade() -> None:
         sa.Column("people_count", sa.SmallInteger(), nullable=False),
         sa.Column("trip_duration_days", sa.SmallInteger(), nullable=False),
         sa.Column("source", sa.String(50), nullable=False, server_default="synthetic"),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
     )
-    op.create_index(
-        "ix_trajectory_feedback_trajectory_id", "trajectory_feedback", ["trajectory_id"]
-    )
+    op.create_index("ix_trajectory_feedback_trajectory_id", "trajectory_feedback", ["trajectory_id"])
 
 
 def downgrade() -> None:

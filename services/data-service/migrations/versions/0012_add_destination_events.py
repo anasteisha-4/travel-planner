@@ -36,13 +36,9 @@ def upgrade() -> None:
         sa.Column("is_annual", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("crowd_impact", sa.Float(), nullable=False, server_default="0.5"),
         sa.Column("price_impact", sa.Float(), nullable=False, server_default="0.5"),
-        sa.Column(
-            "traveler_relevance", sa.Float(), nullable=False, server_default="0.5"
-        ),
+        sa.Column("traveler_relevance", sa.Float(), nullable=False, server_default="0.5"),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="seed_csv"
-        ),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="seed_csv"),
     )
     op.create_index(
         "ix_destination_events_destination_id",
@@ -58,7 +54,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_destination_events_month_start", table_name="destination_events")
-    op.drop_index(
-        "ix_destination_events_destination_id", table_name="destination_events"
-    )
+    op.drop_index("ix_destination_events_destination_id", table_name="destination_events")
     op.drop_table("destination_events")

@@ -55,20 +55,18 @@ def test_get_model_versions_fields(client: TestClient, db: Session):
 
 
 def test_get_model_versions_sorted_by_created_desc(client: TestClient, db: Session):
-
     m1 = _make_model("ranker", "v1")
     m2 = _make_model("ranker", "v2")
     db.add(m1)
     db.flush()
     # Force m2 to have a later created_at by setting it explicitly
     from sqlalchemy import text
+
     db.add(m2)
     db.commit()
 
     # Update m2 created_at to be clearly newer
-    db.execute(
-        text("UPDATE model_registry SET created_at = NOW() + interval '1 second' WHERE version = 'v2'")
-    )
+    db.execute(text("UPDATE model_registry SET created_at = NOW() + interval '1 second' WHERE version = 'v2'"))
     db.commit()
 
     resp = client.get("/api/v1/models/versions")

@@ -37,9 +37,7 @@ def fetch_gpi_from_wikipedia() -> list[dict]:
         "format": "json",
         "disabletoc": 1,
     }
-    headers = {
-        "User-Agent": "TriplyDataBot/1.0 (travel-planner ETL; contact@triply.app)"
-    }
+    headers = {"User-Agent": "TriplyDataBot/1.0 (travel-planner ETL; contact@triply.app)"}
     with httpx.Client(timeout=30, follow_redirects=True, headers=headers) as client:
         resp = client.get(api_url, params=params)
         resp.raise_for_status()
@@ -80,9 +78,7 @@ def fetch_gpi_from_wikipedia() -> list[dict]:
                 score_text = re.sub(r"[^0-9.]", "", score_text)
                 score = float(score_text)
                 if 1.0 <= score <= 5.0 and country_text:
-                    records.append(
-                        {"rank": rank, "country": country_text, "score": score}
-                    )
+                    records.append({"rank": rank, "country": country_text, "score": score})
             except (ValueError, IndexError):
                 continue
 

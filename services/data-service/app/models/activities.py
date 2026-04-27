@@ -3,12 +3,12 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    TIMESTAMP,
     CheckConstraint,
     Enum,
     Float,
     ForeignKey,
     Integer,
-    TIMESTAMP,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,7 +18,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
-class ActivityType(str, enum.Enum):
+class ActivityType(enum.StrEnum):
     beach = "beach"
     culture = "culture"
     nature = "nature"
@@ -34,18 +34,14 @@ class ActivityType(str, enum.Enum):
 class DestinationActivity(Base):
     __tablename__ = "destination_activities"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     destination_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("destinations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    activity_type: Mapped[ActivityType] = mapped_column(
-        Enum(ActivityType, name="activitytype"), nullable=False
-    )
+    activity_type: Mapped[ActivityType] = mapped_column(Enum(ActivityType, name="activitytype"), nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     poi_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
@@ -53,8 +49,6 @@ class DestinationActivity(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "destination_id", "activity_type", name="uq_activity_dest_type"
-        ),
+        UniqueConstraint("destination_id", "activity_type", name="uq_activity_dest_type"),
         CheckConstraint("score >= 0 AND score <= 1", name="ck_activity_score"),
     )

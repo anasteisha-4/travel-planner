@@ -29,15 +29,9 @@ def upgrade() -> None:
         sa.Column("local_languages", JSONB(), nullable=False, server_default="[]"),
         sa.Column("russian_speaking_score", sa.Float(), nullable=False),
         sa.Column("english_speaking_score", sa.Float(), nullable=False),
-        sa.Column(
-            "has_cyrillic_signs", sa.Boolean(), nullable=False, server_default="false"
-        ),
-        sa.Column(
-            "script_difficulty", sa.String(20), nullable=False, server_default="easy"
-        ),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="rule_based"
-        ),
+        sa.Column("has_cyrillic_signs", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("script_difficulty", sa.String(20), nullable=False, server_default="easy"),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="rule_based"),
         sa.Column(
             "updated_at",
             sa.TIMESTAMP(timezone=True),

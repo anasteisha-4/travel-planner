@@ -18,7 +18,9 @@ class User(BaseModel):
 
 class UserPreferences(BaseModel):
     __tablename__ = "user_preferences"
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False
+    )
     travel_types: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, server_default="{}", nullable=False)
     favorite_destinations: Mapped[str | None] = mapped_column(String, nullable=True)
     currency: Mapped[str] = mapped_column(String, default="RUB", server_default="RUB", nullable=False)

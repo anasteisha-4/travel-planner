@@ -27,19 +27,13 @@ def upgrade() -> None:
             unique=True,
         ),
         sa.Column("has_metro", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column(
-            "taxi_app_available", sa.Boolean(), nullable=False, server_default="true"
-        ),
+        sa.Column("taxi_app_available", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("road_quality_score", sa.Float(), nullable=True),
         sa.Column("avg_internet_mbps", sa.Float(), nullable=True),
         sa.Column("healthcare_score", sa.Float(), nullable=True),
-        sa.Column(
-            "atm_density_score", sa.Float(), nullable=False, server_default="0.5"
-        ),
+        sa.Column("atm_density_score", sa.Float(), nullable=False, server_default="0.5"),
         sa.Column("cash_economy", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="rule_based"
-        ),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="rule_based"),
         sa.Column(
             "updated_at",
             sa.TIMESTAMP(timezone=True),
@@ -54,7 +48,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_destination_infrastructure_destination_id", "destination_infrastructure"
-    )
+    op.drop_index("ix_destination_infrastructure_destination_id", "destination_infrastructure")
     op.drop_table("destination_infrastructure")

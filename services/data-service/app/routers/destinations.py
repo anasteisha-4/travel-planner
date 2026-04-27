@@ -31,7 +31,7 @@ def search_destinations(
 
     seen: set[str] = set()
     output = []
-    for match_name, score, idx in results:
+    for _match_name, score, idx in results:
         if score < 40:
             continue
         key = candidates[idx][1]
@@ -90,21 +90,14 @@ def get_destinations_by_ids(
     db: Session = Depends(get_internal_db),
 ):
     from uuid import UUID as _UUID
+
     try:
         uuid_ids = [_UUID(i) for i in ids]
     except ValueError:
         return []
-    destinations = (
-        db.query(Destination)
-        .filter(Destination.id.in_(uuid_ids))
-        .all()
-    )
+    destinations = db.query(Destination).filter(Destination.id.in_(uuid_ids)).all()
     dest_map = {str(d.id): d for d in destinations}
-    return [
-        {"id": i, "name": dest_map[i].name, "country_code": dest_map[i].country_code}
-        for i in ids
-        if i in dest_map
-    ]
+    return [{"id": i, "name": dest_map[i].name, "country_code": dest_map[i].country_code} for i in ids if i in dest_map]
 
 
 @router.get("/{destination_id}")
@@ -117,16 +110,8 @@ def get_destination(destination_id: str, db: Session = Depends(get_internal_db))
 
         raise HTTPException(status_code=404, detail="Destination not found")
 
-    costs = (
-        db.query(DestinationCosts)
-        .filter(DestinationCosts.destination_id == dest.id)
-        .first()
-    )
-    safety = (
-        db.query(DestinationSafety)
-        .filter(DestinationSafety.destination_id == dest.id)
-        .first()
-    )
+    costs = db.query(DestinationCosts).filter(DestinationCosts.destination_id == dest.id).first()
+    safety = db.query(DestinationSafety).filter(DestinationSafety.destination_id == dest.id).first()
 
     return {
         "id": str(dest.id),

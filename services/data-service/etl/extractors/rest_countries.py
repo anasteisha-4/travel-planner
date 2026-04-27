@@ -11,9 +11,7 @@ REST_COUNTRIES_URL = (
     "?fields=name,cca2,latlng,capitalInfo,region,subregion,capital,population,currencies"
 )
 
-REST_COUNTRIES_LANGUAGES_URL = (
-    "https://restcountries.com/v3.1/all?fields=cca2,languages"
-)
+REST_COUNTRIES_LANGUAGES_URL = "https://restcountries.com/v3.1/all?fields=cca2,languages"
 
 
 def extract_countries() -> list[dict]:

@@ -18,9 +18,7 @@ import os
 logger = logging.getLogger(__name__)
 
 # CSV path relative to data-service root
-_OVERRIDES_CSV = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "raw", "connectivity_overrides.csv"
-)
+_OVERRIDES_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw", "connectivity_overrides.csv")
 
 # Country codes with direct flights from Moscow (post-2022 situation)
 _DIRECT_FROM_MOSCOW: frozenset[str] = frozenset(
@@ -264,7 +262,6 @@ _TRANSIT_DUBAI: frozenset[str] = frozenset(
         "MG",
         "RW",
         "UG",
-        "TZ",
         "AU",
         "NZ",
         "MA",
@@ -401,9 +398,7 @@ def load_overrides() -> dict[str, dict]:
     overrides: dict[str, dict] = {}
     path = os.path.normpath(_OVERRIDES_CSV)
     if not os.path.exists(path):
-        logger.warning(
-            f"connectivity_overrides.csv not found at {path}, skipping overrides."
-        )
+        logger.warning(f"connectivity_overrides.csv not found at {path}, skipping overrides.")
         return overrides
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -421,9 +416,7 @@ def load_overrides() -> dict[str, dict]:
                 "transit_via_tbilisi": _parse_bool(row["transit_via_tbilisi"]),
                 "train_from_moscow": _parse_bool(row["train_from_moscow"]),
                 "train_hours_from_moscow": _parse_float(row["train_hours_from_moscow"]),
-                "flight_hours_from_moscow": _parse_float(
-                    row["flight_hours_from_moscow"]
-                ),
+                "flight_hours_from_moscow": _parse_float(row["flight_hours_from_moscow"]),
                 "min_transit_hours": _parse_float(row["min_transit_hours"]),
                 "mir_card_accepted": _parse_bool(row["mir_card_accepted"]),
             }

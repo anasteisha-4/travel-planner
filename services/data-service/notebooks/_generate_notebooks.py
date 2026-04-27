@@ -580,10 +580,7 @@ save(
     "12_poi.ipynb",
     [
         md("# Points of Interest — OTM + OSM (1M+ records)"),
-        code(
-            SETUP
-            + "\nprint('Loading POI... (1M+ rows, may take ~10s)')\ndf = load('poi')"
-        ),
+        code(SETUP + "\nprint('Loading POI... (1M+ rows, may take ~10s)')\ndf = load('poi')"),
         code("""\
 dests = load('destinations')[['id','name','country_code','region']].rename(columns={'name':'dest_name','id':'dest_id'})
 df = df.merge(dests, left_on='destination_id', right_on='dest_id')

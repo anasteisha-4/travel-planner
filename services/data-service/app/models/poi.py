@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.base_model import BaseModel
 
 
-class POISource(str, enum.Enum):
+class POISource(enum.StrEnum):
     opentripmap = "opentripmap"
     overpass_osm = "overpass_osm"
     heritage = "heritage"  # UNESCO World Heritage Sites + OSM protected areas
@@ -35,9 +35,7 @@ class POI(BaseModel):
         nullable=False,
         index=True,
     )
-    source: Mapped[POISource] = mapped_column(
-        Enum(POISource, name="poisource"), nullable=False
-    )
+    source: Mapped[POISource] = mapped_column(Enum(POISource, name="poisource"), nullable=False)
     external_id: Mapped[str] = mapped_column(String(200), nullable=False)
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     popularity_score: Mapped[float | None] = mapped_column(Float, nullable=True)

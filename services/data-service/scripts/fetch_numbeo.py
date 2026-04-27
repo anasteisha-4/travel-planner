@@ -62,11 +62,7 @@ def fetch_item_prices(item_id: int) -> dict[str, float]:
 
     prices = {}
     # Numbeo table format: [rank/empty, "City, Country", price]
-    rows = (
-        table.find("tbody").find_all("tr")
-        if table.find("tbody")
-        else table.find_all("tr")[1:]
-    )
+    rows = table.find("tbody").find_all("tr") if table.find("tbody") else table.find_all("tr")[1:]
     for row in rows:
         cells = row.find_all("td")
         if len(cells) < 3:
@@ -80,9 +76,7 @@ def fetch_item_prices(item_id: int) -> dict[str, float]:
                 continue
             city = parts[0]
             country = parts[1]
-            price_str = (
-                cells[2].get_text(strip=True).replace(",", "").replace("$", "").strip()
-            )
+            price_str = cells[2].get_text(strip=True).replace(",", "").replace("$", "").strip()
             price = float(price_str)
             key = f"{city}|{country}"
             prices[key] = price
@@ -248,9 +242,7 @@ def main():
     time.sleep(2)
 
     # Merge all city data
-    all_cities = (
-        set(meal_prices.keys()) | set(transport_prices.keys()) | set(rent_prices.keys())
-    )
+    all_cities = set(meal_prices.keys()) | set(transport_prices.keys()) | set(rent_prices.keys())
     logger.info(f"Total cities with at least one price: {len(all_cities)}")
 
     written = 0

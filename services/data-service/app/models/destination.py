@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    TIMESTAMP,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -10,7 +11,6 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     String,
-    TIMESTAMP,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -40,17 +40,13 @@ class Destination(BaseModel):
         back_populates="destination", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        UniqueConstraint("name", "country_code", name="uq_destination_name_country"),
-    )
+    __table_args__ = (UniqueConstraint("name", "country_code", name="uq_destination_name_country"),)
 
 
 class DestinationSeasonality(Base):
     __tablename__ = "destination_seasonality"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     destination_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("destinations.id", ondelete="CASCADE"),
@@ -71,7 +67,5 @@ class DestinationSeasonality(Base):
     __table_args__ = (
         UniqueConstraint("destination_id", "month", name="uq_seasonality_dest_month"),
         CheckConstraint("month >= 1 AND month <= 12", name="ck_seasonality_month"),
-        CheckConstraint(
-            "season_score >= 0 AND season_score <= 1", name="ck_seasonality_score"
-        ),
+        CheckConstraint("season_score >= 0 AND season_score <= 1", name="ck_seasonality_score"),
     )

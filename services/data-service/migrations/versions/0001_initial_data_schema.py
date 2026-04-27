@@ -35,12 +35,8 @@ def upgrade() -> None:
         sa.Column("population", sa.BigInteger, nullable=True),
         sa.Column("currencies", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("name", "country_code", name="uq_destination_name_country"),
     )
     op.create_index("ix_destinations_country_code", "destinations", ["country_code"])
@@ -59,16 +55,10 @@ def upgrade() -> None:
         sa.Column("avg_temp_c", sa.Float, nullable=False),
         sa.Column("avg_precipitation_mm", sa.Float, nullable=False),
         sa.Column("season_score", sa.Float, nullable=False),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.UniqueConstraint(
-            "destination_id", "month", name="uq_seasonality_dest_month"
-        ),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.UniqueConstraint("destination_id", "month", name="uq_seasonality_dest_month"),
         sa.CheckConstraint("month >= 1 AND month <= 12", name="ck_seasonality_month"),
-        sa.CheckConstraint(
-            "season_score >= 0 AND season_score <= 1", name="ck_seasonality_score"
-        ),
+        sa.CheckConstraint("season_score >= 0 AND season_score <= 1", name="ck_seasonality_score"),
     )
     op.create_index(
         "ix_destination_seasonality_destination_id",
@@ -92,16 +82,10 @@ def upgrade() -> None:
         sa.Column("avg_hotel_cost_usd", sa.Float, nullable=False),
         sa.Column("avg_daily_cost_usd", sa.Float, nullable=False),
         sa.Column("cost_index", sa.Float, nullable=False),
-        sa.Column(
-            "data_source", sa.String(50), nullable=False, server_default="numbeo"
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
+        sa.Column("data_source", sa.String(50), nullable=False, server_default="numbeo"),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index(
-        "ix_destination_costs_destination_id", "destination_costs", ["destination_id"]
-    )
+    op.create_index("ix_destination_costs_destination_id", "destination_costs", ["destination_id"])
 
     # 4. destination_safety
     op.create_table(
@@ -118,16 +102,10 @@ def upgrade() -> None:
         sa.Column("gpi_score", sa.Float, nullable=True),
         sa.Column("gpi_rank", sa.SmallInteger, nullable=True),
         sa.Column("gpi_year", sa.SmallInteger, nullable=True),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.CheckConstraint(
-            "safety_score >= 0 AND safety_score <= 1", name="ck_safety_score"
-        ),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.CheckConstraint("safety_score >= 0 AND safety_score <= 1", name="ck_safety_score"),
     )
-    op.create_index(
-        "ix_destination_safety_destination_id", "destination_safety", ["destination_id"]
-    )
+    op.create_index("ix_destination_safety_destination_id", "destination_safety", ["destination_id"])
 
     # 5. visa_rules (enum first)
     visa_type_enum = postgresql.ENUM(
@@ -166,20 +144,12 @@ def upgrade() -> None:
         sa.Column("max_stay_days", sa.SmallInteger, nullable=True),
         sa.Column("notes", sa.Text, nullable=True),
         sa.Column("data_year", sa.SmallInteger, nullable=True),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.UniqueConstraint(
-            "citizenship_code", "destination_id", name="uq_visa_citizenship_dest"
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.UniqueConstraint("citizenship_code", "destination_id", name="uq_visa_citizenship_dest"),
         sa.CheckConstraint("visa_score >= 0 AND visa_score <= 1", name="ck_visa_score"),
     )
-    op.create_index(
-        "ix_visa_rules_citizenship_code", "visa_rules", ["citizenship_code"]
-    )
+    op.create_index("ix_visa_rules_citizenship_code", "visa_rules", ["citizenship_code"])
     op.create_index("ix_visa_rules_destination_id", "visa_rules", ["destination_id"])
 
     # 6. destination_activities (enum first)
@@ -228,12 +198,8 @@ def upgrade() -> None:
         ),
         sa.Column("score", sa.Float, nullable=False),
         sa.Column("poi_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.UniqueConstraint(
-            "destination_id", "activity_type", name="uq_activity_dest_type"
-        ),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.UniqueConstraint("destination_id", "activity_type", name="uq_activity_dest_type"),
         sa.CheckConstraint("score >= 0 AND score <= 1", name="ck_activity_score"),
     )
     op.create_index(
@@ -243,9 +209,7 @@ def upgrade() -> None:
     )
 
     # 7. poi (enum first)
-    poi_source_enum = postgresql.ENUM(
-        "opentripmap", "foursquare", name="poisource", create_type=True
-    )
+    poi_source_enum = postgresql.ENUM("opentripmap", "foursquare", name="poisource", create_type=True)
     poi_source_enum.create(op.get_bind())
 
     op.create_table(
@@ -263,9 +227,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "source",
-            postgresql.ENUM(
-                "opentripmap", "foursquare", name="poisource", create_type=False
-            ),
+            postgresql.ENUM("opentripmap", "foursquare", name="poisource", create_type=False),
             nullable=False,
         ),
         sa.Column("external_id", sa.String(200), nullable=False),
@@ -274,19 +236,13 @@ def upgrade() -> None:
         sa.Column("address", sa.Text, nullable=True),
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("tags", postgresql.JSONB, nullable=False, server_default="[]"),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("source", "external_id", name="uq_poi_source_external"),
     )
     op.create_index("ix_poi_destination_id", "poi", ["destination_id"])
     op.create_index("ix_poi_category", "poi", ["category"])
-    op.create_index(
-        "ix_poi_destination_category", "poi", ["destination_id", "category"]
-    )
+    op.create_index("ix_poi_destination_category", "poi", ["destination_id", "category"])
 
     # 8. trajectories
     op.create_table(
@@ -299,23 +255,13 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("duration_days", sa.SmallInteger, nullable=False),
-        sa.Column(
-            "sequence_of_poi", postgresql.JSONB, nullable=False, server_default="[]"
-        ),
+        sa.Column("sequence_of_poi", postgresql.JSONB, nullable=False, server_default="[]"),
         sa.Column("source", sa.String(50), nullable=False, server_default="generated"),
-        sa.Column(
-            "activity_tags", postgresql.JSONB, nullable=False, server_default="[]"
-        ),
-        sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()
-        ),
+        sa.Column("activity_tags", postgresql.JSONB, nullable=False, server_default="[]"),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index(
-        "ix_trajectories_destination_id", "trajectories", ["destination_id"]
-    )
+    op.create_index("ix_trajectories_destination_id", "trajectories", ["destination_id"])
 
 
 def downgrade() -> None:

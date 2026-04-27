@@ -148,17 +148,13 @@ def extract_poi_opentripmap(limit: int | None = None) -> list[dict]:
     if limit is not None:
         pending = pending[:limit]
 
-    logger.info(
-        f"OpenTripMap: {len(completed_ids)} completed, {len(pending)} pending, "
-        f"{requests_today} requests today"
-    )
+    logger.info(f"OpenTripMap: {len(completed_ids)} completed, {len(pending)} pending, {requests_today} requests today")
 
     all_poi: list[dict] = []
     for dest in pending:
         if requests_today >= DAILY_REQUEST_LIMIT:
             logger.info(
-                f"Daily limit reached ({requests_today}/{DAILY_REQUEST_LIMIT}). "
-                f"Resume tomorrow: make fetch-poi-otm"
+                f"Daily limit reached ({requests_today}/{DAILY_REQUEST_LIMIT}). Resume tomorrow: make fetch-poi-otm"
             )
             break
 
@@ -172,9 +168,6 @@ def extract_poi_opentripmap(limit: int | None = None) -> list[dict]:
         otm_state["requests_today"] = requests_today
         _save_state(state)
 
-        logger.info(
-            f"Fetched {len(poi)} POI for {dest.name} "
-            f"(running total: {requests_today}/{DAILY_REQUEST_LIMIT})"
-        )
+        logger.info(f"Fetched {len(poi)} POI for {dest.name} (running total: {requests_today}/{DAILY_REQUEST_LIMIT})")
 
     return all_poi

@@ -22,9 +22,9 @@ Why a separate extractor:
 import json
 import logging
 import time
+from collections.abc import Generator
 from datetime import date
 from pathlib import Path
-from typing import Generator
 
 import httpx
 
@@ -113,16 +113,12 @@ def fetch_beaches_for_destination(
                 response = client.post(OVERPASS_URL, data={"data": query})
                 if response.status_code == 429:
                     wait = SLEEP_ON_RATE_LIMIT * attempt
-                    logger.warning(
-                        f"Overpass 429 (attempt {attempt}), sleeping {wait}s"
-                    )
+                    logger.warning(f"Overpass 429 (attempt {attempt}), sleeping {wait}s")
                     time.sleep(wait)
                     continue
                 if response.status_code == 504:
                     wait = 30 * attempt
-                    logger.warning(
-                        f"Overpass 504 (attempt {attempt}), sleeping {wait}s"
-                    )
+                    logger.warning(f"Overpass 504 (attempt {attempt}), sleeping {wait}s")
                     time.sleep(wait)
                     continue
                 response.raise_for_status()
@@ -198,9 +194,7 @@ def iter_beaches_overpass(
     logger.info(f"Beach supplement: {len(completed_ids)} done, {len(pending)} pending")
 
     for dest in pending:
-        poi = fetch_beaches_for_destination(
-            str(dest.id), dest.lat, dest.lng, radius_m=dest.radius_m
-        )
+        poi = fetch_beaches_for_destination(str(dest.id), dest.lat, dest.lng, radius_m=dest.radius_m)
 
         if poi is None:
             logger.warning(f"Skipping {dest.name} (server error), will retry next run")

@@ -218,9 +218,7 @@ def upsert_language_accessibility(records: list[dict]) -> None:
     db = _get_db()
     try:
         for record in records:
-            stmt = insert(DestinationLanguageAccessibility).values(
-                id=uuid.uuid4(), **record
-            )
+            stmt = insert(DestinationLanguageAccessibility).values(id=uuid.uuid4(), **record)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["destination_id"],
                 set_={
@@ -272,9 +270,7 @@ def upsert_attributes(records: list[dict]) -> None:
             db.execute(stmt)
             db.commit()  # per-record commit: progress survives crashes/interrupts
             if i % 10 == 0 or i == len(records):
-                logger.info(
-                    f"Upserted {i}/{len(records)} destination_attributes records."
-                )
+                logger.info(f"Upserted {i}/{len(records)} destination_attributes records.")
     except Exception:
         db.rollback()
         raise
@@ -459,16 +455,8 @@ def _geo_sort(poi_list: list) -> list:
 def _pick_by_theme(poi_list: list, theme: str, n: int, used_ids: set) -> list:
     """Pick up to n POI matching theme categories, falling back to any unused POI."""
     preferred_cats = _THEME_CATEGORIES.get(theme, set())
-    preferred = [
-        p
-        for p in poi_list
-        if p.category in preferred_cats and str(p.id) not in used_ids
-    ]
-    others = [
-        p
-        for p in poi_list
-        if p.category not in preferred_cats and str(p.id) not in used_ids
-    ]
+    preferred = [p for p in poi_list if p.category in preferred_cats and str(p.id) not in used_ids]
+    others = [p for p in poi_list if p.category not in preferred_cats and str(p.id) not in used_ids]
     selected = (preferred + others)[:n]
     return selected
 
@@ -482,7 +470,7 @@ def generate_trajectories() -> int:
     - activity_tags reflect all categories present in the template
     """
     from app.database import SessionLocal
-    from app.models import Destination, POI, Trajectory
+    from app.models import POI, Destination, Trajectory
 
     db = SessionLocal()
     try:

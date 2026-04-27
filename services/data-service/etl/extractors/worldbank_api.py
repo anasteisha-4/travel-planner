@@ -95,9 +95,7 @@ def _is_real_country_code(iso2: str) -> bool:
     if iso2[0].isdigit():
         return False
     # WB aggregate codes: start with X/Y/Z + digit, or S/B/8 combinations
-    if iso2[0] in "XYZS" and iso2[1].isdigit():
-        return False
-    return True
+    return not (iso2[0] in "XYZS" and iso2[1].isdigit())
 
 
 def _latest_by_country(records: list[dict]) -> dict[str, tuple[float, str]]:
@@ -212,9 +210,7 @@ def extract_all(force: bool = False) -> None:
     for name, cfg in _INDICATORS.items():
         out = DATA_DIR / cfg["output"]
         if out.exists() and not force:
-            logger.info(
-                f"Skipping {name} — {cfg['output']} already exists (use --force to re-download)"
-            )
+            logger.info(f"Skipping {name} — {cfg['output']} already exists (use --force to re-download)")
             continue
         if name == "healthcare":
             extract_healthcare()

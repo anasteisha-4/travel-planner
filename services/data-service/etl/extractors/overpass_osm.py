@@ -8,9 +8,9 @@ city so the run is fully resumable after a crash.
 import json
 import logging
 import time
+from collections.abc import Generator
 from datetime import date
 from pathlib import Path
-from typing import Generator
 
 import httpx
 
@@ -148,10 +148,7 @@ def fetch_poi_for_destination(
                     time.sleep(SLEEP_ON_RATE_LIMIT)
                     continue
                 if response.status_code == 504:
-                    logger.warning(
-                        f"Overpass 504 for {destination_id} (attempt {attempt}/{MAX_RETRIES}), "
-                        f"sleeping 30s"
-                    )
+                    logger.warning(f"Overpass 504 for {destination_id} (attempt {attempt}/{MAX_RETRIES}), sleeping 30s")
                     time.sleep(30)
                     continue
                 response.raise_for_status()
@@ -159,9 +156,7 @@ def fetch_poi_for_destination(
                 break
         except Exception as e:
             if attempt == MAX_RETRIES:
-                logger.warning(
-                    f"Overpass fetch failed for {destination_id} after {MAX_RETRIES} attempts: {e}"
-                )
+                logger.warning(f"Overpass fetch failed for {destination_id} after {MAX_RETRIES} attempts: {e}")
                 return []
             time.sleep(10 * attempt)
     else:
@@ -208,8 +203,7 @@ def fetch_poi_for_destination(
                 "tags": [
                     f"{k}={v}"
                     for k, v in tags.items()
-                    if k
-                    in ("tourism", "amenity", "leisure", "natural", "historic", "shop")
+                    if k in ("tourism", "amenity", "leisure", "natural", "historic", "shop")
                 ],
                 "opening_hours": tags.get("opening_hours"),
             }
@@ -249,14 +243,10 @@ def iter_poi_overpass(
     if limit is not None:
         pending = pending[:limit]
 
-    logger.info(
-        f"OSM Overpass: {len(completed_ids)} already done, {len(pending)} pending"
-    )
+    logger.info(f"OSM Overpass: {len(completed_ids)} already done, {len(pending)} pending")
 
     for dest in pending:
-        poi = fetch_poi_for_destination(
-            str(dest.id), dest.lat, dest.lng, radius_m=dest.radius_m
-        )
+        poi = fetch_poi_for_destination(str(dest.id), dest.lat, dest.lng, radius_m=dest.radius_m)
         yield dest.name, poi
 
         osm_state["completed"].append(str(dest.id))

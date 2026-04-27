@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-04-21
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -42,6 +43,8 @@ def upgrade() -> None:
         sa.Column("latency_ms", sa.Integer, nullable=True),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
     )
+
+
 def downgrade() -> None:
     op.drop_table("recommendation_logs")
     op.drop_table("model_registry")

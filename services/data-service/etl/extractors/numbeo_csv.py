@@ -120,9 +120,7 @@ def extract_sea_cities_phase2f() -> pd.DataFrame:
         logger.warning(f"SEA Phase 2F cities CSV not found: {path}, skipping.")
         return pd.DataFrame()
     df = pd.read_csv(path, keep_default_na=False)
-    logger.info(
-        f"Loaded {len(df)} SEA/Indian Ocean cities from Phase 2F file from {path}"
-    )
+    logger.info(f"Loaded {len(df)} SEA/Indian Ocean cities from Phase 2F file from {path}")
     return df
 
 
@@ -198,14 +196,10 @@ def extract_middle_east_extra_phase2i() -> pd.DataFrame:
     """
     path = DATA_DIR / "middle_east_extra_phase2i.csv"
     if not path.exists():
-        logger.warning(
-            f"Middle East extra Phase 2I cities CSV not found: {path}, skipping."
-        )
+        logger.warning(f"Middle East extra Phase 2I cities CSV not found: {path}, skipping.")
         return pd.DataFrame()
     df = pd.read_csv(path, keep_default_na=False)
-    logger.info(
-        f"Loaded {len(df)} extra Middle East cities from Phase 2I file from {path}"
-    )
+    logger.info(f"Loaded {len(df)} extra Middle East cities from Phase 2I file from {path}")
     return df
 
 
@@ -229,9 +223,7 @@ def extract_south_asia_phase2j() -> pd.DataFrame:
         logger.warning(f"South Asia Phase 2J cities CSV not found: {path}, skipping.")
         return pd.DataFrame()
     df = pd.read_csv(path, keep_default_na=False)
-    logger.info(
-        f"Loaded {len(df)} South Asia tourist cities from Phase 2J file from {path}"
-    )
+    logger.info(f"Loaded {len(df)} South Asia tourist cities from Phase 2J file from {path}")
     return df
 
 
@@ -258,14 +250,10 @@ def extract_latin_america_phase2k() -> pd.DataFrame:
     """
     path = DATA_DIR / "latin_america_phase2k.csv"
     if not path.exists():
-        logger.warning(
-            f"Latin America Phase 2K cities CSV not found: {path}, skipping."
-        )
+        logger.warning(f"Latin America Phase 2K cities CSV not found: {path}, skipping.")
         return pd.DataFrame()
     df = pd.read_csv(path, keep_default_na=False)
-    logger.info(
-        f"Loaded {len(df)} Latin America tourist cities from Phase 2K file from {path}"
-    )
+    logger.info(f"Loaded {len(df)} Latin America tourist cities from Phase 2K file from {path}")
     return df
 
 
@@ -281,9 +269,7 @@ def extract_north_america_phase2l() -> pd.DataFrame:
     """
     path = DATA_DIR / "north_america_phase2l.csv"
     if not path.exists():
-        logger.warning(
-            f"North America Phase 2L cities CSV not found: {path}, skipping."
-        )
+        logger.warning(f"North America Phase 2L cities CSV not found: {path}, skipping.")
         return pd.DataFrame()
     df = pd.read_csv(path, keep_default_na=False)
     logger.info(f"Loaded {len(df)} North America Phase 2L cities from {path}")

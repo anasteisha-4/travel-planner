@@ -17,9 +17,7 @@ Usage:
 import argparse
 import logging
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 ALL_JOBS = [
@@ -58,32 +56,32 @@ SEED_JOBS = [
 
 
 def run_destinations():
-    from etl.extractors.rest_countries import extract_countries
     from etl.extractors.numbeo_csv import (
-        extract_cities_supplement,
-        extract_russia_cities_phase2,
-        extract_cis_cities_phase2b,
-        extract_turkey_resorts_phase2c,
-        extract_north_africa_phase2d,
-        extract_global_cities_phase2e,
-        extract_sea_cities_phase2f,
-        extract_china_cities_phase2g,
-        extract_japan_cities_phase2h,
-        extract_middle_east_cities_phase2i,
-        extract_japan_extra_phase2h,
-        extract_middle_east_extra_phase2i,
-        extract_south_asia_phase2j,
-        extract_latin_america_phase2k,
-        extract_north_america_phase2l,
-        extract_europe_phase2m,
-        extract_oceania_phase2n,
         extract_africa_phase2o,
+        extract_china_cities_phase2g,
+        extract_cis_cities_phase2b,
+        extract_cities_supplement,
+        extract_europe_phase2m,
+        extract_global_cities_phase2e,
+        extract_japan_cities_phase2h,
+        extract_japan_extra_phase2h,
+        extract_latin_america_phase2k,
+        extract_middle_east_cities_phase2i,
+        extract_middle_east_extra_phase2i,
+        extract_north_africa_phase2d,
+        extract_north_america_phase2l,
+        extract_oceania_phase2n,
+        extract_russia_cities_phase2,
+        extract_sea_cities_phase2f,
+        extract_south_asia_phase2j,
+        extract_turkey_resorts_phase2c,
     )
-    from etl.transformers.destination_transformer import (
-        transform_countries,
-        transform_cities,
-    )
+    from etl.extractors.rest_countries import extract_countries
     from etl.loaders.postgres_loader import upsert_destinations
+    from etl.transformers.destination_transformer import (
+        transform_cities,
+        transform_countries,
+    )
 
     logger.info("Loading destinations from REST Countries API...")
     raw_countries = extract_countries()
@@ -123,9 +121,7 @@ def run_destinations():
     if not raw_north_africa.empty:
         north_africa_cities = transform_cities(raw_north_africa)
         upsert_destinations(north_africa_cities)
-        logger.info(
-            f"Upserted {len(north_africa_cities)} North Africa Phase 2D cities."
-        )
+        logger.info(f"Upserted {len(north_africa_cities)} North Africa Phase 2D cities.")
 
     logger.info("Loading global top cities Phase 2E (GeoNames)...")
     raw_global = extract_global_cities_phase2e()
@@ -174,9 +170,7 @@ def run_destinations():
     if not raw_middle_east_extra.empty:
         middle_east_extra_cities = transform_cities(raw_middle_east_extra)
         upsert_destinations(middle_east_extra_cities)
-        logger.info(
-            f"Upserted {len(middle_east_extra_cities)} extra Middle East Phase 2I cities."
-        )
+        logger.info(f"Upserted {len(middle_east_extra_cities)} extra Middle East Phase 2I cities.")
 
     logger.info("Loading South Asia tourist cities Phase 2J...")
     raw_south_asia = extract_south_asia_phase2j()
@@ -190,18 +184,14 @@ def run_destinations():
     if not raw_latin_america.empty:
         latin_america_cities = transform_cities(raw_latin_america)
         upsert_destinations(latin_america_cities)
-        logger.info(
-            f"Upserted {len(latin_america_cities)} Latin America Phase 2K cities."
-        )
+        logger.info(f"Upserted {len(latin_america_cities)} Latin America Phase 2K cities.")
 
     logger.info("Loading North America cities Phase 2L...")
     raw_north_america = extract_north_america_phase2l()
     if not raw_north_america.empty:
         north_america_cities = transform_cities(raw_north_america)
         upsert_destinations(north_america_cities)
-        logger.info(
-            f"Upserted {len(north_america_cities)} North America Phase 2L cities."
-        )
+        logger.info(f"Upserted {len(north_america_cities)} North America Phase 2L cities.")
 
     logger.info("Loading Europe missing segments Phase 2M...")
     raw_europe = extract_europe_phase2m()
@@ -227,8 +217,8 @@ def run_destinations():
 
 def run_safety(skip_existing: bool = True):
     from etl.extractors.gpi_csv import extract_gpi
-    from etl.transformers.safety_transformer import transform_safety
     from etl.loaders.postgres_loader import upsert_safety
+    from etl.transformers.safety_transformer import transform_safety
 
     logger.info("Loading GPI safety scores...")
     raw = extract_gpi()
@@ -239,8 +229,8 @@ def run_safety(skip_existing: bool = True):
 
 def run_costs(skip_existing: bool = True):
     from etl.extractors.numbeo_csv import extract_costs
-    from etl.transformers.costs_transformer import transform_costs
     from etl.loaders.postgres_loader import upsert_costs
+    from etl.transformers.costs_transformer import transform_costs
 
     logger.info("Loading Numbeo cost data...")
     raw = extract_costs()
@@ -251,8 +241,8 @@ def run_costs(skip_existing: bool = True):
 
 def run_visa():
     from etl.extractors.passport_index_csv import extract_passport_index
-    from etl.transformers.visa_transformer import transform_visa
     from etl.loaders.postgres_loader import upsert_visa_rules
+    from etl.transformers.visa_transformer import transform_visa
 
     logger.info("Loading Passport Index (ilyankou/passport-index-dataset)...")
     raw = extract_passport_index()
@@ -263,8 +253,8 @@ def run_visa():
 
 def run_seasonality():
     from etl.extractors.open_meteo import extract_weather_for_all_destinations
-    from etl.transformers.seasonality_transformer import transform_seasonality
     from etl.loaders.postgres_loader import upsert_seasonality
+    from etl.transformers.seasonality_transformer import transform_seasonality
 
     logger.info("Fetching historical weather data...")
     raw = extract_weather_for_all_destinations()
@@ -275,8 +265,8 @@ def run_seasonality():
 
 def run_poi_opentripmap(limit: int | None = None):
     from etl.extractors.opentripmap import extract_poi_opentripmap
-    from etl.transformers.poi_transformer import transform_poi
     from etl.loaders.postgres_loader import upsert_poi
+    from etl.transformers.poi_transformer import transform_poi
 
     logger.info("Fetching POI from OpenTripMap...")
     raw = extract_poi_opentripmap(limit=limit)
@@ -287,8 +277,8 @@ def run_poi_opentripmap(limit: int | None = None):
 
 def run_poi_osm(limit: int | None = None):
     from etl.extractors.overpass_osm import iter_poi_overpass
-    from etl.transformers.poi_transformer import transform_poi
     from etl.loaders.postgres_loader import upsert_poi
+    from etl.transformers.poi_transformer import transform_poi
 
     logger.info("Fetching POI from OSM Overpass (streaming per-destination)...")
     total = 0
@@ -298,9 +288,7 @@ def run_poi_osm(limit: int | None = None):
         records = transform_poi(raw, source="overpass_osm")
         upsert_poi(records)
         total += len(records)
-        logger.info(
-            f"Upserted {len(records)} OSM POI for {dest_name} (total so far: {total})"
-        )
+        logger.info(f"Upserted {len(records)} OSM POI for {dest_name} (total so far: {total})")
     logger.info(f"OSM Overpass complete. Total upserted: {total}")
 
 
@@ -324,9 +312,7 @@ def run_poi_wellness(limit: int | None = None):
     from etl.extractors.overpass_wellness import iter_wellness_overpass
     from etl.loaders.postgres_loader import upsert_poi
 
-    logger.info(
-        "Fetching wellness POI v2 (public_bath, sauna, spa, mineral_spring, massage)..."
-    )
+    logger.info("Fetching wellness POI v2 (public_bath, sauna, spa, mineral_spring, massage)...")
     total = 0
     for dest_name, raw in iter_wellness_overpass(limit=limit):
         if not raw:
@@ -375,8 +361,8 @@ def run_poi_unesco():
 
 
 def run_activities():
-    from etl.transformers.activity_transformer import compute_activity_scores
     from etl.loaders.postgres_loader import upsert_activities
+    from etl.transformers.activity_transformer import compute_activity_scores
 
     logger.info("Computing activity scores...")
     records = compute_activity_scores()
@@ -396,8 +382,8 @@ def run_popularity():
     from etl.extractors.wikipedia_pageviews import (
         extract_pageviews_missing_destinations as extract_pageviews_all_destinations,
     )
-    from etl.transformers.popularity_transformer import transform_popularity
     from etl.loaders.postgres_loader import upsert_popularity
+    from etl.transformers.popularity_transformer import transform_popularity
 
     logger.info("Fetching Wikipedia pageviews for crowd index...")
     raw = extract_pageviews_all_destinations()
@@ -407,38 +393,32 @@ def run_popularity():
 
 
 def run_attributes(skip_existing: bool = True, use_overpass: bool = True):
-    from etl.transformers.attributes_transformer import transform_attributes
     from etl.loaders.postgres_loader import upsert_attributes
+    from etl.transformers.attributes_transformer import transform_attributes
 
     mode = "Overpass API" if use_overpass else "country-code heuristics (fast)"
     logger.info(f"Computing destination attributes ({mode})...")
-    records = transform_attributes(
-        use_overpass=use_overpass, skip_existing=skip_existing
-    )
+    records = transform_attributes(use_overpass=use_overpass, skip_existing=skip_existing)
     upsert_attributes(records)
     logger.info(f"Upserted {len(records)} destination_attributes records.")
 
 
 def run_language(skip_existing: bool = True):
     from etl.extractors.rest_countries import extract_country_languages
-    from etl.transformers.language_transformer import transform_language_accessibility
     from etl.loaders.postgres_loader import upsert_language_accessibility
+    from etl.transformers.language_transformer import transform_language_accessibility
 
-    logger.info(
-        "Building language accessibility scores (rule-based by country_code)..."
-    )
+    logger.info("Building language accessibility scores (rule-based by country_code)...")
     country_languages = extract_country_languages()
-    records = transform_language_accessibility(
-        country_languages, skip_existing=skip_existing
-    )
+    records = transform_language_accessibility(country_languages, skip_existing=skip_existing)
     upsert_language_accessibility(records)
     logger.info(f"Upserted {len(records)} language_accessibility records.")
 
 
 def run_connectivity(skip_existing: bool = True):
     from etl.extractors.openflights import load_overrides
-    from etl.transformers.connectivity_transformer import transform_connectivity
     from etl.loaders.postgres_loader import upsert_connectivity
+    from etl.transformers.connectivity_transformer import transform_connectivity
 
     logger.info("Building connectivity scores (rule-based + manual overrides)...")
     overrides = load_overrides()
@@ -452,8 +432,8 @@ def run_infrastructure(
     use_wikidata_metro: bool = False,
     skip_existing: bool = True,
 ):
-    from etl.transformers.infrastructure_transformer import transform_infrastructure
     from etl.loaders.postgres_loader import upsert_infrastructure
+    from etl.transformers.infrastructure_transformer import transform_infrastructure
 
     logger.info("Building infrastructure scores (CSV metro index + real data)...")
     records = transform_infrastructure(
@@ -466,11 +446,11 @@ def run_infrastructure(
 
 
 def run_events(use_wikidata: bool = False):
-    from etl.transformers.events_transformer import (
-        transform_events,
-        enrich_with_wikidata,
-    )
     from etl.loaders.postgres_loader import upsert_events
+    from etl.transformers.events_transformer import (
+        enrich_with_wikidata,
+        transform_events,
+    )
 
     logger.info("Loading destination events from seed CSV...")
     records = transform_events()
@@ -572,9 +552,7 @@ def main():
                     skip_existing=args.skip_existing,
                 )
             elif job == "attributes":
-                runner(
-                    skip_existing=args.skip_existing, use_overpass=not args.no_overpass
-                )
+                runner(skip_existing=args.skip_existing, use_overpass=not args.no_overpass)
             elif job in ("safety", "costs", "language", "connectivity"):
                 runner(skip_existing=args.skip_existing)
             else:

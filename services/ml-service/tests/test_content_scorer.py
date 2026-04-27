@@ -109,12 +109,16 @@ def test_language_score_any():
 
 
 def test_language_score_ru_match():
-    score = _language_score({"russian_speaking_score": 0.9, "english_speaking_score": 0.1, "script_difficulty": 0.0}, ["ru"])
+    score = _language_score(
+        {"russian_speaking_score": 0.9, "english_speaking_score": 0.1, "script_difficulty": 0.0}, ["ru"]
+    )
     assert score >= 0.8
 
 
 def test_language_score_en_match():
-    score = _language_score({"russian_speaking_score": 0.1, "english_speaking_score": 0.9, "script_difficulty": 0.0}, ["en"])
+    score = _language_score(
+        {"russian_speaking_score": 0.1, "english_speaking_score": 0.9, "script_difficulty": 0.0}, ["en"]
+    )
     assert score >= 0.8
 
 

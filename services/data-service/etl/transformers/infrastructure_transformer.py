@@ -224,10 +224,10 @@ def _load_csv_by_country(csv_path: Path, value_field: str) -> dict[str, float]:
             cc = (row.get("country_code") or "").upper().strip()
             raw = row.get(value_field) or ""
             if cc and raw:
-                try:
+                import contextlib
+
+                with contextlib.suppress(ValueError):
                     result[cc] = float(raw)
-                except ValueError:
-                    pass
     logger.info(f"Loaded {len(result)} rows from {csv_path.name} ({value_field})")
     return result
 
@@ -235,9 +235,7 @@ def _load_csv_by_country(csv_path: Path, value_field: str) -> dict[str, float]:
 def _load_cash_economy(csv_path: Path) -> set[str]:
     """Load cash_economy_findex.csv → set of cash-dominant country codes."""
     if not csv_path.exists():
-        logger.warning(
-            f"Cash economy CSV not found: {csv_path}, using hardcoded fallback."
-        )
+        logger.warning(f"Cash economy CSV not found: {csv_path}, using hardcoded fallback.")
         return set(_CASH_ECONOMY_COUNTRIES_FALLBACK)
     result: set[str] = set()
     with open(csv_path, newline="", encoding="utf-8") as f:
@@ -255,6 +253,7 @@ def _load_cash_economy(csv_path: Path) -> set[str]:
 def _check_metro_overpass(lat: float, lng: float, radius_m: int) -> bool:
     """Query Overpass for subway routes within destination radius."""
     import time
+
     import requests
 
     query = f"""
@@ -302,18 +301,10 @@ def transform_infrastructure(
     from app.models.infrastructure import DestinationInfrastructure
 
     # Load real data CSVs
-    internet_by_cc = _load_csv_by_country(
-        DATA_DIR / "internet_speeds_country.csv", "avg_download_mbps"
-    )
-    healthcare_by_cc = _load_csv_by_country(
-        DATA_DIR / "healthcare_life_expectancy.csv", "healthcare_score"
-    )
-    road_by_cc = _load_csv_by_country(
-        DATA_DIR / "road_quality_wef.csv", "road_quality_score"
-    )
-    atm_by_cc = _load_csv_by_country(
-        DATA_DIR / "atm_banking_access.csv", "atm_density_proxy"
-    )
+    internet_by_cc = _load_csv_by_country(DATA_DIR / "internet_speeds_country.csv", "avg_download_mbps")
+    healthcare_by_cc = _load_csv_by_country(DATA_DIR / "healthcare_life_expectancy.csv", "healthcare_score")
+    road_by_cc = _load_csv_by_country(DATA_DIR / "road_quality_wef.csv", "road_quality_score")
+    atm_by_cc = _load_csv_by_country(DATA_DIR / "atm_banking_access.csv", "atm_density_proxy")
     cash_countries = _load_cash_economy(DATA_DIR / "cash_economy_findex.csv")
 
     # Load metro index: CSV + optional Wikidata enrichment
@@ -350,9 +341,7 @@ def transform_infrastructure(
             existing_ids = {str(r[0]) for r in existing}
             before = len(destinations)
             destinations = [d for d in destinations if str(d.id) not in existing_ids]
-            logger.info(
-                f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining."
-            )
+            logger.info(f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining.")
     finally:
         db.close()
 
@@ -383,11 +372,7 @@ def transform_infrastructure(
 
         def _norm_metro_name(s: str) -> str:
             # Lowercase, strip accents, remove punctuation
-            s = (
-                unicodedata.normalize("NFKD", s)
-                .encode("ascii", "ignore")
-                .decode("ascii")
-            )
+            s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
             return s.lower().replace(",", "").replace(".", "").replace("-", " ").strip()
 
         dest_name_lower = (dest.name or "").lower().strip()
@@ -399,17 +384,13 @@ def transform_infrastructure(
         # (handles "washington" matching "washington, d.c.")
         if not has_metro:
             for metro_ascii in cc_metros_ascii:
-                if dest_name_ascii.startswith(
-                    metro_ascii + " "
-                ) or metro_ascii.startswith(dest_name_ascii + " "):
+                if dest_name_ascii.startswith(metro_ascii + " ") or metro_ascii.startswith(dest_name_ascii + " "):
                     has_metro = True
                     break
 
         # Fallback: Overpass for countries with metro but destination not in index
         if not has_metro and use_overpass and cc in _METRO_COUNTRIES:
-            has_metro = _check_metro_overpass(
-                float(dest.lat), float(dest.lng), radius_m
-            )
+            has_metro = _check_metro_overpass(float(dest.lat), float(dest.lng), radius_m)
             if has_metro:
                 stats["metro_overpass"] += 1
 
@@ -469,18 +450,12 @@ def transform_infrastructure(
 
         # data_source_details
         source_details = {
-            "internet_mbps": "speedtest_2024"
-            if cc in internet_by_cc
-            else "regional_fallback",
+            "internet_mbps": "speedtest_2024" if cc in internet_by_cc else "regional_fallback",
             "healthcare": f"wb_life_expectancy_{healthcare_years.get(cc, 'unknown')}"
             if cc in healthcare_by_cc
             else "regional_fallback",
-            "road_quality": f"wb_lpi_{road_years.get(cc, 'unknown')}"
-            if cc in road_by_cc
-            else "regional_fallback",
-            "atm_density": f"wb_findex_{atm_years.get(cc, 'unknown')}"
-            if cc in atm_by_cc
-            else "regional_fallback",
+            "road_quality": f"wb_lpi_{road_years.get(cc, 'unknown')}" if cc in road_by_cc else "regional_fallback",
+            "atm_density": f"wb_findex_{atm_years.get(cc, 'unknown')}" if cc in atm_by_cc else "regional_fallback",
         }
 
         # data_source summary

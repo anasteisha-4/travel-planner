@@ -104,7 +104,9 @@ def validate_trip(
             if h is not None and float(h) > 85:
                 reasons.append(f"very high humidity ({float(h):.0f}%)")
             if not reasons:
-                reasons = [f"{float(t):.0f}°C, {float(p):.0f}mm precipitation"] if t and p else ["unfavourable conditions"]
+                reasons = (
+                    [f"{float(t):.0f}°C, {float(p):.0f}mm precipitation"] if t and p else ["unfavourable conditions"]
+                )
             warnings.append(
                 ValidationWarning(
                     type="season",

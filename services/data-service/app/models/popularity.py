@@ -2,13 +2,13 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    TIMESTAMP,
     CheckConstraint,
     Float,
     ForeignKey,
     Integer,
     SmallInteger,
     String,
-    TIMESTAMP,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -21,9 +21,7 @@ from app.database import Base
 class DestinationPopularity(Base):
     __tablename__ = "destination_popularity"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     destination_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("destinations.id", ondelete="CASCADE"),
@@ -42,7 +40,5 @@ class DestinationPopularity(Base):
     __table_args__ = (
         UniqueConstraint("destination_id", "month", name="uq_popularity_dest_month"),
         CheckConstraint("month >= 1 AND month <= 12", name="ck_popularity_month"),
-        CheckConstraint(
-            "crowd_index >= 0 AND crowd_index <= 1", name="ck_popularity_crowd_index"
-        ),
+        CheckConstraint("crowd_index >= 0 AND crowd_index <= 1", name="ck_popularity_crowd_index"),
     )

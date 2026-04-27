@@ -40,12 +40,8 @@ def transform_popularity(raw: list[dict]) -> list[dict]:
         annual_mean = sum(monthly_views.values()) / len(monthly_views)
         if annual_mean == 0:
             continue
-        seasonal = {
-            month: views / annual_mean for month, views in monthly_views.items()
-        }
-        dest_seasonal.append(
-            (item["destination_id"], item.get("article"), monthly_views, seasonal)
-        )
+        seasonal = {month: views / annual_mean for month, views in monthly_views.items()}
+        dest_seasonal.append((item["destination_id"], item.get("article"), monthly_views, seasonal))
         all_seasonal_indices.extend(seasonal.values())
 
     # p5/p95 of seasonal indices for robust global normalization

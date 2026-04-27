@@ -3,9 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db, verify_internal_secret
 
-router = APIRouter(
-    prefix="", tags=["internal"], dependencies=[Depends(verify_internal_secret)]
-)
+router = APIRouter(prefix="", tags=["internal"], dependencies=[Depends(verify_internal_secret)])
 
 
 @router.get("/destinations")
@@ -22,16 +20,8 @@ def list_destinations_internal(
 
     result = []
     for d in destinations:
-        costs = (
-            db.query(DestinationCosts)
-            .filter(DestinationCosts.destination_id == d.id)
-            .first()
-        )
-        safety = (
-            db.query(DestinationSafety)
-            .filter(DestinationSafety.destination_id == d.id)
-            .first()
-        )
+        costs = db.query(DestinationCosts).filter(DestinationCosts.destination_id == d.id).first()
+        safety = db.query(DestinationSafety).filter(DestinationSafety.destination_id == d.id).first()
         result.append(
             {
                 "id": str(d.id),
@@ -111,15 +101,15 @@ def generate_itinerary(
     start_date: str | None = None,
     db: Session = Depends(get_internal_db),
 ):
+    import contextlib
     from datetime import datetime as dt_class
+
     from app.services.itinerary_service import generate_itinerary
 
     parsed_start_date = None
     if start_date:
-        try:
+        with contextlib.suppress(ValueError):
             parsed_start_date = dt_class.fromisoformat(start_date)
-        except ValueError:
-            pass  # If invalid, ignore and use default
 
     return generate_itinerary(
         db=db,

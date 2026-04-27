@@ -2,10 +2,10 @@ from app.models.activities import ActivityType, DestinationActivity
 from app.models.attributes import DestinationAttributes
 from app.models.connectivity import DestinationConnectivity
 from app.models.costs import DestinationCosts
+from app.models.destination import Destination, DestinationSeasonality
 from app.models.events import DestinationEvent, EventCategory
 from app.models.infrastructure import DestinationInfrastructure
 from app.models.language import DestinationLanguageAccessibility
-from app.models.destination import Destination, DestinationSeasonality
 from app.models.poi import POI, POISource
 from app.models.popularity import DestinationPopularity
 from app.models.safety import DestinationSafety

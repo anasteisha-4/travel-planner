@@ -172,9 +172,7 @@ def _get_destination_lookup(skip_existing: bool = False) -> dict[str, dict]:
 def _match_destination(city_name: str, country_code: str, lookup: dict) -> str | None:
     """Fuzzy match with parenthetical variant extraction. Threshold 80 to avoid false city matches."""
     candidates = [
-        (dest_id, info)
-        for dest_id, info in lookup.items()
-        if info["country_code"].upper() == country_code.upper()
+        (dest_id, info) for dest_id, info in lookup.items() if info["country_code"].upper() == country_code.upper()
     ]
     if not candidates:
         return None
@@ -204,16 +202,12 @@ def transform_costs(df: pd.DataFrame, skip_existing: bool = False) -> list[dict]
             lookup,
         )
         if not dest_id:
-            logger.debug(
-                f"No destination match for {row.get('city_name')}, {row.get('country_code')}"
-            )
+            logger.debug(f"No destination match for {row.get('city_name')}, {row.get('country_code')}")
             continue
 
         # Skip duplicate matches (e.g. Nizhny Novgorod matched twice via name variants)
         if dest_id in matched_ids:
-            logger.debug(
-                f"Duplicate Numbeo match skipped: {row.get('city_name')} → {dest_id}"
-            )
+            logger.debug(f"Duplicate Numbeo match skipped: {row.get('city_name')} → {dest_id}")
             continue
         matched_ids.add(dest_id)
 
@@ -334,9 +328,7 @@ def _normalize_and_fill_defaults(rows: list[dict], lookup: dict) -> list[dict]:
         rows.append(
             {
                 "destination_id": dest_id,
-                "avg_meal_cost_usd": round(
-                    inferred_daily / 4.5, 2
-                ),  # inverse of meal*2.5+transport+hotel
+                "avg_meal_cost_usd": round(inferred_daily / 4.5, 2),  # inverse of meal*2.5+transport+hotel
                 "avg_transport_cost_usd": round(inferred_daily * 0.05, 2),
                 "avg_hotel_cost_usd": round(inferred_daily * 0.6, 2),
                 "avg_daily_cost_usd": round(inferred_daily, 2),

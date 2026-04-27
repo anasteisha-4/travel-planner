@@ -106,9 +106,7 @@ def _bulk_update(oh_map: dict[str, str]) -> int:
         # Single SELECT to find which external_ids exist in our DB with NULL opening_hours
         ext_ids = list(oh_map.keys())
         matches = (
-            db.query(POI.id, POI.external_id)
-            .filter(POI.external_id.in_(ext_ids), POI.opening_hours.is_(None))
-            .all()
+            db.query(POI.id, POI.external_id).filter(POI.external_id.in_(ext_ids), POI.opening_hours.is_(None)).all()
         )
         if not matches:
             return 0
@@ -122,9 +120,7 @@ def _bulk_update(oh_map: dict[str, str]) -> int:
         from sqlalchemy import text
 
         db.execute(
-            text(
-                "UPDATE poi SET opening_hours = :oh WHERE id = :id AND opening_hours IS NULL"
-            ),
+            text("UPDATE poi SET opening_hours = :oh WHERE id = :id AND opening_hours IS NULL"),
             [{"oh": oh_map[ext_id], "id": str(row_id)} for row_id, ext_id in matches],
         )
         db.commit()
@@ -138,9 +134,10 @@ def _bulk_update(oh_map: dict[str, str]) -> int:
 
 
 def run(limit: int | None = None, reset: bool = False) -> None:
+    from datetime import date
+
     from app.database import SessionLocal
     from app.models import Destination
-    from datetime import date
 
     state = _load_state()
     job = state.setdefault(STATE_KEY, {"completed": [], "total_updated": 0})
@@ -168,9 +165,7 @@ def run(limit: int | None = None, reset: bool = False) -> None:
     if limit is not None:
         pending = pending[:limit]
 
-    logger.info(
-        f"opening_hours update: {len(pending)} pending / {len(completed_ids)} done"
-    )
+    logger.info(f"opening_hours update: {len(pending)} pending / {len(completed_ids)} done")
 
     total_updated = int(job.get("total_updated", 0))
 
@@ -187,18 +182,14 @@ def run(limit: int | None = None, reset: bool = False) -> None:
             continue
 
         oh_map = {
-            f"osm:{el['id']}": el["tags"]["opening_hours"]
-            for el in elements
-            if el.get("tags", {}).get("opening_hours")
+            f"osm:{el['id']}": el["tags"]["opening_hours"] for el in elements if el.get("tags", {}).get("opening_hours")
         }
 
         updated = 0
         if oh_map:
             updated = _bulk_update(oh_map)
             if updated:
-                logger.info(
-                    f"  → {updated} POI updated (OSM had {len(oh_map)} with opening_hours)"
-                )
+                logger.info(f"  → {updated} POI updated (OSM had {len(oh_map)} with opening_hours)")
 
         total_updated += updated
         job["completed"].append(dest_id)

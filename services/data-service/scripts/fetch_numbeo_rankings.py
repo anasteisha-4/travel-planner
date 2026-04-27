@@ -365,6 +365,7 @@ _CITY_ALIASES: dict[tuple[str, str], str] = {
 def match_and_update(rankings: list[tuple[str, str, float]]) -> None:
     """Fuzzy-match rankings to destinations and upsert cost records."""
     from rapidfuzz import fuzz
+
     from app.database import SessionLocal
     from app.models import Destination
     from app.models.costs import DestinationCosts
@@ -394,9 +395,7 @@ def match_and_update(rankings: list[tuple[str, str, float]]) -> None:
             dest_id = name_to_id.get(iso2, {}).get(alias_dest_name.lower())
             if dest_id and dest_id not in matched:
                 matched[dest_id] = (alias_dest_name, col_index)
-                logger.debug(
-                    f"  ✓ alias '{city}' ({iso2}) → '{alias_dest_name}' CoL={col_index}"
-                )
+                logger.debug(f"  ✓ alias '{city}' ({iso2}) → '{alias_dest_name}' CoL={col_index}")
                 continue
 
         # 2. Fuzzy match with threshold 70
@@ -414,20 +413,14 @@ def match_and_update(rankings: list[tuple[str, str, float]]) -> None:
         if best_score >= 70 and best_id and best_name:
             if best_id not in matched:
                 matched[best_id] = (best_name, col_index)
-                logger.debug(
-                    f"  ✓ '{city}' ({iso2}) → '{best_name}' score={best_score} CoL={col_index}"
-                )
+                logger.debug(f"  ✓ '{city}' ({iso2}) → '{best_name}' score={best_score} CoL={col_index}")
         else:
             unmatched.append((city, iso2, col_index))
             logger.debug(f"  ✗ '{city}' ({iso2}) no match (best_score={best_score})")
 
-    logger.info(
-        f"Matched {len(matched)} destinations, {len(unmatched)} unmatched from Numbeo"
-    )
+    logger.info(f"Matched {len(matched)} destinations, {len(unmatched)} unmatched from Numbeo")
     if unmatched[:10]:
-        logger.info(
-            "Unmatched sample: " + str([(c, iso) for c, iso, _ in unmatched[:10]])
-        )
+        logger.info("Unmatched sample: " + str([(c, iso) for c, iso, _ in unmatched[:10]]))
 
     # Normalize: CoL index → cost_index [0,1] using p5/p95 of matched set
     col_values = np.array([col for _, col in matched.values()])
@@ -441,17 +434,13 @@ def match_and_update(rankings: list[tuple[str, str, float]]) -> None:
     try:
         updated = 0
         newly_numbeo = 0
-        for dest_id, (dest_name, col_index) in matched.items():
+        for dest_id, (_dest_name, col_index) in matched.items():
             # daily cost estimate from CoL index
             daily_usd = round(col_index * COL_INDEX_TO_DAILY_USD, 2)
             clipped = max(p5, min(p95, col_index))
             new_cost_index = round((clipped - p5) / rng, 4)
 
-            existing = (
-                db.query(DestinationCosts)
-                .filter(DestinationCosts.destination_id == dest_id)
-                .first()
-            )
+            existing = db.query(DestinationCosts).filter(DestinationCosts.destination_id == dest_id).first()
 
             if existing:
                 was_numbeo = existing.data_source == "numbeo"
@@ -482,9 +471,7 @@ def match_and_update(rankings: list[tuple[str, str, float]]) -> None:
                 newly_numbeo += 1
 
         db.commit()
-        logger.info(
-            f"Upserted {updated} cost records ({newly_numbeo} upgraded from fallback → numbeo)"
-        )
+        logger.info(f"Upserted {updated} cost records ({newly_numbeo} upgraded from fallback → numbeo)")
     finally:
         db.close()
 
@@ -509,9 +496,7 @@ def verify() -> None:
             pct = row.cnt / total * 100
             logger.info(f"  {row.data_source:20s}: {row.cnt:4d}  ({pct:.1f}%)")
         numbeo = next((r.cnt for r in stats if r.data_source == "numbeo"), 0)
-        logger.info(
-            f"\nNumbero coverage: {numbeo}/{total} = {numbeo / total * 100:.1f}%"
-        )
+        logger.info(f"\nNumbero coverage: {numbeo}/{total} = {numbeo / total * 100:.1f}%")
     finally:
         db.close()
 

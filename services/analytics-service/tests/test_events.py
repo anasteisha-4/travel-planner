@@ -33,8 +33,13 @@ def test_ingest_single_event(client: TestClient, db: Session):
 
 def test_ingest_batch_events(client: TestClient, db: Session):
     session_id = str(uuid.uuid4())
-    event_types = ["recommendation_shown", "recommendation_clicked", "destination_detail_opened",
-                   "budget_predicted", "trip_created"]
+    event_types = [
+        "recommendation_shown",
+        "recommendation_clicked",
+        "destination_detail_opened",
+        "budget_predicted",
+        "trip_created",
+    ]
     events = [
         {"session_id": session_id, "event_type": event_types[i], "entity_type": "destination", "entity_id": str(i)}
         for i in range(5)

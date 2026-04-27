@@ -29,19 +29,11 @@ def predict_trip_budget(
 
     from app.models import DestinationCosts
 
-    costs = (
-        db.query(DestinationCosts)
-        .filter(DestinationCosts.destination_id == destination_id)
-        .first()
-    )
+    costs = db.query(DestinationCosts).filter(DestinationCosts.destination_id == destination_id).first()
     if not costs:
         return {"error": "No cost data available for this destination."}
 
-    factor = (
-        PEOPLE_FACTOR[people_count]
-        if people_count in PEOPLE_FACTOR
-        else 2.8 + (people_count - 4) * 0.5
-    )
+    factor = PEOPLE_FACTOR[people_count] if people_count in PEOPLE_FACTOR else 2.8 + (people_count - 4) * 0.5
 
     # Seasonal multiplier: crowd_index-derived per-month scalar [0.7, 1.4]
     seasonal = 1.0
@@ -54,9 +46,7 @@ def predict_trip_budget(
     )
 
     predicted_daily = (
-        costs.avg_meal_cost_usd * 2.5 * factor
-        + costs.avg_transport_cost_usd * factor
-        + hotel_tier_usd
+        costs.avg_meal_cost_usd * 2.5 * factor + costs.avg_transport_cost_usd * factor + hotel_tier_usd
     ) * seasonal
     predicted_total = predicted_daily * duration_days
 
@@ -72,12 +62,8 @@ def predict_trip_budget(
         "range_low_usd": round(predicted_total * 0.75, 2),
         "range_high_usd": round(predicted_total * 1.35, 2),
         "breakdown": {
-            "meals_usd": round(
-                costs.avg_meal_cost_usd * 2.5 * factor * duration_days * seasonal, 2
-            ),
-            "transport_usd": round(
-                costs.avg_transport_cost_usd * factor * duration_days * seasonal, 2
-            ),
+            "meals_usd": round(costs.avg_meal_cost_usd * 2.5 * factor * duration_days * seasonal, 2),
+            "transport_usd": round(costs.avg_transport_cost_usd * factor * duration_days * seasonal, 2),
             "accommodation_usd": round(hotel_tier_usd * duration_days * seasonal, 2),
         },
     }

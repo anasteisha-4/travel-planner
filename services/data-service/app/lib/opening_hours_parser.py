@@ -8,16 +8,15 @@ Supports simplified OSM opening_hours format:
 - Fallback: assume open if format not recognized
 """
 
-from datetime import datetime, time
-from typing import Optional
 import re
+from datetime import datetime, time
 
 
 class OpeningHoursParser:
     DAYS_MAPPING = {"Mo": 0, "Tu": 1, "We": 2, "Th": 3, "Fr": 4, "Sa": 5, "Su": 6}
 
     @staticmethod
-    def is_open(opening_hours: Optional[str], dt: datetime) -> bool:
+    def is_open(opening_hours: str | None, dt: datetime) -> bool:
         """
         Check if POI is open at given datetime.
 
@@ -38,13 +37,9 @@ class OpeningHoursParser:
             return True
 
         # Parse simplified format: "Mo-Su HH:MM-HH:MM"
-        match = re.match(
-            r"(\w{2})-(\w{2})\s+(\d{2}):(\d{2})-(\d{2}):(\d{2})", opening_hours
-        )
+        match = re.match(r"(\w{2})-(\w{2})\s+(\d{2}):(\d{2})-(\d{2}):(\d{2})", opening_hours)
         if match:
-            day_start_str, day_end_str, h_open, m_open, h_close, m_close = (
-                match.groups()
-            )
+            day_start_str, day_end_str, h_open, m_open, h_close, m_close = match.groups()
 
             day_start = OpeningHoursParser.DAYS_MAPPING.get(day_start_str)
             day_end = OpeningHoursParser.DAYS_MAPPING.get(day_end_str)
@@ -101,9 +96,8 @@ class OpeningHoursParser:
         if " off" in opening_hours:
             # Simple: if string contains day + "off", check if today is that day
             for day_code in OpeningHoursParser.DAYS_MAPPING:
-                if f"{day_code} off" in opening_hours:
-                    if OpeningHoursParser.DAYS_MAPPING[day_code] == dt.weekday():
-                        return False
+                if f"{day_code} off" in opening_hours and OpeningHoursParser.DAYS_MAPPING[day_code] == dt.weekday():
+                    return False
             return True
 
         # Default: assume open if we can't parse
@@ -133,7 +127,4 @@ class OpeningHoursParser:
                 return True
 
         # Still valid if it contains some expected patterns
-        if re.search(r"\d{2}:\d{2}", opening_hours) or "24/7" in opening_hours:
-            return True
-
-        return False
+        return bool(re.search(r"\d{2}:\d{2}", opening_hours) or "24/7" in opening_hours)

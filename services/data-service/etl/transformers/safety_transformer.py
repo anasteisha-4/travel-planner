@@ -11,9 +11,7 @@ GPI_MIN = 1.0
 GPI_MAX = 5.0
 GPI_RANGE = GPI_MAX - GPI_MIN
 
-_OVERRIDES_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "raw", "safety_city_overrides.csv"
-)
+_OVERRIDES_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw", "safety_city_overrides.csv")
 
 
 def _load_city_overrides() -> dict[tuple[str, str], float]:
@@ -62,15 +60,11 @@ def _get_country_destinations(
             existing = db.query(DestinationSafety.destination_id).all()
             existing_ids = {str(r[0]) for r in existing}
             destinations = [d for d in destinations if str(d.id) not in existing_ids]
-            logger.info(
-                f"skip_existing=True: {len(existing_ids)} already covered, {len(destinations)} remaining."
-            )
+            logger.info(f"skip_existing=True: {len(existing_ids)} already covered, {len(destinations)} remaining.")
         result: dict[str, list[tuple[str, str]]] = {}
         for d in destinations:
             if d.country_code:
-                result.setdefault(d.country_code.upper(), []).append(
-                    (str(d.id), d.name)
-                )
+                result.setdefault(d.country_code.upper(), []).append((str(d.id), d.name))
         return result
     finally:
         db.close()
@@ -111,9 +105,7 @@ def transform_safety(df: pd.DataFrame, skip_existing: bool = False) -> list[dict
             adjustment = city_overrides.get(override_key)
 
             if adjustment is not None:
-                final_score = round(
-                    max(0.0, min(1.0, base_safety_score + adjustment)), 4
-                )
+                final_score = round(max(0.0, min(1.0, base_safety_score + adjustment)), 4)
                 data_source = "gpi_city_adjusted"
             else:
                 final_score = base_safety_score
@@ -152,9 +144,7 @@ def transform_safety(df: pd.DataFrame, skip_existing: bool = False) -> list[dict
             )
             default_count += 1
 
-    adjusted_count = sum(
-        1 for r in records if r["safety_data_source"] == "gpi_city_adjusted"
-    )
+    adjusted_count = sum(1 for r in records if r["safety_data_source"] == "gpi_city_adjusted")
     logger.info(
         f"Transformed {len(records)} safety records "
         f"({len(records) - default_count} real GPI, {default_count} defaults, "

@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 PAGEVIEWS_URL = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
 HEADERS = {"User-Agent": "Triply/1.0 (travel-planner; contact: admin@triply.app)"}
-SLEEP_BETWEEN_REQUESTS = (
-    0.5  # conservative — Wikimedia pageviews allows ~100 req/s but we share with search
-)
+SLEEP_BETWEEN_REQUESTS = 0.5  # conservative — Wikimedia pageviews allows ~100 req/s but we share with search
 
 # Known aliases where city name ≠ Wikipedia article title
 ARTICLE_ALIASES: dict[str, str] = {
@@ -101,11 +99,7 @@ def _fetch_monthly_pageviews(article: str, year: int) -> dict[int, int]:
                 return {}
             r.raise_for_status()
             items = r.json().get("items", [])
-        return {
-            int(item["timestamp"][4:6]): item["views"]
-            for item in items
-            if "timestamp" in item and "views" in item
-        }
+        return {int(item["timestamp"][4:6]): item["views"] for item in items if "timestamp" in item and "views" in item}
     except Exception as e:
         logger.debug(f"Pageview fetch failed for {article}: {e}")
         return {}
@@ -130,9 +124,7 @@ def fetch_pageviews_for_destination(
         for month, views in monthly.items():
             combined.setdefault(month, []).append(views)
 
-    avg_monthly = {
-        month: int(sum(views) / len(views)) for month, views in combined.items()
-    }
+    avg_monthly = {month: int(sum(views) / len(views)) for month, views in combined.items()}
 
     return {
         "destination_id": destination_id,
@@ -143,18 +135,17 @@ def fetch_pageviews_for_destination(
 
 def extract_pageviews_missing_destinations() -> list[dict]:
     """Fetch Wikipedia pageviews only for destinations not yet in destination_popularity."""
+    from sqlalchemy import text
+
     from app.database import SessionLocal
     from app.models import Destination
-    from sqlalchemy import text
 
     db = SessionLocal()
     try:
         destinations = db.query(Destination).filter(Destination.is_active == True).all()  # noqa: E712
         covered_ids: set[str] = {
             row[0]
-            for row in db.execute(
-                text("SELECT DISTINCT destination_id::text FROM destination_popularity")
-            ).fetchall()
+            for row in db.execute(text("SELECT DISTINCT destination_id::text FROM destination_popularity")).fetchall()
         }
     finally:
         db.close()
@@ -166,9 +157,7 @@ def extract_pageviews_missing_destinations() -> list[dict]:
 
     results = []
     for i, dest in enumerate(missing, 1):
-        data = fetch_pageviews_for_destination(
-            str(dest.id), dest.name, dest.country_code
-        )
+        data = fetch_pageviews_for_destination(str(dest.id), dest.name, dest.country_code)
         results.append(data)
         found = "✓" if data["article"] else "✗"
         logger.info(
@@ -191,9 +180,7 @@ def extract_pageviews_all_destinations() -> list[dict]:
 
     results = []
     for i, dest in enumerate(destinations, 1):
-        data = fetch_pageviews_for_destination(
-            str(dest.id), dest.name, dest.country_code
-        )
+        data = fetch_pageviews_for_destination(str(dest.id), dest.name, dest.country_code)
         results.append(data)
         found = "✓" if data["article"] else "✗"
         logger.info(

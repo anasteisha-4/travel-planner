@@ -42,9 +42,7 @@ def extract_unesco(
         radius_km: max distance from destination center to associate a UNESCO site
     """
     if not DATA_FILE.exists():
-        logger.error(
-            f"UNESCO CSV not found: {DATA_FILE}. Download from https://whc.unesco.org/en/list/xml/"
-        )
+        logger.error(f"UNESCO CSV not found: {DATA_FILE}. Download from https://whc.unesco.org/en/list/xml/")
         return []
 
     df = pd.read_csv(DATA_FILE, keep_default_na=False)
@@ -65,15 +63,10 @@ def extract_unesco(
         lat_delta = radius_km / 111.0
         lng_delta = radius_km / (111.0 * max(0.1, abs(float(f"{dest_lat:.4f}"))))
 
-        nearby = df[
-            (abs(df["lat"] - dest_lat) <= lat_delta)
-            & (abs(df["lng"] - dest_lng) <= lng_delta)
-        ]
+        nearby = df[(abs(df["lat"] - dest_lat) <= lat_delta) & (abs(df["lng"] - dest_lng) <= lng_delta)]
 
         for _, row in nearby.iterrows():
-            categories = _CATEGORY_MAP.get(
-                str(row.get("category", "Cultural")).strip(), ["culture"]
-            )
+            categories = _CATEGORY_MAP.get(str(row.get("category", "Cultural")).strip(), ["culture"])
             for cat in categories:
                 records.append(
                     {
@@ -87,8 +80,7 @@ def extract_unesco(
                         "rating": None,
                         "popularity_score": MIXED_SCORE,
                         "address": None,
-                        "description": str(row.get("category", ""))
-                        + f" ({row.get('year_inscribed', '')})",
+                        "description": str(row.get("category", "")) + f" ({row.get('year_inscribed', '')})",
                         "tags": [
                             "heritage=UNESCO",
                             f"category={cat}",

@@ -26,8 +26,7 @@ BALI_RADIUS = 50_000  # 50km — covers entire island
 
 def main() -> None:
     from app.database import SessionLocal
-    from app.models import Destination, POI
-
+    from app.models import POI, Destination
     from etl.extractors.overpass_beaches import fetch_beaches_for_destination
 
     db = SessionLocal()
@@ -40,9 +39,7 @@ def main() -> None:
         logger.info(f"Bali destination_id={dest_id}")
 
         logger.info(f"Fetching beach POI from Overpass (radius={BALI_RADIUS}m)...")
-        poi_list = fetch_beaches_for_destination(
-            dest_id, BALI_LAT, BALI_LNG, radius_m=BALI_RADIUS
-        )
+        poi_list = fetch_beaches_for_destination(dest_id, BALI_LAT, BALI_LNG, radius_m=BALI_RADIUS)
 
         if poi_list is None:
             logger.error("Overpass request failed — try again later")
@@ -75,11 +72,7 @@ def main() -> None:
         updated_count = 0
         for p in poi_list:
             ext_id = p.get("external_id")
-            existing = (
-                db.query(POI).filter(POI.external_id == ext_id).first()
-                if ext_id
-                else None
-            )
+            existing = db.query(POI).filter(POI.external_id == ext_id).first() if ext_id else None
             if existing:
                 # Update popularity_score if changed
                 if existing.popularity_score != p["popularity_score"]:
@@ -144,9 +137,7 @@ def _recompute_bali_beach_score(dest_id: str) -> None:
         )
 
         is_coastal = (
-            db.query(DestinationAttributes.is_coastal)
-            .filter(DestinationAttributes.destination_id == dest_id)
-            .scalar()
+            db.query(DestinationAttributes.is_coastal).filter(DestinationAttributes.destination_id == dest_id).scalar()
         ) or False
 
         _GENERIC_NAMES = frozenset({"Beach", "Sandy Beach", "Pebble Beach"})
@@ -156,11 +147,8 @@ def _recompute_bali_beach_score(dest_id: str) -> None:
 
         eff_count = 0.0
         scores = []
-        for name, pop_score, source in poi_rows:
-            if name in _GENERIC_NAMES and is_coastal:
-                weight = _BEACH_COASTAL_WEIGHT
-            else:
-                weight = _BEACH_NAMED_WEIGHT
+        for name, pop_score, _source in poi_rows:
+            weight = _BEACH_COASTAL_WEIGHT if name in _GENERIC_NAMES and is_coastal else _BEACH_NAMED_WEIGHT
             eff_count += weight
             if pop_score is not None:
                 scores.append(float(pop_score))

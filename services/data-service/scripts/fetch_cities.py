@@ -19,9 +19,7 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OUTPUT_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "raw" / "cities_supplement.csv"
-)
+OUTPUT_PATH = Path(__file__).resolve().parents[1] / "data" / "raw" / "cities_supplement.csv"
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
@@ -200,10 +198,6 @@ KNOWN_CAPITALS = {
     "Male",
     "Colombo",
     "Singapore",
-    "Muscat",
-    "Doha",
-    "Manama",
-    "Kuwait City",
 }
 
 # Top tourist cities that are NOT capitals — curated list for GeoNames lookup
@@ -395,11 +389,11 @@ def fetch_city_info(city: str, country_code: str) -> dict | None:
         r = results[0]
         population = None
         extra = r.get("extratags") or {}
+        import contextlib
+
         if extra.get("population"):
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 population = int(extra["population"])
-            except (ValueError, TypeError):
-                pass
 
         return {
             "name": city,
@@ -420,9 +414,7 @@ def main():
 
     results = []
     for i, (city, country_code) in enumerate(TOURIST_CITIES):
-        logger.info(
-            f"[{i + 1}/{len(TOURIST_CITIES)}] Fetching {city}, {country_code}..."
-        )
+        logger.info(f"[{i + 1}/{len(TOURIST_CITIES)}] Fetching {city}, {country_code}...")
         info = fetch_city_info(city, country_code)
         if info:
             results.append(info)

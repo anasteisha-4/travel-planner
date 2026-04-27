@@ -51,9 +51,7 @@ def _precip_comfort(avg_mm: float) -> float:
 
 def _humidity_comfort(rh_pct: float) -> float:
     """1.0 at ≤70% RH, linear decay above. 90% RH → 0.33, 100% RH → 0.0."""
-    return max(
-        0.0, 1.0 - max(0.0, rh_pct - HUMIDITY_OK_THRESHOLD) / HUMIDITY_DECAY_RANGE
-    )
+    return max(0.0, 1.0 - max(0.0, rh_pct - HUMIDITY_OK_THRESHOLD) / HUMIDITY_DECAY_RANGE)
 
 
 def transform_seasonality(raw: list[dict]) -> list[dict]:
@@ -72,9 +70,7 @@ def transform_seasonality(raw: list[dict]) -> list[dict]:
         if not dates:
             continue
 
-        monthly: dict[int, dict[str, list]] = defaultdict(
-            lambda: {"temps": [], "precips": [], "humidities": []}
-        )
+        monthly: dict[int, dict[str, list]] = defaultdict(lambda: {"temps": [], "precips": [], "humidities": []})
         for i, date_str in enumerate(dates):
             month = int(date_str[5:7])
             if i < len(temps) and temps[i] is not None:
@@ -91,9 +87,7 @@ def transform_seasonality(raw: list[dict]) -> list[dict]:
             avg_temp = float(np.mean(data["temps"]))
             # monthly total (sum of daily values), not mean — needed for absolute scale
             avg_precip = float(np.sum(data["precips"])) if data["precips"] else 0.0
-            avg_humidity = (
-                float(np.mean(data["humidities"])) if data["humidities"] else None
-            )
+            avg_humidity = float(np.mean(data["humidities"])) if data["humidities"] else None
 
             tc = _temp_comfort(avg_temp)
             pc = _precip_comfort(avg_precip)
@@ -107,9 +101,7 @@ def transform_seasonality(raw: list[dict]) -> list[dict]:
                     "month": month,
                     "avg_temp_c": round(avg_temp, 2),
                     "avg_precipitation_mm": round(avg_precip, 2),
-                    "avg_humidity_pct": round(avg_humidity, 1)
-                    if avg_humidity is not None
-                    else None,
+                    "avg_humidity_pct": round(avg_humidity, 1) if avg_humidity is not None else None,
                     "season_score": season_score,
                 }
             )

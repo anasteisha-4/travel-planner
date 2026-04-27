@@ -102,9 +102,7 @@ def _build_dest_index() -> dict[tuple[str, str], str]:
     try:
         return {
             (d.name.strip().lower(), (d.country_code or "").upper()): str(d.id)
-            for d in db.query(
-                Destination.id, Destination.name, Destination.country_code
-            ).all()
+            for d in db.query(Destination.id, Destination.name, Destination.country_code).all()
         }
     finally:
         db.close()
@@ -131,9 +129,7 @@ def transform_events(seed_path: Path = _SEED_PATH) -> list[dict]:
 
             dest_id = dest_index.get((dest_name.lower(), country_code))
             if dest_id is None:
-                logger.warning(
-                    f"Cannot resolve destination: '{dest_name}' ({country_code}) — skipping"
-                )
+                logger.warning(f"Cannot resolve destination: '{dest_name}' ({country_code}) — skipping")
                 unresolved += 1
                 continue
 
@@ -146,9 +142,7 @@ def transform_events(seed_path: Path = _SEED_PATH) -> list[dict]:
 
             category = row.get("category", "festival").strip().lower()
             if category not in _VALID_CATEGORIES:
-                logger.warning(
-                    f"Unknown category '{category}' for '{name}' — using 'festival'"
-                )
+                logger.warning(f"Unknown category '{category}' for '{name}' — using 'festival'")
                 category = "festival"
 
             month_start = _parse_int_or_none(row.get("month_start", ""))
@@ -171,18 +165,13 @@ def transform_events(seed_path: Path = _SEED_PATH) -> list[dict]:
                     "is_annual": _parse_bool(row.get("is_annual", "true")),
                     "crowd_impact": _parse_float(row.get("crowd_impact", ""), 0.5),
                     "price_impact": _parse_float(row.get("price_impact", ""), 0.5),
-                    "traveler_relevance": _parse_float(
-                        row.get("traveler_relevance", ""), 0.5
-                    ),
+                    "traveler_relevance": _parse_float(row.get("traveler_relevance", ""), 0.5),
                     "notes": row.get("notes", "").strip() or None,
                     "data_source": row.get("data_source", "seed_csv").strip(),
                 }
             )
 
-    logger.info(
-        f"Seed: {len(records)} event records "
-        f"(unresolved={unresolved}, duplicates_skipped={skipped})."
-    )
+    logger.info(f"Seed: {len(records)} event records (unresolved={unresolved}, duplicates_skipped={skipped}).")
     return records
 
 
@@ -207,9 +196,7 @@ def enrich_with_wikidata(
     dest_index = _build_dest_index()
 
     # Existing (destination_id, name_lower) set — seed wins on collision
-    existing: set[tuple[str, str]] = {
-        (r["destination_id"], r["name"].lower()) for r in seed_records
-    }
+    existing: set[tuple[str, str]] = {(r["destination_id"], r["name"].lower()) for r in seed_records}
 
     if country_codes is None:
         country_codes = _default_country_codes()

@@ -24,7 +24,6 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.poi import POI
 
-
 logger = logging.getLogger(__name__)
 
 

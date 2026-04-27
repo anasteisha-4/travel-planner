@@ -50,15 +50,8 @@ def compute_score(
         transit_hours = 0.0
     else:
         # Check if any non-excluded hub is available
-        transit_available = any(
-            record.get(field, False)
-            for hub, field in HUB_FIELDS.items()
-            if hub not in excluded
-        )
-        if transit_available:
-            transit_hours = record.get("min_transit_hours") or 3.0
-        else:
-            transit_hours = 20.0
+        transit_available = any(record.get(field, False) for hub, field in HUB_FIELDS.items() if hub not in excluded)
+        transit_hours = record.get("min_transit_hours") or 3.0 if transit_available else 20.0
 
     transit_component = 0.3 * max(0.0, 1.0 - transit_hours / 20.0)
     ground_component = 0.2 if record["train_from_moscow"] else 0.0
@@ -66,9 +59,7 @@ def compute_score(
     return round(direct_component + transit_component + ground_component, 4)
 
 
-def transform_connectivity(
-    overrides: dict[str, dict], skip_existing: bool = False
-) -> list[dict]:
+def transform_connectivity(overrides: dict[str, dict], skip_existing: bool = False) -> list[dict]:
     """Build connectivity records for all active destinations.
 
     Args:
@@ -94,9 +85,7 @@ def transform_connectivity(
             existing_ids = {str(r[0]) for r in existing}
             before = len(destinations)
             destinations = [d for d in destinations if str(d.id) not in existing_ids]
-            logger.info(
-                f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining."
-            )
+            logger.info(f"skip_existing=True: skipping {before - len(destinations)}, {len(destinations)} remaining.")
     finally:
         db.close()
 
