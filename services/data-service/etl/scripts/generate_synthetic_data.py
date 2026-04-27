@@ -21,6 +21,8 @@ from typing import Any
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from sqlalchemy import text
+
 from app.config import settings
 from app.models.costs import DestinationCosts
 from app.models.destination import Destination
@@ -104,12 +106,25 @@ BUDGET_TIER_MULTIPLIERS = {
     "luxury": 2.8,
 }
 
-ACCOMMODATION_TIER_SHARE = {
-    "hostel": 0.20,
+# IMPORTANT: These constants MUST match services/ml-service/app/services/budget_formula.py exactly.
+# Both services are deployed separately, so they cannot share a module. If you change values here,
+# update budget_formula.py too — mismatches cause formula MAPE inflation at training time.
+ACCOMMODATION_COST_FRACTION = {
+    "hostel": 0.18,
     "budget": 0.35,
-    "mid": 0.50,
-    "luxury": 0.75,
+    "mid": 0.65,
+    "luxury": 1.60,
 }
+
+MEALS_COST_FRACTION = {
+    "hostel": 0.25,
+    "budget": 0.30,
+    "mid": 0.38,
+    "luxury": 0.55,
+}
+
+TRANSPORT_COST_FRACTION = 0.12
+ACTIVITIES_COST_FRACTION = 0.08
 
 
 def _jitter(value: float, pct: float = 0.30) -> float:
@@ -187,41 +202,71 @@ def generate_budgets(
     session: Session,
     destination_ids: list[uuid.UUID],
     costs_by_dest: dict[uuid.UUID, float],
+    seasonality_by_dest: dict[uuid.UUID, dict[int, float]],
     n: int = 100_000,
 ) -> None:
     logger.info("Generating %d trip budget actuals...", n)
     inserted = 0
     batch: list[dict[str, Any]] = []
 
+    # Per-destination persistent bias: fixed ±12% systematic deviation.
+    # Simulates real-world patterns: Tokyo systematically more expensive than
+    # Bangkok even at the same cost_index tier. Seed=2024 for reproducibility.
+    rng = random.Random(2024)
+    dest_bias: dict[uuid.UUID, float] = {
+        dest_id: rng.gauss(1.0, 0.12) for dest_id in destination_ids
+    }
+
+    # Realistic people-count weights: solo/couple most common
+    people_weights = [20, 35, 20, 12, 8, 5]
+
     for _ in range(n):
         dest_id = random.choice(destination_ids)
         avg_daily = costs_by_dest.get(dest_id, 80.0)
 
-        duration = random.randint(3, 21)
-        people = random.randint(1, 6)
+        duration = random.randint(3, 28)
+        people = random.choices(range(1, 7), weights=people_weights)[0]
         travel_month = random.randint(1, 12)
         acc_tier = random.choice(ACCOMMODATION_TIERS)
-        budget_tier = random.choice(BUDGET_TIERS)
 
-        tier_mult = BUDGET_TIER_MULTIPLIERS[budget_tier]
-        acc_share = ACCOMMODATION_TIER_SHARE[acc_tier]
+        # Seasonal multiplier from destination seasonality [0.7, 1.35]
+        season_score = seasonality_by_dest.get(dest_id, {}).get(travel_month, 0.65)
+        # High season (season_score < 0.5 means bad weather → fewer tourists, lower prices)
+        # Peak season has higher prices: score 0.9 → ~1.20×, score 0.5 → ~1.0×, score 0.3 → ~0.85×
+        seasonal_mult = round(0.70 + season_score * 0.65, 3)
 
-        # Base daily spend for 1 person
-        daily_per_person = _jitter(avg_daily * tier_mult)
+        # --- Build cost from components (each per person per day) ---
+        acc_frac = ACCOMMODATION_COST_FRACTION[acc_tier]
+        meals_frac = MEALS_COST_FRACTION[acc_tier]
+        transport_frac = TRANSPORT_COST_FRACTION
 
-        total = round(daily_per_person * duration * people, 2)
+        # Apply per-destination systematic bias (fixed per dest_id, seed=2024).
+        # Jitter reduced from ±30% to ±15%: real signal comes from dest_bias,
+        # not pure noise — so budget ML can learn destination-specific patterns.
+        bias = dest_bias[dest_id]
+        effective_daily = avg_daily * bias
 
-        # Split proportions with noise
-        meals_share = _jitter(0.30, 0.15)
-        acc_daily_share = _jitter(acc_share, 0.15)
-        transport_share = _jitter(0.15, 0.20)
-        activities_share = _jitter(0.10, 0.30)
+        # Accommodation is per room (split among people, but min 1 room)
+        rooms = (
+            max(1, (people + 1) // 2)
+            if acc_tier == "hostel"
+            else max(1, (people + 1) // 2)
+        )
+        acc_nightly_per_room = _jitter(effective_daily * acc_frac, 0.15) * seasonal_mult
+        accommodation_usd = round(acc_nightly_per_room * rooms * duration, 2)
 
-        denom = meals_share + acc_daily_share + transport_share + activities_share
-        meals_usd = round(total * meals_share / denom, 2)
-        accommodation_usd = round(total * acc_daily_share / denom, 2)
-        transport_usd = round(total * transport_share / denom, 2)
-        activities_usd = round(total * activities_share / denom, 2)
+        meals_daily_per_person = (
+            _jitter(effective_daily * meals_frac, 0.15) * seasonal_mult
+        )
+        meals_usd = round(meals_daily_per_person * people * duration, 2)
+
+        transport_daily = _jitter(effective_daily * transport_frac, 0.15)
+        transport_usd = round(transport_daily * people * duration, 2)
+
+        activities_daily = _jitter(effective_daily * ACTIVITIES_COST_FRACTION, 0.15)
+        activities_usd = round(activities_daily * people * duration, 2)
+
+        total = round(accommodation_usd + meals_usd + transport_usd + activities_usd, 2)
 
         batch.append(
             {
@@ -348,6 +393,17 @@ def main(table: str | None = None) -> None:
         }
         logger.info("  %d safety records loaded.", len(safety_by_dest))
 
+        logger.info("Loading seasonality per destination...")
+        seasonality_by_dest: dict[uuid.UUID, dict[int, float]] = {}
+        for row in session.execute(
+            text(
+                "SELECT destination_id, month, season_score FROM destination_seasonality"
+            )
+        ):
+            did = row[0]
+            seasonality_by_dest.setdefault(did, {})[int(row[1])] = float(row[2])
+        logger.info("  %d destinations with seasonality.", len(seasonality_by_dest))
+
         logger.info("Loading trajectory IDs...")
         trajectory_ids: list[uuid.UUID] = [
             row[0] for row in session.execute(select(Trajectory.id)).all()
@@ -358,7 +414,9 @@ def main(table: str | None = None) -> None:
             generate_preferences(session, destination_ids, safety_by_dest)
 
         if table is None or table == "budgets":
-            generate_budgets(session, destination_ids, costs_by_dest)
+            generate_budgets(
+                session, destination_ids, costs_by_dest, seasonality_by_dest
+            )
 
         if table is None or table == "feedback":
             generate_feedback(session, trajectory_ids)
