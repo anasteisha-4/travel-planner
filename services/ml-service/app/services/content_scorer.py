@@ -15,9 +15,22 @@ Scoring factors and weights:
 """
 
 import uuid
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from app.schemas.recommendation import ScoredDestination
+
+
+@runtime_checkable
+class BaseScorer(Protocol):
+    def score(
+        self,
+        user_profile: dict,
+        destinations: list[dict],
+        dest_features: dict[uuid.UUID, dict],
+        travel_month: int,
+        filters: dict,
+    ) -> list[ScoredDestination]: ...
+
 
 ACTIVITY_WEIGHT_BY_RANK = {1: 5, 2: 4, 3: 3, 4: 2, 5: 1}
 
@@ -103,11 +116,7 @@ def _budget_fit_score(
 
     if budget_min_usd <= trip_cost <= budget_max_usd:
         return 1.0
-    overshoot = (
-        budget_min_usd - trip_cost
-        if trip_cost < budget_min_usd
-        else trip_cost - budget_max_usd
-    )
+    overshoot = budget_min_usd - trip_cost if trip_cost < budget_min_usd else trip_cost - budget_max_usd
 
     return max(0.0, 1.0 - overshoot / (budget_range * 2))
 
@@ -175,12 +184,8 @@ def _region_boost(
     """Small boost (up to 0.15) for destinations in same region/subregion as liked ones."""
     if not liked_dest_features:
         return 0.0
-    same_subregion = sum(
-        1 for f in liked_dest_features if f.get("subregion") == dest_subregion and dest_subregion
-    )
-    same_region = sum(
-        1 for f in liked_dest_features if f.get("region") == dest_region and dest_region
-    )
+    same_subregion = sum(1 for f in liked_dest_features if f.get("subregion") == dest_subregion and dest_subregion)
+    same_region = sum(1 for f in liked_dest_features if f.get("region") == dest_region and dest_region)
     return min(0.15, same_subregion * 0.08 + same_region * 0.04)
 
 
@@ -246,8 +251,8 @@ class ContentScorer:
         liked_dest_ids: list[int] = user_profile.get("liked_destination_ids") or []
         origin_lat: float | None = user_profile.get("origin_lat")
 
-# TODO: check if we need citizenship_code
-        # citizenship_code: str = filters.get("citizenship_code", "RU")
+        # Citizenship is handled at the data-loading layer — visa_score in dest_features
+        # already reflects the correct citizenship passed to get_destination_features().
         exclude_ids: set[uuid.UUID] = set(filters.get("exclude_destination_ids", []))
         region_filter: str | None = filters.get("region")
 
@@ -313,9 +318,7 @@ class ContentScorer:
             crowd_sc = _crowd_score(crowd_index, crowd_preference)
             climate_sc = _climate_match(f, climate_prefs)
             conn_sc = _connectivity_boost(connectivity, origin_lat)
-            region_boost = _region_boost(
-                dest.get("region"), dest.get("subregion"), liked_features
-            )
+            region_boost = _region_boost(dest.get("region"), dest.get("subregion"), liked_features)
 
             breakdown = {
                 "activity_match": round(act_score, 4),

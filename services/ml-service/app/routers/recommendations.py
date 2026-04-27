@@ -8,14 +8,15 @@ from app.database import get_db
 from app.deps import get_current_user_id
 from app.models.recommendation_log import RecommendationLog
 from app.schemas.recommendation import RecommendRequest, RecommendResponse
-from app.services.content_scorer import ContentScorer
+from app.services.content_scorer import BaseScorer, ContentScorer
 from app.services.data_loader import get_all_destinations, get_destination_features
+from app.services.experiment import get_variant
+from app.services.profile_client import _get_profile_sync
+from app.services.ranker_scorer import LTRScorer, get_active_scorer
 
 router = APIRouter()
 
-_scorer = ContentScorer()
-
-SCORER_WEIGHTS = {
+CONTENT_SCORER_WEIGHTS = {
     "activity_match": 0.28,
     "budget_fit": 0.18,
     "season": 0.18,
@@ -26,6 +27,32 @@ SCORER_WEIGHTS = {
     "climate": 0.04,
 }
 
+_content_scorer = ContentScorer()
+
+
+def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -> tuple[BaseScorer, str]:
+    """Return (scorer, model_version_str).
+
+    Priority:
+    1. Explicit model_version in request body (for manual testing).
+    2. A/B experiment assignment (scorer_ab).
+    3. Active LTR model from registry, fallback to content.
+    """
+    if request.model_version == "content-v1":
+        return _content_scorer, "content-v1"
+
+    if request.model_version is None:
+        try:
+            variant = get_variant(db, user_id, "scorer_ab")
+            if variant == "content-v1":
+                return _content_scorer, "content-v1"
+        except Exception:
+            pass
+
+    scorer = get_active_scorer(db)
+    version = "ltr-v1" if isinstance(scorer, LTRScorer) else "content-v1"
+    return scorer, version
+
 
 @router.post("/recommend", response_model=RecommendResponse)
 def get_recommendations(
@@ -33,19 +60,14 @@ def get_recommendations(
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> RecommendResponse:
-    from app.services.profile_client import _get_profile_sync
-
     t_start = time.monotonic()
 
     profile = _get_profile_sync(db, user_id)
 
     destinations = get_all_destinations(db)
     dest_ids = [uuid.UUID(str(d["id"])) for d in destinations]
-    dest_features = get_destination_features(db, dest_ids)
-
     citizenship = request.citizenship_code.upper()
-    if citizenship != "RU":
-        _attach_visa_scores(db, dest_ids, dest_features, citizenship)
+    dest_features = get_destination_features(db, dest_ids, citizenship_code=citizenship)
 
     filters = {
         "citizenship_code": citizenship,
@@ -53,7 +75,8 @@ def get_recommendations(
         "region": request.region,
     }
 
-    scored = _scorer.score(
+    scorer, model_version = _select_scorer(request, db, user_id)
+    scored = scorer.score(
         user_profile=profile,
         destinations=destinations,
         dest_features=dest_features,
@@ -70,37 +93,16 @@ def get_recommendations(
         recommendation_id=recommendation_id,
         user_id=user_id,
         request=request,
-        model_version="content-v1",
+        model_version=model_version,
         results=top_results,
         latency_ms=latency_ms,
     )
 
     return RecommendResponse(
         recommendation_id=recommendation_id,
-        model_version="content-v1",
+        model_version=model_version,
         results=top_results,
     )
-
-
-def _attach_visa_scores(
-    db: Session,
-    dest_ids: list[uuid.UUID],
-    dest_features: dict[uuid.UUID, dict],
-    citizenship_code: str,
-) -> None:
-    from sqlalchemy import text
-
-    rows = db.execute(
-        text(
-            "SELECT destination_id, visa_score FROM visa_rules "
-            "WHERE citizenship_code = :cc AND destination_id = ANY(:ids)"
-        ),
-        {"cc": citizenship_code, "ids": dest_ids},
-    )
-    for row in rows:
-        k = uuid.UUID(str(row.destination_id))
-        if k in dest_features:
-            dest_features[k]["visa_score"] = float(row.visa_score)
 
 
 def _log_recommendation(
@@ -113,6 +115,11 @@ def _log_recommendation(
     latency_ms: int,
 ) -> None:
     try:
+        scorer_weights = (
+            CONTENT_SCORER_WEIGHTS
+            if model_version == "content-v1"
+            else {"model_type": "lambdarank", "objective": "lambdarank", "metric": "ndcg"}
+        )
         log = RecommendationLog(
             id=recommendation_id,
             user_id=user_id,
@@ -124,7 +131,7 @@ def _log_recommendation(
                 "exclude_destination_ids": [str(x) for x in request.exclude_destination_ids],
             },
             model_version=model_version,
-            scorer_weights=SCORER_WEIGHTS,
+            scorer_weights=scorer_weights,
             results=[
                 {
                     "destination_id": str(r.destination_id),

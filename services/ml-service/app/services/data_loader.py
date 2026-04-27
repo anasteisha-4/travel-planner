@@ -9,16 +9,13 @@ register_uuid()
 
 def get_all_destinations(db: Session) -> list[dict]:
     result = db.execute(
-        text(
-            "SELECT id, name, country_code, lat, lng, region, subregion "
-            "FROM destinations WHERE is_active = true"
-        )
+        text("SELECT id, name, country_code, lat, lng, region, subregion FROM destinations WHERE is_active = true")
     )
     return [dict(row._mapping) for row in result]
 
 
 def get_destination_features(
-    db: Session, dest_ids: list[uuid.UUID]
+    db: Session, dest_ids: list[uuid.UUID], citizenship_code: str = "RU"
 ) -> dict[uuid.UUID, dict]:
     if not dest_ids:
         return {}
@@ -26,10 +23,7 @@ def get_destination_features(
     id_param = dest_ids  # passed as uuid[] via psycopg2 after register_uuid()
 
     safety_rows = db.execute(
-        text(
-            "SELECT destination_id, safety_score FROM destination_safety "
-            "WHERE destination_id = ANY(:ids)"
-        ),
+        text("SELECT destination_id, safety_score FROM destination_safety WHERE destination_id = ANY(:ids)"),
         {"ids": id_param},
     )
     costs_rows = db.execute(
@@ -41,24 +35,22 @@ def get_destination_features(
     )
     season_rows = db.execute(
         text(
-            "SELECT destination_id, month, season_score FROM destination_seasonality "
-            "WHERE destination_id = ANY(:ids)"
+            "SELECT destination_id, month, season_score FROM destination_seasonality WHERE destination_id = ANY(:ids)"
         ),
         {"ids": id_param},
     )
     activity_rows = db.execute(
         text(
-            "SELECT destination_id, activity_type, score FROM destination_activities "
-            "WHERE destination_id = ANY(:ids)"
+            "SELECT destination_id, activity_type, score FROM destination_activities WHERE destination_id = ANY(:ids)"
         ),
         {"ids": id_param},
     )
     visa_rows = db.execute(
         text(
             "SELECT destination_id, visa_score FROM visa_rules "
-            "WHERE citizenship_code = 'RU' AND destination_id = ANY(:ids)"
+            "WHERE citizenship_code = :cc AND destination_id = ANY(:ids)"
         ),
-        {"ids": id_param},
+        {"cc": citizenship_code.upper(), "ids": id_param},
     )
     popularity_rows = db.execute(
         text(
@@ -169,12 +161,9 @@ def get_destination_features(
             features[k]["has_thermal"] = bool(row.has_thermal)
             altitude = row.altitude_m
             landscape = row.landscape or []
-            features[k]["has_mountains"] = (
-                (altitude is not None and int(altitude) >= 800)
-                or any(
-                    lbl in ("mountain", "mountains", "highland", "alps")
-                    for lbl in (landscape if isinstance(landscape, list) else [])
-                )
+            features[k]["has_mountains"] = (altitude is not None and int(altitude) >= 800) or any(
+                lbl in ("mountain", "mountains", "highland", "alps")
+                for lbl in (landscape if isinstance(landscape, list) else [])
             )
 
     SCRIPT_DIFFICULTY_MAP = {"easy": 0.0, "medium": 0.5, "hard": 1.0}
@@ -183,9 +172,7 @@ def get_destination_features(
         if k in features:
             features[k]["russian_speaking_score"] = float(row.russian_speaking_score)
             features[k]["english_speaking_score"] = float(row.english_speaking_score)
-            features[k]["script_difficulty"] = SCRIPT_DIFFICULTY_MAP.get(
-                str(row.script_difficulty).lower(), 0.0
-            )
+            features[k]["script_difficulty"] = SCRIPT_DIFFICULTY_MAP.get(str(row.script_difficulty).lower(), 0.0)
 
     for row in infrastructure_rows:
         k = _key(row.destination_id)
