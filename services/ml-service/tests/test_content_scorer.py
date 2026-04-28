@@ -181,7 +181,7 @@ def test_explanation_tags_affordable():
 
 def test_explanation_tags_max_5():
     tags = _explanation_tags(
-        {"season": 0.9, "activity_match": 0.9},
+        {"season_fit": 0.9, "activity_match": 0.9},
         {"is_coastal": True, "has_ski": True, "has_thermal": True, "avg_daily_cost_usd": 30},
         visa_score=1.0,
         safety_score=0.9,
@@ -302,9 +302,9 @@ def test_scorer_sorted_by_score_desc():
     scorer = ContentScorer()
     id1, id2 = uuid.uuid4(), uuid.uuid4()
     dests = [_make_dest(id1, "CityA"), _make_dest(id2, "CityB")]
-    # CityB has much better season and safety
+    # CityB has much better season and safety; both above hard-filter threshold (risk_tolerance=3 → 0.40)
     feat = {
-        id1: _make_features(id1, safety_score=0.3, seasonality={7: 0.2})[1],
+        id1: _make_features(id1, safety_score=0.45, seasonality={7: 0.2})[1],
         id2: _make_features(id2, safety_score=0.95, seasonality={7: 0.95})[1],
     }
     results = scorer.score(
@@ -330,7 +330,16 @@ def test_scorer_breakdown_keys_present():
         filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": None},
     )
     bd = results[0].score_breakdown
-    for key in ["activity_match", "budget_fit", "season", "visa", "safety", "language", "crowd", "climate"]:
+    for key in [
+        "activity_match",
+        "budget_fit",
+        "season_fit",
+        "visa_effort",
+        "safety_modulation",
+        "language_match",
+        "crowd_fit",
+        "climate_match",
+    ]:
         assert key in bd
 
 

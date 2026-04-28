@@ -26,4 +26,7 @@ class TripBudgetActual(BaseModel):
     transport_usd: Mapped[float] = mapped_column(Float, nullable=False)
     activities_usd: Mapped[float] = mapped_column(Float, nullable=False)
     accommodation_tier: Mapped[str] = mapped_column(String(20), nullable=False)
+    travel_to_destination_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    origin_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    origin_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     data_source: Mapped[str] = mapped_column(String(50), nullable=False, default="synthetic")

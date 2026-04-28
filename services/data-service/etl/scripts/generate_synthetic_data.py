@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import logging
+import math
 import random
 import uuid
 from typing import Any
@@ -34,6 +35,132 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 1000
+
+# 80 major origin cities covering real travel demand geography.
+# (lat, lng) pairs — used to synthesise realistic travel distances.
+ORIGIN_CITIES: list[tuple[float, float]] = [
+    # Russia
+    (59.95, 30.32),  # Saint Petersburg
+    (55.75, 37.62),  # Moscow
+    (56.84, 60.60),  # Yekaterinburg
+    (55.02, 82.93),  # Novosibirsk
+    (43.12, 131.89),  # Vladivostok
+    (54.99, 73.37),  # Omsk
+    (51.54, 46.01),  # Saratov
+    (47.23, 39.72),  # Rostov-on-Don
+    (54.73, 55.96),  # Ufa
+    (53.20, 50.15),  # Samara
+    # Europe
+    (48.87, 2.33),  # Paris
+    (51.51, -0.13),  # London
+    (52.52, 13.40),  # Berlin
+    (40.42, -3.70),  # Madrid
+    (41.90, 12.50),  # Rome
+    (48.21, 16.37),  # Vienna
+    (52.37, 4.90),  # Amsterdam
+    (50.85, 4.35),  # Brussels
+    (55.68, 12.57),  # Copenhagen
+    (59.33, 18.07),  # Stockholm
+    (60.17, 24.94),  # Helsinki
+    (47.38, 8.54),  # Zurich
+    (50.08, 14.44),  # Prague
+    (47.50, 19.04),  # Budapest
+    (52.23, 21.01),  # Warsaw
+    (44.82, 20.46),  # Belgrade
+    (41.00, 28.98),  # Istanbul
+    (37.98, 23.73),  # Athens
+    # North America
+    (40.71, -74.01),  # New York
+    (34.05, -118.24),  # Los Angeles
+    (41.88, -87.63),  # Chicago
+    (29.76, -95.37),  # Houston
+    (33.75, -84.39),  # Atlanta
+    (37.77, -122.42),  # San Francisco
+    (47.61, -122.33),  # Seattle
+    (25.77, -80.19),  # Miami
+    (45.50, -73.57),  # Montreal
+    (43.65, -79.38),  # Toronto
+    (49.25, -123.12),  # Vancouver
+    (19.43, -99.13),  # Mexico City
+    # Asia
+    (35.68, 139.69),  # Tokyo
+    (37.57, 126.98),  # Seoul
+    (39.91, 116.39),  # Beijing
+    (31.23, 121.47),  # Shanghai
+    (22.33, 114.17),  # Hong Kong
+    (22.57, 88.36),  # Kolkata
+    (19.08, 72.88),  # Mumbai
+    (28.64, 77.22),  # Delhi
+    (1.29, 103.85),  # Singapore
+    (13.76, 100.50),  # Bangkok
+    (21.03, 105.85),  # Hanoi
+    (3.14, 101.69),  # Kuala Lumpur
+    (41.30, 69.24),  # Tashkent
+    (43.24, 76.89),  # Almaty
+    (40.18, 44.51),  # Yerevan
+    (41.69, 44.83),  # Tbilisi
+    (40.41, 49.87),  # Baku
+    (51.18, 71.45),  # Nur-Sultan
+    (37.94, 58.38),  # Ashgabat
+    (38.56, 68.77),  # Dushanbe
+    (42.87, 74.59),  # Bishkek
+    # Middle East & Africa
+    (25.20, 55.27),  # Dubai
+    (24.69, 46.72),  # Riyadh
+    (30.04, 31.24),  # Cairo
+    (33.89, 35.50),  # Beirut
+    (31.77, 35.22),  # Tel Aviv
+    (-26.20, 28.04),  # Johannesburg
+    (-33.93, 18.42),  # Cape Town
+    (6.45, 3.47),  # Lagos
+    (-1.29, 36.82),  # Nairobi
+    # South America
+    (-23.55, -46.63),  # São Paulo
+    (-22.91, -43.17),  # Rio de Janeiro
+    (-34.61, -58.38),  # Buenos Aires
+    (-12.05, -77.04),  # Lima
+    (4.71, -74.07),  # Bogotá
+    (-0.20, -78.50),  # Quito
+    # Oceania
+    (-33.87, 151.21),  # Sydney
+    (-37.81, 144.96),  # Melbourne
+    (-27.47, 153.02),  # Brisbane
+    (-36.86, 174.77),  # Auckland
+]
+
+# IMPORTANT: Keep in sync with services/ml-service/app/services/budget_formula.py
+_TRAVEL_COST_BRACKETS: list[tuple[float, float]] = [
+    (500, 60),
+    (1500, 180),
+    (3000, 320),
+    (6000, 500),
+    (10000, 750),
+    (float("inf"), 1100),
+]
+_TRAVEL_SEASON_MULT: dict[int, float] = {6: 1.15, 7: 1.30, 8: 1.30, 12: 1.40, 1: 1.20}
+_EARTH_RADIUS_KM = 6371.0
+
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+
+
+def _estimate_travel_cost(
+    origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, people_count: int, travel_month: int
+) -> float:
+    distance_km = _haversine(origin_lat, origin_lng, dest_lat, dest_lng)
+    per_person = _TRAVEL_COST_BRACKETS[-1][1]
+    for threshold, cost in _TRAVEL_COST_BRACKETS:
+        if distance_km < threshold:
+            per_person = cost
+            break
+    season_mult = _TRAVEL_SEASON_MULT.get(travel_month, 1.0)
+    return round(per_person * people_count * season_mult, 2)
+
 
 CITIZENSHIP_CODES = [
     "RU",
@@ -201,6 +328,7 @@ def generate_budgets(
     destination_ids: list[uuid.UUID],
     costs_by_dest: dict[uuid.UUID, float],
     seasonality_by_dest: dict[uuid.UUID, dict[int, float]],
+    coords_by_dest: dict[uuid.UUID, tuple[float, float]],
     n: int = 100_000,
 ) -> None:
     logger.info("Generating %d trip budget actuals...", n)
@@ -256,7 +384,14 @@ def generate_budgets(
         activities_daily = _jitter(effective_daily * ACTIVITIES_COST_FRACTION, 0.15)
         activities_usd = round(activities_daily * people * duration, 2)
 
-        total = round(accommodation_usd + meals_usd + transport_usd + activities_usd, 2)
+        # Travel-to-destination: pick a random world origin city
+        origin_lat, origin_lng = random.choice(ORIGIN_CITIES)
+        dest_lat, dest_lng = coords_by_dest.get(dest_id, (0.0, 0.0))
+        travel_cost = _estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people, travel_month)
+        # Add ±15% jitter to simulate real fare variance
+        travel_cost = _jitter(travel_cost, 0.15) if travel_cost > 0 else 0.0
+
+        total = round(accommodation_usd + meals_usd + transport_usd + activities_usd + travel_cost, 2)
 
         batch.append(
             {
@@ -272,6 +407,9 @@ def generate_budgets(
                 "transport_usd": transport_usd,
                 "activities_usd": activities_usd,
                 "accommodation_tier": acc_tier,
+                "travel_to_destination_usd": travel_cost,
+                "origin_lat": origin_lat,
+                "origin_lng": origin_lng,
                 "data_source": "synthetic",
             }
         )
@@ -384,6 +522,13 @@ def main(table: str | None = None) -> None:
             seasonality_by_dest.setdefault(did, {})[int(row[1])] = float(row[2])
         logger.info("  %d destinations with seasonality.", len(seasonality_by_dest))
 
+        logger.info("Loading destination coordinates...")
+        coords_by_dest: dict[uuid.UUID, tuple[float, float]] = {
+            row[0]: (float(row[1]), float(row[2]))
+            for row in session.execute(select(Destination.id, Destination.lat, Destination.lng)).all()
+        }
+        logger.info("  %d destination coordinates loaded.", len(coords_by_dest))
+
         logger.info("Loading trajectory IDs...")
         trajectory_ids: list[uuid.UUID] = [row[0] for row in session.execute(select(Trajectory.id)).all()]
         logger.info("  %d trajectories loaded.", len(trajectory_ids))
@@ -392,7 +537,7 @@ def main(table: str | None = None) -> None:
             generate_preferences(session, destination_ids, safety_by_dest)
 
         if table is None or table == "budgets":
-            generate_budgets(session, destination_ids, costs_by_dest, seasonality_by_dest)
+            generate_budgets(session, destination_ids, costs_by_dest, seasonality_by_dest, coords_by_dest)
 
         if table is None or table == "feedback":
             generate_feedback(session, trajectory_ids)

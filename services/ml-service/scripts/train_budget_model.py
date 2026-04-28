@@ -37,7 +37,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.services.budget_formula import (  # noqa: E402
     ACC_TIER_ENCODING,
+    estimate_travel_cost,
     formula_baseline,
+    haversine,
     seasonal_mult_from_json,
 )
 from app.services.feature_matrix import build_destination_feature_matrix, get_feature_columns  # noqa: E402
@@ -73,11 +75,14 @@ def load_actuals(db: Session) -> pd.DataFrame:
         text(
             "SELECT tba.destination_id, tba.duration_days, tba.people_count, "
             "tba.travel_month, tba.accommodation_tier, tba.total_actual_usd, "
+            "tba.travel_to_destination_usd, tba.origin_lat, tba.origin_lng, "
             "dc.avg_meal_cost_usd, dc.avg_transport_cost_usd, dc.avg_hotel_cost_usd, "
             "dc.avg_daily_cost_usd, dc.cost_index, dc.hostel_usd, dc.budget_usd, "
-            "dc.mid_usd, dc.luxury_usd, dc.seasonal_multiplier "
+            "dc.mid_usd, dc.luxury_usd, dc.seasonal_multiplier, "
+            "d.lat AS dest_lat, d.lng AS dest_lng "
             "FROM trip_budget_actuals tba "
             "JOIN destination_costs dc ON dc.destination_id = tba.destination_id "
+            "JOIN destinations d ON d.id = tba.destination_id "
             "WHERE tba.total_actual_usd > 0"
         )
     ).fetchall()
@@ -101,6 +106,18 @@ def compute_baselines(df: pd.DataFrame) -> np.ndarray:
     for _, row in df.iterrows():
         row_: Any = row
         seasonal = seasonal_mult_from_json(row_.get("seasonal_multiplier"), int(float(row_["travel_month"])))
+        origin_lat = _nullable_float(row_.get("origin_lat"))
+        origin_lng = _nullable_float(row_.get("origin_lng"))
+        dest_lat = float(row_["dest_lat"]) if row_.get("dest_lat") is not None else 0.0
+        dest_lng = float(row_["dest_lng"]) if row_.get("dest_lng") is not None else 0.0
+        travel_cost = estimate_travel_cost(
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+            int(float(row_["people_count"])),
+            int(float(row_["travel_month"])),
+        )
         b = formula_baseline(
             avg_daily_cost=float(row_["avg_daily_cost_usd"]) if row_["avg_daily_cost_usd"] is not None else 80.0,
             hostel_usd=_nullable_float(row_.get("hostel_usd")),
@@ -111,13 +128,14 @@ def compute_baselines(df: pd.DataFrame) -> np.ndarray:
             duration_days=int(float(row_["duration_days"])),
             people_count=int(float(row_["people_count"])),
             accommodation_tier=str(row_["accommodation_tier"]),
+            travel_to_destination=travel_cost,
         )
         baselines.append(b)
     return np.array(baselines, dtype=np.float64)
 
 
 def build_features(df: pd.DataFrame, dest_df: pd.DataFrame, feature_cols: list[str]) -> np.ndarray:
-    """Build feature matrix: trip params (7) + destination features (39) = 46 dims."""
+    """Build feature matrix: trip params (9) + destination features (39) = 48 dims."""
     dest_idx = {str(row["destination_id"]): i for i, row in dest_df.iterrows()}
 
     X_rows = []
@@ -135,6 +153,20 @@ def build_features(df: pd.DataFrame, dest_df: pd.DataFrame, feature_cols: list[s
         season_col = f"season_{int(float(row_['travel_month'])):02d}"
         season_score = float(dest_df.iloc[dest_idx[dest_id_str]][season_col]) if dest_id_str in dest_idx else 0.65
 
+        origin_lat = _nullable_float(row_.get("origin_lat"))
+        origin_lng = _nullable_float(row_.get("origin_lng"))
+        dest_lat = float(row_["dest_lat"]) if row_.get("dest_lat") is not None else 0.0
+        dest_lng = float(row_["dest_lng"]) if row_.get("dest_lng") is not None else 0.0
+        travel_cost = estimate_travel_cost(
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+            int(float(row_["people_count"])),
+            int(float(row_["travel_month"])),
+        )
+        distance_km = haversine(origin_lat or 0.0, origin_lng or 0.0, dest_lat, dest_lng) if origin_lat else 0.0
+
         trip_vec = np.array(
             [
                 float(row_["duration_days"]),
@@ -144,6 +176,8 @@ def build_features(df: pd.DataFrame, dest_df: pd.DataFrame, feature_cols: list[s
                 float(ACC_TIER_ENCODING.get(str(row_["accommodation_tier"]), 2)),
                 seasonal,
                 season_score,
+                travel_cost,
+                math.log1p(distance_km),
             ],
             dtype=np.float32,
         )
@@ -283,7 +317,17 @@ def main(holdout: float = 0.20) -> None:
         actual_test = actuals[test_idx]
         baseline_test = baselines[test_idx]
 
-        feature_names = [f"trip_{i}" for i in range(7)] + feature_cols
+        feature_names = [
+            "trip_duration",
+            "trip_log_duration",
+            "trip_people",
+            "trip_month_norm",
+            "trip_acc_tier",
+            "trip_seasonal",
+            "trip_season_score",
+            "trip_travel_cost",
+            "trip_log_distance",
+        ] + feature_cols
         logger.info("Train: %d  Test: %d", len(X_train), len(X_test))
 
         logger.info("=== Phase 5: Train quantile models ===")
@@ -334,7 +378,7 @@ def main(holdout: float = 0.20) -> None:
             "model_p90": model_p90,
             "feature_cols": feature_cols,
             "feature_names": feature_names,
-            "n_trip_features": 7,
+            "n_trip_features": 9,
         }
         joblib.dump(artifact, model_path)
 

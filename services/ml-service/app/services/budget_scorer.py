@@ -21,7 +21,9 @@ from sqlalchemy.orm import Session
 
 from app.services.budget_formula import (
     ACC_TIER_ENCODING,
+    estimate_travel_cost,
     formula_baseline,
+    haversine,
     seasonal_mult_from_json,
 )
 
@@ -36,9 +38,14 @@ def _formula_baseline(
     people_count: int,
     travel_month: int,
     accommodation_tier: str,
+    origin_lat: float | None = None,
+    origin_lng: float | None = None,
+    dest_lat: float = 0.0,
+    dest_lng: float = 0.0,
 ) -> float:
     seasonal = seasonal_mult_from_json(costs.get("seasonal_multiplier"), travel_month)
     avg_daily = float(costs.get("avg_daily_cost_usd") or 80.0)
+    travel_cost = estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people_count, travel_month)
 
     def _nullable(key: str) -> float | None:
         v = costs.get(key)
@@ -60,6 +67,7 @@ def _formula_baseline(
         duration_days=duration_days,
         people_count=people_count,
         accommodation_tier=accommodation_tier,
+        travel_to_destination=travel_cost,
     )
 
 
@@ -70,6 +78,8 @@ def _build_trip_vec(
     accommodation_tier: str,
     seasonal: float,
     season_score: float,
+    travel_cost: float = 0.0,
+    distance_km: float = 0.0,
 ) -> np.ndarray:
     return np.array(
         [
@@ -80,6 +90,8 @@ def _build_trip_vec(
             float(ACC_TIER_ENCODING.get(accommodation_tier, 2)),
             seasonal,
             season_score,
+            travel_cost,
+            math.log1p(distance_km),
         ],
         dtype=np.float32,
     )
@@ -153,8 +165,25 @@ class BudgetScorer:
         people_count: int,
         travel_month: int,
         accommodation_tier: str,
+        origin_lat: float | None = None,
+        origin_lng: float | None = None,
     ) -> dict[str, float | str]:
-        baseline = _formula_baseline(costs, duration_days, people_count, travel_month, accommodation_tier)
+        dest_lat = float(dest_features.get("lat") or 0.0)
+        dest_lng = float(dest_features.get("lng") or 0.0)
+        travel_cost = estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people_count, travel_month)
+        distance_km = haversine(origin_lat or 0.0, origin_lng or 0.0, dest_lat, dest_lng) if origin_lat else 0.0
+
+        baseline = _formula_baseline(
+            costs,
+            duration_days,
+            people_count,
+            travel_month,
+            accommodation_tier,
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+        )
 
         if not self._ensure_loaded() or self._artifact is None:
             return {
@@ -163,6 +192,7 @@ class BudgetScorer:
                 "total_max": round(baseline * 1.35, 2),
                 "model_version": "formula-v1",
                 "baseline": round(baseline, 2),
+                "travel_to_destination": round(travel_cost, 2),
             }
 
         feature_cols: list[str] = self._artifact["feature_cols"]
@@ -174,7 +204,14 @@ class BudgetScorer:
         season_score = float(dest_features.get("seasonality", {}).get(travel_month, 0.65))
 
         trip_vec = _build_trip_vec(
-            duration_days, people_count, travel_month, accommodation_tier, seasonal, season_score
+            duration_days,
+            people_count,
+            travel_month,
+            accommodation_tier,
+            seasonal,
+            season_score,
+            travel_cost,
+            distance_km,
         )
         dest_vec = _build_dest_vec(dest_features, feature_cols, travel_month)
         X = np.concatenate([trip_vec, dest_vec]).reshape(1, -1).astype(np.float32)
@@ -197,6 +234,7 @@ class BudgetScorer:
             "total_max": round(p90, 2),
             "model_version": "budget-v1",
             "baseline": round(baseline, 2),
+            "travel_to_destination": round(travel_cost, 2),
         }
 
 

@@ -12,6 +12,20 @@ DEST_ID = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 def seed_costs(db: Session):
     db.execute(
         text("""
+            CREATE TABLE IF NOT EXISTS destinations (
+                id UUID PRIMARY KEY,
+                name TEXT,
+                country_code TEXT,
+                lat NUMERIC,
+                lng NUMERIC,
+                region TEXT,
+                subregion TEXT,
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        """)
+    )
+    db.execute(
+        text("""
             CREATE TABLE IF NOT EXISTS destination_costs (
                 destination_id UUID PRIMARY KEY,
                 avg_meal_cost_usd NUMERIC,
@@ -27,7 +41,22 @@ def seed_costs(db: Session):
             )
         """)
     )
+    db.execute(
+        text("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id UUID PRIMARY KEY,
+                onboarding_completed BOOLEAN DEFAULT FALSE,
+                origin_lat NUMERIC,
+                origin_lng NUMERIC
+            )
+        """)
+    )
     db.execute(text("DELETE FROM destination_costs WHERE destination_id = :did"), {"did": str(DEST_ID)})
+    db.execute(text("DELETE FROM destinations WHERE id = :did"), {"did": str(DEST_ID)})
+    db.execute(
+        text("INSERT INTO destinations (id, name, country_code, lat, lng) VALUES (:did, 'TestCity', 'XX', 48.0, 16.0)"),
+        {"did": str(DEST_ID)},
+    )
     db.execute(
         text("""
             INSERT INTO destination_costs (
@@ -44,6 +73,7 @@ def seed_costs(db: Session):
     db.commit()
     yield
     db.execute(text("DELETE FROM destination_costs WHERE destination_id = :did"), {"did": str(DEST_ID)})
+    db.execute(text("DELETE FROM destinations WHERE id = :did"), {"did": str(DEST_ID)})
     db.commit()
 
 
@@ -72,6 +102,7 @@ def test_budget_predict_basic(client: TestClient):
     assert "meals" in data["breakdown"]
     assert "transport" in data["breakdown"]
     assert "accommodation" in data["breakdown"]
+    assert "travel_to_destination" in data["breakdown"]
     assert data["model_version"] == "formula-v1"
 
 

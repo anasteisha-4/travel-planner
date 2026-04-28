@@ -22,6 +22,10 @@ def get_destination_features(
 
     id_param = dest_ids  # passed as uuid[] via psycopg2 after register_uuid()
 
+    coord_rows = db.execute(
+        text("SELECT id, lat, lng FROM destinations WHERE id = ANY(:ids)"),
+        {"ids": id_param},
+    )
     safety_rows = db.execute(
         text("SELECT destination_id, safety_score FROM destination_safety WHERE destination_id = ANY(:ids)"),
         {"ids": id_param},
@@ -99,6 +103,12 @@ def get_destination_features(
 
     def _key(raw) -> uuid.UUID:
         return uuid.UUID(str(raw))
+
+    for row in coord_rows:
+        k = _key(row.id)
+        if k in features:
+            features[k]["lat"] = float(row.lat)
+            features[k]["lng"] = float(row.lng)
 
     for row in safety_rows:
         k = _key(row.destination_id)

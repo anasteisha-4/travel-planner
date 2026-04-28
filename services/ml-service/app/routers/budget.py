@@ -8,8 +8,10 @@ from app.database import get_db
 from app.deps import get_current_user_id
 from app.exceptions import AppException
 from app.schemas.budget import BudgetPredictRequest, BudgetPredictResponse
+from app.services.budget_formula import estimate_travel_cost
 from app.services.budget_scorer import get_budget_scorer
 from app.services.data_loader import get_destination_features
+from app.services.profile_client import _get_profile_sync
 
 router = APIRouter()
 
@@ -55,6 +57,10 @@ def _formula_breakdown(
     people_count: int,
     travel_month: int,
     accommodation_tier: str,
+    origin_lat: float | None,
+    origin_lng: float | None,
+    dest_lat: float,
+    dest_lng: float,
 ) -> dict:
     """Compute per-category breakdown in USD. Mirrors budget_scorer._formula_baseline."""
     import json
@@ -75,12 +81,14 @@ def _formula_breakdown(
     meals_total = avg_daily * MEALS_DAILY_FRACTION[tier] * people_count * seasonal * duration_days
     transport_total = avg_daily * TRANSPORT_DAILY_FRACTION * people_count * duration_days
     activities_total = avg_daily * ACTIVITIES_DAILY_FRACTION * people_count * duration_days
+    travel_total = estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people_count, travel_month)
 
     return {
+        "accommodation": round(accommodation_total, 2),
         "meals": round(meals_total, 2),
         "transport": round(transport_total, 2),
-        "accommodation": round(accommodation_total, 2),
         "activities": round(activities_total, 2),
+        "travel_to_destination": round(travel_total, 2),
     }
 
 
@@ -101,6 +109,12 @@ def predict_budget(
         )
 
     dest_features = get_destination_features(db, [dest_id]).get(dest_id, {})
+    dest_lat = float(dest_features.get("lat") or 0.0)
+    dest_lng = float(dest_features.get("lng") or 0.0)
+
+    profile = _get_profile_sync(db, user_id)
+    origin_lat: float | None = profile.get("origin_lat")
+    origin_lng: float | None = profile.get("origin_lng")
 
     scorer = get_budget_scorer(db)
     if scorer is not None:
@@ -111,22 +125,25 @@ def predict_budget(
             people_count=request.people_count,
             travel_month=request.travel_month,
             accommodation_tier=request.accommodation_tier,
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
         )
     else:
-        # No trained model yet — use formula directly
-        import json
-
         from app.services.budget_scorer import _formula_baseline
 
-        sm = costs.get("seasonal_multiplier") or {}
-        if isinstance(sm, str):
-            sm = json.loads(sm)
         baseline = _formula_baseline(
             costs,
             request.duration_days,
             request.people_count,
             request.travel_month,
             request.accommodation_tier,
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+        )
+        travel_cost = estimate_travel_cost(
+            origin_lat, origin_lng, dest_lat, dest_lng, request.people_count, request.travel_month
         )
         result = {
             "total_min": round(baseline * 0.75, 2),
@@ -134,6 +151,7 @@ def predict_budget(
             "total_max": round(baseline * 1.35, 2),
             "model_version": "formula-v1",
             "baseline": round(baseline, 2),
+            "travel_to_destination": round(travel_cost, 2),
         }
 
     currency = request.currency.upper()
@@ -145,6 +163,10 @@ def predict_budget(
         request.people_count,
         request.travel_month,
         request.accommodation_tier,
+        origin_lat,
+        origin_lng,
+        dest_lat,
+        dest_lng,
     )
 
     return BudgetPredictResponse(
