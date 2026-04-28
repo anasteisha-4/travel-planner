@@ -1,0 +1,49 @@
+name: Retrain Ranker Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      regenerate_pairs:
+        description: 'Regenerate LTR training pairs before retraining'
+        type: boolean
+        default: true
+      n_profiles:
+        description: 'Number of user profiles for pair generation'
+        type: string
+        default: '3000'
+      dests_per_query:
+        description: 'Destinations per query for pair generation'
+        type: string
+        default: '150'
+
+jobs:
+  retrain:
+    name: Retrain Ranker Model
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrain via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/travel-planner
+
+            if [ "${{ github.event.inputs.regenerate_pairs }}" = "true" ]; then
+              echo ">>> Regenerating LTR training pairs..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/generate_ltr_pairs.py \
+                  --n-profiles ${{ github.event.inputs.n_profiles }} \
+                  --dests-per-query ${{ github.event.inputs.dests_per_query }}
+              echo ">>> LTR pairs done."
+            fi
+
+            echo ">>> Retraining ranker model..."
+            docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+              python scripts/train_ranker.py
+            echo ">>> Ranker retrain done."
+
+            docker compose -f docker-compose.prod.yml --env-file .env.prod up -d ml-service
+            echo ">>> ml-service restarted."
