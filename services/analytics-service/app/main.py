@@ -4,7 +4,9 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import events, features, feedback
+from app.routers import events, feedback
+from app.routers.features import internal_router
+from app.routers.features import router as features_router
 
 app = FastAPI(
     title="Travel Planner Analytics Service",
@@ -31,7 +33,8 @@ async def app_exception_handler(request, exc):
 
 app.include_router(events.router)
 app.include_router(feedback.router)
-app.include_router(features.router)
+app.include_router(features_router)
+app.include_router(internal_router)
 
 
 @app.get("/health")

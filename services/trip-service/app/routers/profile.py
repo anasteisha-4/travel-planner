@@ -1,16 +1,32 @@
+import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.services.currency_service import convert_amount, get_exchange_rates
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _trigger_features_rebuild(user_id: UUID) -> None:
+    url = f"{settings.ANALYTICS_SERVICE_URL}/api/v1/internal/users/{user_id}/features/rebuild"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url)
+    except Exception as exc:
+        logger.warning("features rebuild trigger failed for %s: %s", user_id, exc)
+
 
 DURATION_DAYS_MAP = {
     "weekend": 2,
@@ -117,4 +133,7 @@ async def complete_onboarding(
     profile.onboarding_step = 6
     db.commit()
     db.refresh(profile)
+
+    asyncio.ensure_future(_trigger_features_rebuild(user_id))
+
     return profile

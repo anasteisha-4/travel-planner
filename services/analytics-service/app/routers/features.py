@@ -12,6 +12,8 @@ from app.services.feature_builder import build_user_features
 
 router = APIRouter(prefix="/api/v1/users", tags=["features"])
 
+internal_router = APIRouter(prefix="/api/v1/internal", tags=["internal"])
+
 
 @router.get("/{user_id}/features", response_model=UserFeaturesResponse)
 async def get_user_features(
@@ -24,4 +26,13 @@ async def get_user_features(
         raise AppException(status_code=403, code="FORBIDDEN", message="Access denied")
 
     features = await build_user_features(user_id=user_id, db=db, auth_header=authorization)
+    return features
+
+
+@internal_router.post("/users/{user_id}/features/rebuild", response_model=UserFeaturesResponse)
+async def rebuild_user_features(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> UserFeatures:
+    features = await build_user_features(user_id=user_id, db=db, auth_header=None)
     return features

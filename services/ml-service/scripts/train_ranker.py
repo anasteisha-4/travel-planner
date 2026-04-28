@@ -96,13 +96,50 @@ BUDGET_TIER_RANGES = {
 }
 
 
+ACTIVITY_TYPES_DEST = [
+    "beach",
+    "culture",
+    "active",
+    "nature",
+    "food",
+    "shopping",
+    "nightlife",
+    "family",
+    "romance",
+    "business",
+]
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _distance_bucket(km: float) -> int:
+    """0=<500, 1=500-1500, 2=1500-3000, 3=3000-6000, 4=6000-10000, 5=>10000."""
+    if km < 500:
+        return 0
+    if km < 1500:
+        return 1
+    if km < 3000:
+        return 2
+    if km < 6000:
+        return 3
+    if km < 10000:
+        return 4
+    return 5
+
+
 def _build_pair_features(
     profile_snapshot: dict,
     dest_row: Any,
     feature_cols: list[str],
     travel_month: int,
 ) -> np.ndarray:
-    """28-dim user features + 39-dim destination features = 67 total.
+    """34-dim user features + 39-dim destination features = 73 total.
 
     User features are RAW preferences (not pre-computed fits) so LightGBM
     must learn the user × dest interaction itself. Pre-computing season_fit,
@@ -115,7 +152,9 @@ def _build_pair_features(
     Dims 17-19: climate, origin, month
     Dims 20-24: month cyclical + climate_any
     Dims 25-27: interaction features (crowd_fit, climate_match, origin_proximity)
-    Dims 28-66: destination feature vector (39 dims)
+    Dims 28-33: new features (origin_distance_km, distance_bucket, likes_activity_sim,
+                              likes_same_subregion, visa_compatible, language_match)
+    Dims 34-72: destination feature vector (39 dims)
     """
     # Budget encoding
     budget_tier = str(profile_snapshot.get("budget_tier", "mid"))
@@ -203,42 +242,97 @@ def _build_pair_features(
         climate_match = min(1.0, hits * 0.5)
 
     # Dim 27: origin_proximity — connectivity_score as accessibility proxy
-    # (haversine requires origin_lng which is now included in profile snapshot)
     if origin_lat is not None and origin_lng is not None:
         proximity = float(dest_row.get("connectivity_score", 0.5))
     else:
         proximity = 0.5  # unknown origin → neutral
 
+    # Dim 28: u_origin_distance_km — haversine distance from origin to destination
+    dest_lat = float(dest_row.get("lat", 0.0))
+    dest_lng = float(dest_row.get("lng", 0.0))
+    if origin_lat is not None and origin_lng is not None:
+        origin_distance_km = _haversine_km(origin_lat, origin_lng, dest_lat, dest_lng)
+    else:
+        origin_distance_km = 3000.0  # neutral default (medium distance)
+
+    # Dim 29: u_origin_distance_bucket (0-5 ordinal)
+    origin_distance_bucket = float(_distance_bucket(origin_distance_km))
+
+    # Dim 30: u_likes_activity_sim — cosine similarity between dest activity vector
+    #         and mean activity vector of liked destinations
+    liked_dest_ids: list = profile_snapshot.get("liked_destination_ids") or []
+    dest_act_vec = np.array([float(dest_row.get(f"act_{a}", 0.0)) for a in ACTIVITY_TYPES_DEST], dtype=np.float64)
+    likes_activity_sim = 0.0  # default: no liked destinations
+    liked_act_vec = np.array(profile_snapshot.get("liked_activity_vector") or [], dtype=np.float64)
+    if liked_dest_ids and liked_act_vec.size == len(ACTIVITY_TYPES_DEST):
+        norm_u = np.linalg.norm(liked_act_vec)
+        norm_d = np.linalg.norm(dest_act_vec)
+        if norm_u > 0 and norm_d > 0:
+            likes_activity_sim = float(np.dot(liked_act_vec, dest_act_vec) / (norm_u * norm_d))
+
+    # Dim 31: u_likes_same_subregion — binary: dest subregion matches any liked dest subregion
+    likes_same_subregion = 0.0
+    liked_subregions: list = profile_snapshot.get("liked_subregions") or []
+    dest_subregion = dest_row.get("subregion", "")
+    if liked_dest_ids and dest_subregion and dest_subregion in liked_subregions:
+        likes_same_subregion = 1.0
+
+    # Dim 32: u_visa_compatible — binary: dest visa_score passes user visa_tolerance threshold
+    dest_visa_score = float(dest_row.get("visa_score_ru", 0.5))
+    visa_threshold_val = {"visa_free_only": 0.80, "evisa_ok": 0.55, "any_visa": 0.0}.get(
+        str(profile_snapshot.get("visa_tolerance", "any_visa")), 0.0
+    )
+    visa_compatible = float(dest_visa_score >= visa_threshold_val)
+
+    # Dim 33: u_language_match — max of russian/english speaking score based on language_comfort
+    language_comfort: list[str] = profile_snapshot.get("language_comfort") or ["any"]
+    ru_score = float(dest_row.get("russian_speaking_score", 0.1))
+    en_score = float(dest_row.get("english_speaking_score", 0.5))
+    if "any" in language_comfort or ("ru" in language_comfort and "en" in language_comfort):
+        language_match = max(ru_score, en_score)
+    elif "ru" in language_comfort:
+        language_match = ru_score
+    elif "en" in language_comfort:
+        language_match = en_score
+    else:
+        language_match = max(ru_score, en_score)
+
     user_vec = np.array(
         [
-            b_low,  # 0  budget band low (tier)
-            b_high,  # 1  budget band high (tier)
-            budget_min_norm,  # 2  budget_min_usd normalised
-            budget_max_norm,  # 3  budget_max_usd normalised
-            cost_mid,  # 4  budget center (tier)
-            budget_fit,  # 5  cost_index vs budget tier
-            trip_budget_fit,  # 6  trip_cost (daily × days) vs budget range ← KEY interaction
-            float(duration_days) / 45.0,  # 7  trip duration normalised
-            act_match_norm,  # 8  weighted activity match (all 5 prefs)
-            top3_beach,  # 9  wants beach (top-3 pref)
-            top3_culture,  # 10 wants culture (top-3 pref)
-            top3_active,  # 11 wants active/adventure (top-3 pref)
-            top3_nature,  # 12 wants nature (top-3 pref)
-            risk_norm,  # 13 risk tolerance normalised
-            is_safety_sensitive,  # 14 risk <= 2
-            visa_strictness,  # 15 visa strictness (0=any, 0.5=evisa, 1.0=free_only)
-            crowd_pref,  # 16 crowd preference normalised
-            wants_coastal,  # 17 prefers coastal/warm climate
-            wants_mountain,  # 18 prefers cold/snow/mountain
-            has_origin,  # 19 has origin city
-            n_prefs,  # 20 number of activity preferences
-            month_norm,  # 21 travel month (linear)
-            month_sin,  # 22 travel month (sine — cyclical)
-            month_cos,  # 23 travel month (cosine — cyclical)
-            climate_any,  # 24 climate = any (flexible traveller)
-            crowd_fit,  # 25 crowd_index vs crowd_preference (interaction)
-            climate_match,  # 26 climate_prefs × is_coastal/has_mountains (interaction)
-            proximity,  # 27 origin → dest accessibility via connectivity_score
+            b_low,  # 0   budget band low (tier)
+            b_high,  # 1   budget band high (tier)
+            budget_min_norm,  # 2   budget_min_usd normalised
+            budget_max_norm,  # 3   budget_max_usd normalised
+            cost_mid,  # 4   budget center (tier)
+            budget_fit,  # 5   cost_index vs budget tier
+            trip_budget_fit,  # 6   trip_cost (daily × days) vs budget range
+            float(duration_days) / 45.0,  # 7   trip duration normalised
+            act_match_norm,  # 8   weighted activity match (all 5 prefs)
+            top3_beach,  # 9   wants beach (top-3 pref)
+            top3_culture,  # 10  wants culture (top-3 pref)
+            top3_active,  # 11  wants active/adventure (top-3 pref)
+            top3_nature,  # 12  wants nature (top-3 pref)
+            risk_norm,  # 13  risk tolerance normalised
+            is_safety_sensitive,  # 14  risk <= 2
+            visa_strictness,  # 15  visa strictness (0=any, 0.5=evisa, 1.0=free_only)
+            crowd_pref,  # 16  crowd preference normalised
+            wants_coastal,  # 17  prefers coastal/warm climate
+            wants_mountain,  # 18  prefers cold/snow/mountain
+            has_origin,  # 19  has origin city
+            n_prefs,  # 20  number of activity preferences
+            month_norm,  # 21  travel month (linear)
+            month_sin,  # 22  travel month (sine — cyclical)
+            month_cos,  # 23  travel month (cosine — cyclical)
+            climate_any,  # 24  climate = any (flexible traveller)
+            crowd_fit,  # 25  crowd_index vs crowd_preference (interaction)
+            climate_match,  # 26  climate_prefs × is_coastal/has_mountains (interaction)
+            proximity,  # 27  origin → dest accessibility via connectivity_score
+            origin_distance_km / 10000.0,  # 28  origin distance normalised (10k km max)
+            origin_distance_bucket / 5.0,  # 29  distance bucket normalised (0-5 → 0-1)
+            likes_activity_sim,  # 30  cosine sim with liked dest activity profile
+            likes_same_subregion,  # 31  dest subregion in liked subregions
+            visa_compatible,  # 32  visa passes user threshold (binary)
+            language_match,  # 33  max lang score based on language_comfort
         ],
         dtype=np.float32,
     )
@@ -451,7 +545,7 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
             "u_budget_center",
             "u_budget_fit_tier",
             "u_trip_budget_fit",
-            "u_duration_norm",
+            "u_typical_duration_days",
             "u_act_match",
             "u_top3_beach",
             "u_top3_culture",
@@ -472,6 +566,12 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
             "u_crowd_fit",
             "u_climate_match",
             "u_origin_proximity",
+            "u_origin_distance_km",
+            "u_origin_distance_bucket",
+            "u_likes_activity_sim",
+            "u_likes_same_subregion",
+            "u_visa_compatible",
+            "u_language_match",
         ] + feature_cols
         train_ds.set_feature_name(feature_names)
         val_ds.set_feature_name(feature_names)
@@ -553,7 +653,7 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
             "model": model,
             "feature_cols": feature_cols,
             "feature_names": feature_names,
-            "n_user_features": 28,
+            "n_user_features": 34,
             "metrics": metrics,
         }
         buf = io.BytesIO()

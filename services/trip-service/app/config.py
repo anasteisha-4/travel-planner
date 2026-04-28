@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     CORS_ORIGINS: str
     FXR_API_KEY: str = ""
+    ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
 
     class Config:
         env_file = find_env_file()

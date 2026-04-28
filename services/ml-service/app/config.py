@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     TRIP_SERVICE_URL: str = "http://trip-service:8000"
     DATA_SERVICE_URL: str = "http://data-service:8000"
     DATA_SERVICE_SECRET: str = ""
+    ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
 
     class Config:
         env_file = find_env_file()

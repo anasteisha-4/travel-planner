@@ -19,6 +19,19 @@ from sqlalchemy.orm import Session
 from app.schemas.recommendation import ScoredDestination
 from app.services.content_scorer import ContentScorer, _explanation_tags
 
+ACTIVITY_TYPES_DEST = [
+    "beach",
+    "culture",
+    "active",
+    "nature",
+    "food",
+    "shopping",
+    "nightlife",
+    "family",
+    "romance",
+    "business",
+]
+
 logger = logging.getLogger(__name__)
 
 _content_scorer = ContentScorer()
@@ -60,17 +73,76 @@ def _infer_budget_tier(budget_min_usd: float | None, budget_max_usd: float | Non
     return "luxury"
 
 
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _distance_bucket(km: float) -> int:
+    if km < 500:
+        return 0
+    if km < 1500:
+        return 1
+    if km < 3000:
+        return 2
+    if km < 6000:
+        return 3
+    if km < 10000:
+        return 4
+    return 5
+
+
+def _activity_vector(activities: dict[str, float]) -> np.ndarray:
+    return np.array([float(activities.get(a, 0.0)) for a in ACTIVITY_TYPES_DEST], dtype=np.float64)
+
+
+def _enrich_liked_context(
+    profile: dict,
+    destinations: list[dict],
+    dest_features: dict[uuid.UUID, dict],
+) -> dict:
+    liked_dest_ids = profile.get("liked_destination_ids") or []
+    if not liked_dest_ids:
+        return profile
+
+    liked_id_set = {str(x) for x in liked_dest_ids}
+    liked_vecs: list[np.ndarray] = []
+    liked_subregions: list[str] = []
+
+    for dest in destinations:
+        dest_id = uuid.UUID(str(dest["id"]))
+        if str(dest_id) not in liked_id_set:
+            continue
+        f = dest_features.get(dest_id, {})
+        liked_vecs.append(_activity_vector(f.get("activities", {})))
+        subregion = f.get("subregion") or dest.get("subregion")
+        if subregion:
+            liked_subregions.append(str(subregion))
+
+    if not liked_vecs:
+        return profile
+
+    enriched = dict(profile)
+    enriched["liked_activity_vector"] = np.mean(liked_vecs, axis=0).tolist()
+    enriched["liked_subregions"] = sorted(set(liked_subregions))
+    return enriched
+
+
 def _build_user_vec(
     profile: dict,
     dest_features: dict[str, Any],
     feature_cols: list[str],
     travel_month: int,
 ) -> np.ndarray:
-    """28-dim user-side features — must match train_ranker._build_pair_features exactly.
+    """34-dim user-side features — must match train_ranker._build_pair_features exactly.
 
     Uses RAW preferences (not pre-computed fits) so LightGBM learns interactions
     from data rather than being given the answer. See train_ranker.py for rationale.
-    Dims 25-27 are interaction features added in Phase 7.4b.
+    Dims 25-27: interaction features (crowd_fit, climate_match, origin_proximity)
+    Dims 28-33: origin distance, likes similarity, visa/language compatibility
     """
     budget_tier = _infer_budget_tier(
         profile.get("budget_min_usd"),
@@ -163,6 +235,54 @@ def _build_user_vec(
     else:
         proximity = 0.5  # unknown origin → neutral
 
+    # Dim 28: u_origin_distance_km — haversine distance from origin to destination
+    dest_lat = float(dest_features.get("lat", 0.0))
+    dest_lng = float(dest_features.get("lng", 0.0))
+    if origin_lat is not None and origin_lng is not None:
+        origin_distance_km = _haversine_km(origin_lat, origin_lng, dest_lat, dest_lng)
+    else:
+        origin_distance_km = 3000.0
+
+    # Dim 29: u_origin_distance_bucket (0-5 ordinal)
+    origin_distance_bucket = float(_distance_bucket(origin_distance_km))
+
+    # Dim 30: u_likes_activity_sim — cosine similarity of user pref vector with dest activity vector
+    liked_dest_ids: list = profile.get("liked_destination_ids") or []
+    dest_act_vec = _activity_vector(dest_features.get("activities", {}))
+    likes_activity_sim = 0.0
+    liked_act_vec = np.array(profile.get("liked_activity_vector") or [], dtype=np.float64)
+    if liked_dest_ids and liked_act_vec.size == len(ACTIVITY_TYPES_DEST):
+        norm_u = np.linalg.norm(liked_act_vec)
+        norm_d = np.linalg.norm(dest_act_vec)
+        if norm_u > 0 and norm_d > 0:
+            likes_activity_sim = float(np.dot(liked_act_vec, dest_act_vec) / (norm_u * norm_d))
+
+    # Dim 31: u_likes_same_subregion — dest subregion matches any liked dest subregion
+    likes_same_subregion = 0.0
+    if liked_dest_ids:
+        dest_subregion = dest_features.get("subregion", "")
+        liked_subregions: list = profile.get("liked_subregions") or []
+        if dest_subregion and liked_subregions and dest_subregion in liked_subregions:
+            likes_same_subregion = 1.0
+
+    # Dim 32: u_visa_compatible — binary: dest visa_score passes user visa_tolerance threshold
+    dest_visa_score = float(dest_features.get("visa_score", 0.5))
+    visa_threshold_val = {"visa_free_only": 0.80, "evisa_ok": 0.55, "any_visa": 0.0}.get(visa_tolerance, 0.0)
+    visa_compatible = float(dest_visa_score >= visa_threshold_val)
+
+    # Dim 33: u_language_match — max lang score based on language_comfort
+    language_comfort: list[str] = profile.get("language_comfort") or ["any"]
+    ru_score = float(dest_features.get("russian_speaking_score", 0.1))
+    en_score = float(dest_features.get("english_speaking_score", 0.5))
+    if "any" in language_comfort or ("ru" in language_comfort and "en" in language_comfort):
+        language_match = max(ru_score, en_score)
+    elif "ru" in language_comfort:
+        language_match = ru_score
+    elif "en" in language_comfort:
+        language_match = en_score
+    else:
+        language_match = max(ru_score, en_score)
+
     return np.array(
         [
             b_low,
@@ -193,6 +313,12 @@ def _build_user_vec(
             crowd_fit,
             climate_match,
             proximity,
+            origin_distance_km / 10000.0,
+            origin_distance_bucket / 5.0,
+            likes_activity_sim,
+            likes_same_subregion,
+            visa_compatible,
+            language_match,
         ],
         dtype=np.float32,
     )
@@ -277,6 +403,7 @@ class LTRScorer:
 
         model = self._artifact["model"]
         feature_cols: list[str] = self._artifact["feature_cols"]
+        ranker_profile = _enrich_liked_context(user_profile, destinations, dest_features)
 
         visa_tolerance = user_profile.get("visa_tolerance") or "any_visa"
         visa_threshold = {"visa_free_only": 0.80, "evisa_ok": 0.55, "any_visa": 0.0}.get(visa_tolerance, 0.0)
@@ -298,7 +425,7 @@ class LTRScorer:
             if visa_score < visa_threshold:
                 continue
 
-            user_vec = _build_user_vec(user_profile, f, feature_cols, travel_month)
+            user_vec = _build_user_vec(ranker_profile, f, feature_cols, travel_month)
             dest_vec = _build_dest_vec(f, feature_cols)
             X_rows.append(np.concatenate([user_vec, dest_vec]))
             candidates.append((dest, f, visa_score))
