@@ -130,8 +130,92 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd ~/travel-planner
+
             git pull origin main
+
+            # Detect which files changed in this push
+            CHANGED=$(git diff HEAD~1 --name-only 2>/dev/null || git diff HEAD^ --name-only 2>/dev/null || echo "")
+
+            # Helper: check if any file matching a pattern changed
+            changed() { echo "$CHANGED" | grep -qE "$1"; }
+
+            echo "=== Changed files ==="
+            echo "$CHANGED"
+            echo "===================="
+
+            # Deploy updated services
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps \
               auth-service trip-service data-service ml-service analytics-service frontend
+
+            # --- Alembic migrations ---
+            # Trigger: any new migration file in any service
+            if changed '^services/.*/migrations/versions/'; then
+              echo ">>> New migrations detected — applying..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm auth-service alembic upgrade head
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm trip-service alembic upgrade head
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm data-service alembic upgrade head
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service alembic upgrade head
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm analytics-service alembic upgrade head
+              echo ">>> Migrations done."
+            else
+              echo ">>> No new migrations."
+            fi
+
+            # --- Synthetic budget data regeneration ---
+            # Trigger: generator script changed, OR budget_formula.py changed
+            # (formula constants are duplicated in generate_synthetic_data.py — must stay in sync)
+            if changed '^services/data-service/etl/scripts/generate_synthetic_data\.py|^services/ml-service/app/services/budget_formula\.py'; then
+              echo ">>> Synthetic data generator changed — regenerating budget actuals..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
+                psql -U postgres -d travel_planner \
+                -c "DELETE FROM trip_budget_actuals WHERE data_source = 'synthetic';"
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm data-service \
+                python -m etl.scripts.generate_synthetic_data --table budgets
+              echo ">>> Synthetic data done."
+              BUDGET_CHANGED=1
+            else
+              BUDGET_CHANGED=0
+            fi
+
+            # --- Budget model retrain ---
+            # Trigger: anything that affects what the model learns:
+            #   - train_budget_model.py     — training logic, features, hyperparams
+            #   - budget_formula.py         — baseline formula (= labels for residual learning)
+            #   - feature_matrix.py         — destination feature computation used in training
+            # NOT triggered by budget_scorer.py — that's inference only, model artifact unchanged
+            if [ "$BUDGET_CHANGED" = "1" ] || \
+               changed '^services/ml-service/scripts/train_budget_model\.py|^services/ml-service/app/services/budget_formula\.py|^services/ml-service/app/services/feature_matrix\.py'; then
+              echo ">>> Budget model code changed — retraining..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/train_budget_model.py
+              echo ">>> Budget retrain done."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d ml-service
+            else
+              echo ">>> No budget retrain needed."
+            fi
+
+            # --- Ranker (LTR) retrain ---
+            # Trigger: anything that affects training pairs or model training:
+            #   - generate_ltr_pairs.py   — pair generation logic, label computation
+            #   - train_ranker.py         — training logic, user feature vector, hyperparams
+            #   - content_scorer.py       — used by generate_ltr_pairs.py for destination sampling
+            #                              AND by ranker_scorer.py for fallback/label scoring
+            #   - feature_matrix.py       — destination features used both in pair gen and training
+            #   - data_loader.py          — destination features used in generate_ltr_pairs.py
+            # NOT triggered by ranker_scorer.py alone — that's inference code, not training
+            if changed '^services/ml-service/scripts/generate_ltr_pairs\.py|^services/ml-service/scripts/train_ranker\.py|^services/ml-service/app/services/content_scorer\.py|^services/ml-service/app/services/feature_matrix\.py|^services/ml-service/app/services/data_loader\.py'; then
+              echo ">>> Ranker model code changed — regenerating LTR pairs and retraining..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/generate_ltr_pairs.py --n-profiles 3000 --dests-per-query 150
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/train_ranker.py
+              echo ">>> Ranker retrain done."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d ml-service
+            else
+              echo ">>> No ranker retrain needed."
+            fi
+
+            echo "=== Deploy complete ==="
             docker compose -f docker-compose.prod.yml ps
