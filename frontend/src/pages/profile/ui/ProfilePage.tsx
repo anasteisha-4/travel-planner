@@ -156,12 +156,14 @@ export const ProfilePage = () => {
         </div>
       </PageContent>
 
-      <ProfileEditWizard
-        open={isEditing}
-        onOpenChange={setIsEditing}
-        initialData={profile ?? {}}
-        onSaved={handleSaved}
-      />
+      {isEditing && profile && (
+        <ProfileEditWizard
+          open={isEditing}
+          onOpenChange={setIsEditing}
+          initialData={profile}
+          onSaved={handleSaved}
+        />
+      )}
 
       <ConfirmDrawer
         open={isDeleteDrawerOpen}

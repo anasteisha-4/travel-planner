@@ -192,7 +192,7 @@ export const RecommendationCard = ({ destination, onClick, className }: Recommen
         {/* Right: daily cost */}
         {destination.avg_daily_cost_usd !== null && (
           <span style={{ fontSize: 12, fontWeight: 600, color: '#A8A29E', flexShrink: 0 }}>
-            ~${Math.round(destination.avg_daily_cost_usd)}/день
+            ~${Math.round(destination.avg_daily_cost_usd)}/день · USD
           </span>
         )}
       </div>

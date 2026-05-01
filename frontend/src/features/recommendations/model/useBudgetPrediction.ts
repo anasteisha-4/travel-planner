@@ -10,6 +10,8 @@ export const useBudgetPrediction = (params: BudgetPredictRequest | null) => {
       params?.duration_days,
       params?.people_count,
       params?.travel_month,
+      params?.accommodation_tier ?? null,
+      params?.currency ?? null,
     ],
     queryFn: () => recommendationsApi.getBudgetPrediction(params!),
     enabled: params !== null,

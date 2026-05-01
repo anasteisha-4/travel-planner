@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useBudgetPrediction } from '../model/useBudgetPrediction';
-import type { ScoreBreakdown, ScoredDestination } from '../model/types';
+import type { BudgetPredictResponse, ScoreBreakdown, ScoredDestination } from '../model/types';
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', RUB: '₽', GBP: '£', TRY: '₺',
@@ -71,6 +71,27 @@ const TYPICAL_DURATION_MAP: Record<string, number> = {
   standard: 7,
   long: 14,
   extended: 21,
+};
+
+const formatDateParam = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getSuggestedTripDates = (month: number, durationDays: number) => {
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const year = month < currentMonth ? today.getFullYear() + 1 : today.getFullYear();
+  const start = month === currentMonth ? today : new Date(year, month - 1, 1);
+  const end = new Date(start);
+  end.setDate(start.getDate() + durationDays - 1);
+
+  return {
+    startDate: formatDateParam(start),
+    endDate: formatDateParam(end),
+  };
 };
 
 const ScoreRow = ({
@@ -269,26 +290,18 @@ const TripParamsControls = ({
 
 const BudgetBlock = ({
   destination,
-  month,
   tripParams,
+  currency,
+  data,
+  isLoading,
 }: {
   destination: ScoredDestination;
-  month: number;
   tripParams: TripParams;
+  currency: string;
+  data?: BudgetPredictResponse;
+  isLoading: boolean;
 }) => {
-  const qc = useQueryClient();
-  const profileCached = qc.getQueryData<UserProfileV2>(['profile']);
-  const currency = profileCached?.preferred_currency ?? 'RUB';
   const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
-
-  const { data, isLoading } = useBudgetPrediction({
-    destination_id: destination.destination_id,
-    duration_days: tripParams.duration_days,
-    people_count: tripParams.people_count,
-    travel_month: month,
-    accommodation_tier: tripParams.accommodation_tier,
-    currency,
-  });
 
   if (isLoading) {
     return (
@@ -424,13 +437,39 @@ export const DestinationDetailSheet = ({
     people_count: 2,
     accommodation_tier: defaultTier,
   });
+  const currency = profileCached?.preferred_currency ?? 'RUB';
+  const budgetPredictionParams = destination
+    ? {
+        destination_id: destination.destination_id,
+        duration_days: tripParams.duration_days,
+        people_count: tripParams.people_count,
+        travel_month: month,
+        accommodation_tier: tripParams.accommodation_tier,
+        currency,
+      }
+    : null;
+  const { data: budgetPrediction, isLoading: isBudgetLoading } =
+    useBudgetPrediction(budgetPredictionParams);
 
   const handleCreateTrip = () => {
     if (!destination) return;
+    const dates = getSuggestedTripDates(month, tripParams.duration_days);
+    const params = new URLSearchParams({
+      destination: destination.name,
+      destination_id: destination.destination_id,
+      people_count: String(tripParams.people_count),
+      currency,
+      start_date: dates.startDate,
+      end_date: dates.endDate,
+    });
+    if (profileCached?.origin_city_name) {
+      params.set('departure_city', profileCached.origin_city_name);
+    }
+    if (budgetPrediction?.total_mid) {
+      params.set('budget', String(Math.round(budgetPrediction.total_mid)));
+    }
     onClose();
-    navigate(
-      `/trips/new?destination=${encodeURIComponent(destination.name)}&destination_id=${destination.destination_id}`
-    );
+    navigate(`/trips/new?${params.toString()}`);
   };
 
   if (!destination) return null;
@@ -568,7 +607,13 @@ export const DestinationDetailSheet = ({
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <BudgetBlock destination={destination} month={month} tripParams={tripParams} />
+              <BudgetBlock
+                destination={destination}
+                tripParams={tripParams}
+                currency={currency}
+                data={budgetPrediction}
+                isLoading={isBudgetLoading}
+              />
             </div>
           </div>
 

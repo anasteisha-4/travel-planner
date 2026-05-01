@@ -16,15 +16,17 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { Loader2, MapPin, Minus, Plus } from 'lucide-react';
-import { useTripForm } from '../model/useTripForm';
+import { type TripFormInitialValues, useTripForm } from '../model/useTripForm';
 
 export const TripForm = ({
   existingTrip,
+  initialValues,
   onSuccess,
   onCancel,
   asSheet,
 }: {
   existingTrip?: Trip;
+  initialValues?: TripFormInitialValues;
   onSuccess: (trip: Trip) => void;
   onCancel?: () => void;
   asSheet?: boolean;
@@ -55,7 +57,7 @@ export const TripForm = ({
     todayStr,
     handleCreate,
     handleUpdate,
-  } = useTripForm(existingTrip);
+  } = useTripForm(existingTrip, initialValues);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
 
@@ -140,7 +142,6 @@ export const TripForm = ({
           <FieldLabel>Начало</FieldLabel>
           <DateInput
             value={startDate}
-            min={todayStr}
             placeholder="Дата"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               handleStartDateChange(e.target.value);

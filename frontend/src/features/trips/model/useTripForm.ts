@@ -9,16 +9,29 @@ import { useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
 
-export const useTripForm = (existingTrip?: Trip) => {
+export type TripFormInitialValues = Partial<
+  Pick<
+    TripCreate,
+    'destination' | 'start_date' | 'end_date' | 'budget' | 'currency' | 'people_count' | 'departure_city' | 'notes'
+  >
+>;
+
+export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitialValues) => {
   const queryClient = useQueryClient();
-  const [destination, setDestination] = useState(existingTrip?.destination ?? '');
-  const [startDate, setStartDate] = useState(existingTrip?.start_date ?? '');
-  const [endDate, setEndDate] = useState(existingTrip?.end_date ?? '');
-  const [currency, setCurrency] = useState(existingTrip?.currency ?? 'RUB');
-  const [budget, setBudget] = useState<number>(existingTrip?.budget ?? 0);
-  const [departureCity, setDepartureCity] = useState(existingTrip?.departure_city ?? '');
-  const [peopleCount, setPeopleCount] = useState(existingTrip?.people_count ?? 1);
-  const [notes, setNotes] = useState(existingTrip?.notes ?? '');
+  const [destination, setDestination] = useState(
+    existingTrip?.destination ?? initialValues?.destination ?? ''
+  );
+  const [startDate, setStartDate] = useState(existingTrip?.start_date ?? initialValues?.start_date ?? '');
+  const [endDate, setEndDate] = useState(existingTrip?.end_date ?? initialValues?.end_date ?? '');
+  const [currency, setCurrency] = useState(existingTrip?.currency ?? initialValues?.currency ?? 'RUB');
+  const [budget, setBudget] = useState<number>(existingTrip?.budget ?? initialValues?.budget ?? 0);
+  const [departureCity, setDepartureCity] = useState(
+    existingTrip?.departure_city ?? initialValues?.departure_city ?? ''
+  );
+  const [peopleCount, setPeopleCount] = useState(
+    existingTrip?.people_count ?? initialValues?.people_count ?? 1
+  );
+  const [notes, setNotes] = useState(existingTrip?.notes ?? initialValues?.notes ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -78,8 +91,6 @@ export const useTripForm = (existingTrip?: Trip) => {
     }
     if (!startDate) {
       fieldErrors.start_date = 'Выберите дату начала';
-    } else if (startDate < todayStr) {
-      fieldErrors.start_date = 'Дата начала уже прошла';
     }
     if (!endDate) {
       fieldErrors.end_date = 'Выберите дату окончания';

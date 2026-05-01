@@ -5,8 +5,10 @@ import {
   useRecommendations,
 } from '@/features/recommendations';
 import type { ScoredDestination } from '@/features/recommendations';
+import { profileApi } from '@/features/profile';
 import { sendEvent } from '@/shared/api';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 const SkeletonCard = () => (
@@ -45,6 +47,11 @@ export const RecommendationsPage = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const { data, isLoading, isError, refetch } = useRecommendations({ month, region });
+  useQuery({
+    queryKey: ['profile'],
+    queryFn: profileApi.getProfile,
+    retry: 1,
+  });
 
   useEffect(() => {
     if (data?.results && data.results.length > 0) {
@@ -56,7 +63,7 @@ export const RecommendationsPage = () => {
         region: region ?? null,
       });
     }
-  }, [data?.recommendation_id]);
+  }, [data?.model_version, data?.recommendation_id, data?.results, month, region]);
 
   const handleSelect = (dest: ScoredDestination) => {
     sendEvent('recommendation_clicked', { destination_id: dest.destination_id, score: dest.score, month }, 'destination', dest.destination_id);

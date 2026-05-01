@@ -31,13 +31,7 @@ export const StepRiskVisaLang = ({
 }: Props) => {
   const risk = riskTolerance ?? 3;
 
-  const toggleLang = (id: LanguageOption) => {
-    if (languageComfort.includes(id)) {
-      onLanguageChange(languageComfort.filter((l) => l !== id));
-    } else {
-      onLanguageChange([...languageComfort, id]);
-    }
-  };
+  const selectedLanguage = languageComfort[0] ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,8 +108,8 @@ export const StepRiskVisaLang = ({
           {LANGUAGE_OPTIONS.map((opt) => (
             <PillChip
               key={opt.id}
-              selected={languageComfort.includes(opt.id)}
-              onClick={() => toggleLang(opt.id)}
+              selected={selectedLanguage === opt.id}
+              onClick={() => onLanguageChange([opt.id])}
             >
               {opt.label}
             </PillChip>

@@ -149,7 +149,6 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
 
   const handleOpen = (v: boolean) => {
     if (!v) setStep(1);
-    if (v) setState(profileToEditState(initialData));
     onOpenChange(v);
   };
 

@@ -32,10 +32,17 @@ export const StepClimateNotes = ({
   const crowd = crowdPreference ?? 3;
 
   const toggleClimate = (id: ClimatePref) => {
+    if (id === 'any') {
+      onClimateChange(climatePreferences.includes('any') ? [] : ['any']);
+      return;
+    }
+
+    const selectedWithoutAny = climatePreferences.filter((c) => c !== 'any');
+
     if (climatePreferences.includes(id)) {
-      onClimateChange(climatePreferences.filter((c) => c !== id));
-    } else if (climatePreferences.length < 3) {
-      onClimateChange([...climatePreferences, id]);
+      onClimateChange(selectedWithoutAny.filter((c) => c !== id));
+    } else if (selectedWithoutAny.length < 3) {
+      onClimateChange([...selectedWithoutAny, id]);
     }
   };
 
@@ -69,7 +76,12 @@ export const StepClimateNotes = ({
         <div className="grid grid-cols-2 gap-2">
           {CLIMATE_OPTIONS.map((opt) => {
             const isSelected = climatePreferences.includes(opt.id);
-            const isDisabled = !isSelected && climatePreferences.length >= 3;
+            const selectedSpecificCount = climatePreferences.filter((id) => id !== 'any').length;
+            const isDisabled =
+              opt.id !== 'any' &&
+              !isSelected &&
+              !climatePreferences.includes('any') &&
+              selectedSpecificCount >= 3;
             return (
               <button
                 key={opt.id}
