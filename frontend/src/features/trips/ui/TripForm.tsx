@@ -1,3 +1,4 @@
+import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
 import type { Trip } from '@/entities/trip';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import { cn } from '@/shared/lib/utils';
@@ -15,8 +16,134 @@ import {
   Slider,
   Textarea,
 } from '@/shared/ui';
-import { Loader2, MapPin, Minus, Plus } from 'lucide-react';
-import { type TripFormInitialValues, useTripForm } from '../model/useTripForm';
+import { useQuery } from '@tanstack/react-query';
+import { Check, Loader2, MapPin, Minus, Plus, X } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { type TripFormInitialValues, type TripFormSnapshot, useTripForm } from '../model/useTripForm';
+
+type DestinationSearchInputProps = {
+  label: string;
+  value: string;
+  placeholder: string;
+  error?: string;
+  onChange: (value: string) => void;
+  onSelect: (dest: DestinationSearchResult) => void;
+  onClearError: () => void;
+};
+
+const DestinationSearchInput = ({
+  label,
+  value,
+  placeholder,
+  error,
+  onChange,
+  onSelect,
+  onClearError,
+}: DestinationSearchInputProps) => {
+  const [debouncedQuery, setDebouncedQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setDebouncedQuery(value);
+    }, 400);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [value]);
+
+  const { data: results = [], isFetching } = useQuery({
+    queryKey: ['destination-search', debouncedQuery],
+    queryFn: () => destinationApi.searchDestinations(debouncedQuery, 8),
+    enabled: open && debouncedQuery.trim().length >= 2,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const handleInput = (nextValue: string) => {
+    onChange(nextValue);
+    onClearError();
+    setOpen(true);
+  };
+
+  const handleSelect = (dest: DestinationSearchResult) => {
+    onSelect(dest);
+    onClearError();
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const showDropdown = open && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
+
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="relative">
+        <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+          {isFetching ? (
+            <Loader2 className="h-4 w-4 animate-spin text-stone-400 dark:text-stone-500" />
+          ) : (
+            <MapPin className="h-4 w-4 text-stone-400 dark:text-stone-500" />
+          )}
+        </div>
+        <AppInput
+          ref={inputRef}
+          value={value}
+          onChange={(e) => handleInput(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={placeholder}
+          error={!!error}
+          className="pl-10 pr-10"
+        />
+        {!isFetching && (value || error) && (
+          <div className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2">
+            {error ? (
+              <X className="h-4 w-4 text-red-500" />
+            ) : value ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : null}
+          </div>
+        )}
+      </div>
+      <FormError message={error} />
+
+      {showDropdown && (
+        <div className="mt-1.5 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.1)] dark:border-stone-700 dark:bg-stone-900">
+          {isFetching && results.length === 0 ? (
+            <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-stone-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Поиск...
+            </div>
+          ) : (
+            results.map((dest) => (
+              <button
+                key={dest.id}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  handleSelect(dest);
+                }}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50 active:bg-stone-100 dark:hover:bg-stone-800 dark:active:bg-stone-800 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-stone-100 dark:[&:not(:last-child)]:border-stone-800"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-stone-800">
+                  <MapPin className="h-3.5 w-3.5 text-stone-500" />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-stone-900 dark:text-white">{dest.name}</p>
+                  <p className="text-[12px] text-stone-400">{dest.country_code}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TripForm = ({
   existingTrip,
@@ -24,22 +151,28 @@ export const TripForm = ({
   onSuccess,
   onCancel,
   asSheet,
+  onSnapshotChange,
+  validationSlot,
 }: {
   existingTrip?: Trip;
   initialValues?: TripFormInitialValues;
   onSuccess: (trip: Trip) => void;
   onCancel?: () => void;
   asSheet?: boolean;
+  onSnapshotChange?: (snapshot: TripFormSnapshot) => void;
+  validationSlot?: ReactNode;
 }) => {
   const {
     destination,
-    setDestination,
+    handleDestinationInput,
+    handleDestinationSelect,
     startDate,
     handleStartDateChange,
     endDate,
     setEndDate,
     departureCity,
-    setDepartureCity,
+    handleDepartureCityInput,
+    handleDepartureCitySelect,
     budget,
     setBudget,
     currency,
@@ -57,7 +190,7 @@ export const TripForm = ({
     todayStr,
     handleCreate,
     handleUpdate,
-  } = useTripForm(existingTrip, initialValues);
+  } = useTripForm(existingTrip, initialValues, onSnapshotChange);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
 
@@ -72,23 +205,15 @@ export const TripForm = ({
     <div className="flex flex-col gap-2">
       {/* Destination + People */}
       <div className="grid grid-cols-[1fr,auto] items-start gap-3">
-        <div>
-          <FieldLabel>Куда</FieldLabel>
-          <div className="relative">
-            <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-stone-500" />
-            <AppInput
-              value={destination}
-              onChange={(e) => {
-                setDestination(e.target.value);
-                clearError('destination');
-              }}
-              placeholder="Город или страна"
-              error={!!errors.destination}
-              className="pl-10"
-            />
-          </div>
-          <FormError message={errors.destination} />
-        </div>
+        <DestinationSearchInput
+          label="Куда"
+          value={destination}
+          placeholder="Город или страна"
+          error={errors.destination}
+          onChange={handleDestinationInput}
+          onSelect={handleDestinationSelect}
+          onClearError={() => clearError('destination')}
+        />
 
         <div>
           <FieldLabel>Люди</FieldLabel>
@@ -118,23 +243,15 @@ export const TripForm = ({
       </div>
 
       {/* Departure city */}
-      <div>
-        <FieldLabel>Откуда</FieldLabel>
-        <div className="relative">
-          <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-stone-500" />
-          <AppInput
-            value={departureCity}
-            onChange={(e) => {
-              setDepartureCity(e.target.value);
-              clearError('departure_city');
-            }}
-            placeholder="Пункт отправления"
-            error={!!errors.departure_city}
-            className="pl-10"
-          />
-        </div>
-        <FormError message={errors.departure_city} />
-      </div>
+      <DestinationSearchInput
+        label="Откуда"
+        value={departureCity}
+        placeholder="Пункт отправления"
+        error={errors.departure_city}
+        onChange={handleDepartureCityInput}
+        onSelect={handleDepartureCitySelect}
+        onClearError={() => clearError('departure_city')}
+      />
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-3">
@@ -172,6 +289,8 @@ export const TripForm = ({
           <FormError message={errors.end_date} />
         </div>
       </div>
+
+      {validationSlot}
 
       {/* Budget slider */}
       <div>

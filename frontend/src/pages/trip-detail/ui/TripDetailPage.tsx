@@ -1,6 +1,9 @@
 import type { TripStatus } from '@/entities/trip';
-import { CancelTripSheet, DeleteTripSheet, EditTripSheet, useTripDetail } from '@/features/trips';
+import { expenseApi } from '@/entities/expense';
+import { DestinationValidationCompact } from '@/features/recommendations';
+import { CancelTripSheet, DeleteTripSheet, EditTripSheet, useTripDetail, type TripFormSnapshot } from '@/features/trips';
 import { StatusBadge, TabBar } from '@/shared/ui';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Loader2, MapPin } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -16,6 +19,21 @@ export type TripDetailOutletContext = {
 
 type TabId = 'analytics' | 'info' | 'expenses' | 'diary';
 
+const getDurationDays = (startDate?: string, endDate?: string) => {
+  if (!startDate || !endDate) return 1;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 1;
+  return Math.floor(diffMs / 86_400_000) + 1;
+};
+
+const getTravelMonth = (startDate?: string) => {
+  if (!startDate) return new Date().getMonth() + 1;
+  const parsed = new Date(`${startDate}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed.getMonth() + 1 : new Date().getMonth() + 1;
+};
+
 export const TripDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -27,6 +45,33 @@ export const TripDetailPage = () => {
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [showDeleteSheet, setShowDeleteSheet] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState<TripFormSnapshot | null>(null);
+
+  const validationBudget = editSnapshot?.budget ?? trip?.budget ?? 0;
+  const validationCurrency = editSnapshot?.currency ?? trip?.currency ?? 'RUB';
+  const validationPeopleCount = editSnapshot?.people_count ?? trip?.people_count ?? 1;
+  const validationStartDate = editSnapshot?.start_date ?? trip?.start_date;
+  const validationEndDate = editSnapshot?.end_date ?? trip?.end_date;
+  const validationDurationDays = getDurationDays(validationStartDate, validationEndDate);
+  const validationDestinationId = editSnapshot?.destination_id ?? trip?.destination_id ?? null;
+  const needsUsdRate = !!trip && validationBudget > 0 && validationCurrency !== 'USD';
+  const { data: validationRates } = useQuery({
+    queryKey: ['exchange-rates', validationCurrency],
+    queryFn: () => expenseApi.getExchangeRates(validationCurrency),
+    enabled: needsUsdRate,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+  const validationBudgetUsd = validationBudget > 0
+    ? validationCurrency === 'USD'
+      ? validationBudget
+      : validationRates?.rates.USD
+        ? validationBudget * validationRates.rates.USD
+        : null
+    : null;
+  const validationBudgetPerDayUsd = validationBudgetUsd !== null
+    ? validationBudgetUsd / Math.max(validationDurationDays * validationPeopleCount, 1)
+    : null;
 
   const handleCancelConfirm = async () => {
     await handleStatusChange('cancelled');
@@ -136,6 +181,14 @@ export const TripDetailPage = () => {
         onOpenChange={setShowEditSheet}
         trip={trip}
         onSuccess={handleEditSuccess}
+        onSnapshotChange={setEditSnapshot}
+        validationSlot={
+          <DestinationValidationCompact
+            destinationId={validationDestinationId}
+            travelMonth={getTravelMonth(validationStartDate)}
+            budgetPerDayUsd={validationBudgetPerDayUsd}
+          />
+        }
       />
 
       <CancelTripSheet

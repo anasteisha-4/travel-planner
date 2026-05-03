@@ -16,6 +16,7 @@ class TripStatus(StrEnum):
 
 class TripCreate(BaseModel):
     destination: str
+    destination_id: UUID | None = None
     start_date: date
     end_date: date
     budget: float | None = None
@@ -29,6 +30,7 @@ class TripCreate(BaseModel):
 
 class TripUpdate(BaseModel):
     destination: str | None = None
+    destination_id: UUID | None = None
     start_date: date | None = None
     end_date: date | None = None
     budget: float | None = None
@@ -45,6 +47,7 @@ class TripResponse(BaseModel):
     id: UUID
     user_id: UUID
     destination: str
+    destination_id: UUID | None = None
     start_date: date
     end_date: date
     budget: float | None

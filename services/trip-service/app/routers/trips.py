@@ -16,6 +16,7 @@ def trip_to_response(trip: models.Trip) -> schemas.TripResponse:
         id=trip.id,
         user_id=trip.user_id,
         destination=trip.destination,
+        destination_id=trip.destination_id,
         start_date=trip.start_date,
         end_date=trip.end_date,
         budget=trip.budget,
@@ -53,6 +54,7 @@ def create_trip(
     trip = models.Trip(
         user_id=user_id,
         destination=trip_data.destination,
+        destination_id=trip_data.destination_id,
         start_date=trip_data.start_date,
         end_date=trip_data.end_date,
         budget=trip_data.budget,

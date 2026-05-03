@@ -9,7 +9,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useBudgetPrediction } from '../model/useBudgetPrediction';
-import type { BudgetPredictResponse, ScoreBreakdown, ScoredDestination } from '../model/types';
+import { useDestinationValidation } from '../model/useDestinationValidation';
+import type {
+  BudgetPredictResponse,
+  DestinationValidationResponse,
+  DestinationValidationStatus,
+  DestinationValidationWarning,
+  ScoreBreakdown,
+  ScoredDestination,
+} from '../model/types';
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', RUB: '₽', GBP: '£', TRY: '₺',
@@ -65,12 +73,43 @@ const TIER_OPTIONS: { value: 'budget' | 'mid' | 'luxury'; label: string }[] = [
   { value: 'luxury', label: 'Люкс' },
 ];
 
+const TIER_LABELS: Record<string, string> = {
+  hostel: 'Хостел',
+  budget: 'Эконом',
+  mid: 'Комфорт',
+  luxury: 'Люкс',
+};
+
 const TYPICAL_DURATION_MAP: Record<string, number> = {
   weekend: 3,
   short: 5,
   standard: 7,
   long: 14,
   extended: 21,
+};
+
+const STATUS_META: Record<
+  DestinationValidationStatus,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  suitable: {
+    label: 'Подходит',
+    color: '#15803D',
+    bg: 'rgba(22,163,74,0.08)',
+    border: 'rgba(22,163,74,0.22)',
+  },
+  caution: {
+    label: 'Есть ограничения',
+    color: '#B45309',
+    bg: 'rgba(245,158,11,0.09)',
+    border: 'rgba(245,158,11,0.28)',
+  },
+  not_recommended: {
+    label: 'Не рекомендуется',
+    color: '#DC2626',
+    bg: 'rgba(220,38,38,0.08)',
+    border: 'rgba(220,38,38,0.22)',
+  },
 };
 
 const formatDateParam = (date: Date) => {
@@ -92,6 +131,42 @@ const getSuggestedTripDates = (month: number, durationDays: number) => {
     startDate: formatDateParam(start),
     endDate: formatDateParam(end),
   };
+};
+
+const statusFromWarning = (warning?: DestinationValidationWarning): DestinationValidationStatus => {
+  if (!warning) return 'suitable';
+  if (warning.severity === 'high') return 'not_recommended';
+  return 'caution';
+};
+
+const statusFromScore = (score: number | undefined): DestinationValidationStatus => {
+  if (score === undefined) return 'caution';
+  if (score < 0.3) return 'not_recommended';
+  if (score < 0.6) return 'caution';
+  return 'suitable';
+};
+
+const formatPercent = (value: unknown) => (
+  typeof value === 'number' ? `${Math.round(value * 100)}%` : 'нет данных'
+);
+
+const formatVisa = (value: unknown) => {
+  if (typeof value !== 'string') return 'нет данных';
+  const labels: Record<string, string> = {
+    visa_free: 'без визы',
+    evisa: 'электронная виза',
+    visa_on_arrival: 'виза по прибытии',
+    visa_required: 'нужна виза',
+    no_admission: 'въезд закрыт',
+    unknown: 'нужно проверить',
+  };
+  return labels[value] ?? value.replace(/_/g, ' ');
+};
+
+const getOverallStatus = (statuses: DestinationValidationStatus[]): DestinationValidationStatus => {
+  if (statuses.includes('not_recommended')) return 'not_recommended';
+  if (statuses.includes('caution')) return 'caution';
+  return 'suitable';
 };
 
 const ScoreRow = ({
@@ -152,6 +227,214 @@ const ScoreRow = ({
       {isHigh && (
         <span style={{ fontSize: 11, color: meta.highColor, flexShrink: 0 }}>✓</span>
       )}
+    </div>
+  );
+};
+
+type ValidationBlockProps = {
+  data?: DestinationValidationResponse;
+  destination: ScoredDestination;
+  budgetPerDayUsd: number | null;
+  isLoading: boolean;
+  isError: boolean;
+};
+
+const ValidationBlock = ({
+  data,
+  destination,
+  budgetPerDayUsd,
+  isLoading,
+  isError,
+}: ValidationBlockProps) => {
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              height: 48,
+              borderRadius: 14,
+              background: 'rgba(28,25,23,0.04)',
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div
+        style={{
+          padding: '14px',
+          borderRadius: 16,
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.24)',
+        }}
+      >
+        <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', fontFamily: 'Manrope, sans-serif' }}>
+          Проверка временно недоступна
+        </p>
+        <p style={{ fontSize: 12, color: '#A8A29E', fontFamily: 'Manrope, sans-serif', marginTop: 3 }}>
+          Откройте направление позже, чтобы увидеть визовые, сезонные и бюджетные ограничения.
+        </p>
+      </div>
+    );
+  }
+
+  const warningByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
+  const languageScore = destination.score_breakdown.language;
+  const languageStatus = statusFromScore(languageScore);
+  const rows = [
+    {
+      key: 'visa',
+      label: 'Виза',
+      icon: '🛂',
+      status: statusFromWarning(warningByType.get('visa')),
+      value: formatVisa(data.info.visa_type),
+      note: warningByType.get('visa')?.message ?? (
+        data.info.max_stay_days ? `до ${data.info.max_stay_days} дней` : 'визовых ограничений не найдено'
+      ),
+    },
+    {
+      key: 'season',
+      label: 'Сезон',
+      icon: '🌤',
+      status: statusFromWarning(warningByType.get('season')),
+      value: formatPercent(data.info.season_score),
+      note: warningByType.get('season')?.message ?? (
+        typeof data.info.avg_temp_c === 'number'
+          ? `${Math.round(data.info.avg_temp_c)}°C · ${Math.round(Number(data.info.avg_precipitation_mm ?? 0))} мм осадков`
+          : 'месяц подходит для поездки'
+      ),
+    },
+    {
+      key: 'budget',
+      label: 'Бюджет',
+      icon: '💳',
+      status: statusFromWarning(warningByType.get('budget')),
+      value: typeof data.info.avg_daily_cost_usd === 'number'
+        ? `$${Math.round(data.info.avg_daily_cost_usd)}/день`
+        : 'нет данных',
+      note: warningByType.get('budget')?.message ?? (
+        budgetPerDayUsd
+          ? `ваш ориентир: $${Math.round(budgetPerDayUsd)}/день на человека`
+          : 'сравнение с бюджетом недоступно'
+      ),
+    },
+    {
+      key: 'safety',
+      label: 'Риск',
+      icon: '🛡',
+      status: statusFromWarning(warningByType.get('safety')),
+      value: formatPercent(data.info.safety_score),
+      note: warningByType.get('safety')?.message ?? 'критичных предупреждений нет',
+    },
+    {
+      key: 'language',
+      label: 'Язык',
+      icon: '💬',
+      status: languageStatus,
+      value: formatPercent(languageScore),
+      note: languageStatus === 'suitable'
+        ? 'комфорт языка совпадает с профилем'
+        : 'проверьте языковой комфорт перед поездкой',
+    },
+  ];
+  const overallStatus = getOverallStatus(rows.map((row) => row.status));
+  const overallMeta = STATUS_META[overallStatus];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          padding: '12px 14px',
+          borderRadius: 16,
+          background: overallMeta.bg,
+          border: `1px solid ${overallMeta.border}`,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+            Проверка направления
+          </p>
+          <p style={{ fontSize: 12, color: '#78716C', fontFamily: 'Manrope, sans-serif', marginTop: 2 }}>
+            Виза, сезон, бюджет, риск и язык
+          </p>
+        </div>
+        <span
+          style={{
+            flexShrink: 0,
+            padding: '7px 10px',
+            borderRadius: 999,
+            background: '#fff',
+            color: overallMeta.color,
+            border: `1px solid ${overallMeta.border}`,
+            fontSize: 11,
+            fontWeight: 800,
+            fontFamily: 'Manrope, sans-serif',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {overallMeta.label}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {rows.map((row) => {
+          const meta = STATUS_META[row.status];
+          return (
+            <div
+              key={row.key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 14,
+                background: '#fff',
+                border: '1px solid #E7E5E4',
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  background: meta.bg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  flexShrink: 0,
+                }}
+              >
+                {row.icon}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+                    {row.label}
+                  </p>
+                  <p style={{ fontSize: 12, fontWeight: 800, color: meta.color, fontFamily: 'Manrope, sans-serif' }}>
+                    {row.value}
+                  </p>
+                </div>
+                <p style={{ fontSize: 11, color: '#78716C', fontFamily: 'Manrope, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {row.note}
+                </p>
+              </div>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: meta.color, flexShrink: 0 }} />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -368,10 +651,25 @@ const BudgetBlock = ({
     { label: 'ПЕССИМИСТ', sublabel: 'с запасом', value: data.total_max, color: '#7C3AED', bg: 'rgba(124,58,237,0.06)', border: 'rgba(124,58,237,0.18)' },
   ];
 
-  const tierLabel = TIER_OPTIONS.find((t) => t.value === tripParams.accommodation_tier)?.label ?? '';
+  const tierLabel = TIER_LABELS[tripParams.accommodation_tier] ?? tripParams.accommodation_tier;
+  const travelCost = data.breakdown.travel_to_destination ?? 0;
+  const assumptions = data.assumptions;
+  const originLabel = assumptions?.origin_city_name ?? 'не указан';
+  const strategyLabel = assumptions?.flight_fare_strategy === 'business_comfort'
+    ? 'бизнес'
+    : assumptions?.flight_fare_strategy === 'typical_economy'
+      ? 'средний тариф'
+      : 'дешевый тариф';
+  const hasTravelFareData = assumptions?.travel_cost_source?.startsWith('travelpayouts') ?? false;
+  const travelSourceLabel = hasTravelFareData
+    ? `кэш Aviasales · ${strategyLabel}`
+    : 'нет данных по стоимости пути';
+  const displayBudgetValue = (value: number) => (
+    hasTravelFareData ? value : Math.max(0, value - travelCost)
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {tiers.map((t) => (
           <div
@@ -392,7 +690,7 @@ const BudgetBlock = ({
               {t.label}
             </p>
             <p style={{ fontSize: 18, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {currencySymbol}{Math.round(t.value).toLocaleString('ru-RU')}
+              {currencySymbol}{Math.round(displayBudgetValue(t.value)).toLocaleString('ru-RU')}
             </p>
             <p style={{ fontSize: 9, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
               {t.sublabel}
@@ -400,9 +698,35 @@ const BudgetBlock = ({
           </div>
         ))}
       </div>
-      <p style={{ fontSize: 11, color: '#A8A29E', fontFamily: 'Manrope, sans-serif', textAlign: 'center' }}>
-        {tripParams.duration_days} {tripParams.duration_days === 3 ? 'дня' : 'дней'} · {tripParams.people_count} чел · {tierLabel} · {currency}
-      </p>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 6,
+          padding: '10px 12px',
+          borderRadius: 12,
+          background: '#F5F5F4',
+          border: '1px solid #E7E5E4',
+        }}
+      >
+        {[
+          ['Срок', `${tripParams.duration_days} ${tripParams.duration_days === 1 ? 'день' : tripParams.duration_days < 5 ? 'дня' : 'дней'}`],
+          ['Люди', `${tripParams.people_count} чел`],
+          ['Жилье', tierLabel],
+          ['Валюта', currency],
+          ['Откуда', originLabel],
+          ['Дорога', hasTravelFareData && travelCost > 0 ? `${currencySymbol}${Math.round(travelCost).toLocaleString('ru-RU')} · ${travelSourceLabel}` : travelSourceLabel],
+        ].map(([label, value]) => (
+          <div key={label} style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 9, fontWeight: 800, color: '#A8A29E', letterSpacing: '0.06em', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase' as const }}>
+              {label}
+            </p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#1C1917', fontFamily: 'Manrope, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -446,10 +770,29 @@ export const DestinationDetailSheet = ({
         travel_month: month,
         accommodation_tier: tripParams.accommodation_tier,
         currency,
+        origin_city_name: profileCached?.origin_city_name,
+        origin_lat: profileCached?.origin_lat,
+        origin_lng: profileCached?.origin_lng,
       }
     : null;
   const { data: budgetPrediction, isLoading: isBudgetLoading } =
     useBudgetPrediction(budgetPredictionParams);
+  const budgetPerDayUsd = profileCached?.budget_max_usd
+    ? profileCached.budget_max_usd / Math.max(tripParams.duration_days * tripParams.people_count, 1)
+    : null;
+  const destinationValidationParams = destination
+    ? {
+        destination_id: destination.destination_id,
+        citizenship_code: 'RU',
+        travel_month: month,
+        budget_per_day_usd: budgetPerDayUsd,
+      }
+    : null;
+  const {
+    data: destinationValidation,
+    isLoading: isValidationLoading,
+    isError: isValidationError,
+  } = useDestinationValidation(destinationValidationParams);
 
   const handleCreateTrip = () => {
     if (!destination) return;
@@ -458,6 +801,7 @@ export const DestinationDetailSheet = ({
       destination: destination.name,
       destination_id: destination.destination_id,
       people_count: String(tripParams.people_count),
+      accommodation_tier: tripParams.accommodation_tier,
       currency,
       start_date: dates.startDate,
       end_date: dates.endDate,
@@ -613,6 +957,18 @@ export const DestinationDetailSheet = ({
                 currency={currency}
                 data={budgetPrediction}
                 isLoading={isBudgetLoading}
+              />
+            </div>
+
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 -20px 18px' }} />
+
+            <div style={{ marginBottom: 20 }}>
+              <ValidationBlock
+                data={destinationValidation}
+                destination={destination}
+                budgetPerDayUsd={budgetPerDayUsd}
+                isLoading={isValidationLoading}
+                isError={isValidationError}
               />
             </div>
           </div>

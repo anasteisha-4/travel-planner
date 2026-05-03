@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.exceptions import AppException
-from app.schemas.budget import BudgetPredictRequest, BudgetPredictResponse
-from app.services.budget_formula import estimate_travel_cost
+from app.schemas.budget import BudgetAssumptions, BudgetPredictRequest, BudgetPredictResponse
+from app.services.budget_formula import estimate_travel_cost, haversine
 from app.services.budget_scorer import get_budget_scorer
 from app.services.data_loader import get_destination_features
 from app.services.profile_client import _get_profile_sync
+from app.services.travelpayouts_service import get_cached_fare_usd
 
 router = APIRouter()
 
@@ -36,6 +37,33 @@ TRANSPORT_DAILY_FRACTION = 0.12
 ACTIVITIES_DAILY_FRACTION = 0.08
 
 
+def _as_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if parsed != parsed else parsed
+
+
+def _resolve_origin(request: BudgetPredictRequest, profile: dict) -> tuple[float | None, float | None, str | None, str]:
+    request_origin_lat = _as_float(request.origin_lat)
+    request_origin_lng = _as_float(request.origin_lng)
+    if request_origin_lat is not None and request_origin_lng is not None:
+        return request_origin_lat, request_origin_lng, request.origin_city_name, "request"
+
+    if request.origin_city_name and request.origin_city_name.strip():
+        return None, None, request.origin_city_name.strip(), "request_name"
+
+    profile_origin_lat = _as_float(profile.get("origin_lat"))
+    profile_origin_lng = _as_float(profile.get("origin_lng"))
+    if profile_origin_lat is not None and profile_origin_lng is not None:
+        return profile_origin_lat, profile_origin_lng, profile.get("origin_city_name"), "profile"
+
+    return None, None, request.origin_city_name or profile.get("origin_city_name"), "unknown"
+
+
 def _load_costs(db: Session, dest_id: uuid.UUID) -> dict:
     row = db.execute(
         text(
@@ -49,6 +77,14 @@ def _load_costs(db: Session, dest_id: uuid.UUID) -> dict:
     if row is None:
         return {}
     return dict(row._mapping)
+
+
+def _load_destination_info(db: Session, dest_id: uuid.UUID) -> dict:
+    row = db.execute(
+        text("SELECT name, country_code, lat, lng FROM destinations WHERE id = :did"),
+        {"did": str(dest_id)},
+    ).fetchone()
+    return dict(row._mapping) if row else {}
 
 
 def _formula_breakdown(
@@ -108,13 +144,18 @@ def predict_budget(
             message=f"No cost data for destination {dest_id}",
         )
 
+    dest_info = _load_destination_info(db, dest_id)
     dest_features = get_destination_features(db, [dest_id]).get(dest_id, {})
-    dest_lat = float(dest_features.get("lat") or 0.0)
-    dest_lng = float(dest_features.get("lng") or 0.0)
+    dest_lat = float(dest_features.get("lat") or dest_info.get("lat") or 0.0)
+    dest_lng = float(dest_features.get("lng") or dest_info.get("lng") or 0.0)
 
     profile = _get_profile_sync(db, user_id)
-    origin_lat: float | None = profile.get("origin_lat")
-    origin_lng: float | None = profile.get("origin_lng")
+    origin_lat, origin_lng, origin_city_name, origin_source = _resolve_origin(request, profile)
+    travel_distance_km = (
+        round(haversine(origin_lat, origin_lng, dest_lat, dest_lng), 1)
+        if origin_lat is not None and origin_lng is not None
+        else None
+    )
 
     scorer = get_budget_scorer(db)
     if scorer is not None:
@@ -168,16 +209,66 @@ def predict_budget(
         dest_lat,
         dest_lng,
     )
+    fallback_travel_usd = breakdown_usd["travel_to_destination"]
+    fare = get_cached_fare_usd(
+        origin_city_name=origin_city_name,
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        destination_name=dest_info.get("name"),
+        destination_lat=dest_lat,
+        destination_lng=dest_lng,
+        destination_country_code=dest_info.get("country_code"),
+        travel_month=request.travel_month,
+        duration_days=request.duration_days,
+        accommodation_tier=request.accommodation_tier,
+    )
+    travel_cost_source = "distance_fallback" if fallback_travel_usd > 0 else "none"
+    origin_iata = None
+    destination_iata = None
+    fare_found_at = None
+    fare_expires_at = None
+    fare_strategy = None
+    fare_trip_class = None
+    fare_delta_usd = 0.0
+    if fare is not None and fare.price_usd > 0:
+        fare_delta_usd = fare.price_usd - fallback_travel_usd
+        breakdown_usd["travel_to_destination"] = fare.price_usd
+        travel_cost_source = fare.source
+        origin_iata = fare.origin_iata
+        destination_iata = fare.destination_iata
+        fare_found_at = fare.found_at
+        fare_expires_at = fare.expires_at
+        fare_strategy = fare.fare_strategy
+        fare_trip_class = fare.trip_class
 
     return BudgetPredictResponse(
         destination_id=dest_id,
         duration_days=request.duration_days,
         people_count=request.people_count,
         currency=currency,
-        total_min=round(float(result["total_min"]) * fx, 2),
-        total_mid=round(float(result["total_mid"]) * fx, 2),
-        total_max=round(float(result["total_max"]) * fx, 2),
+        total_min=round(max(1.0, float(result["total_min"]) + fare_delta_usd) * fx, 2),
+        total_mid=round(max(1.0, float(result["total_mid"]) + fare_delta_usd) * fx, 2),
+        total_max=round(max(1.0, float(result["total_max"]) + fare_delta_usd) * fx, 2),
         daily_cost_usd=round(float(costs.get("avg_daily_cost_usd") or 80.0), 2),
         breakdown={k: round(v * fx, 2) for k, v in breakdown_usd.items()},
+        assumptions=BudgetAssumptions(
+            duration_days=request.duration_days,
+            people_count=request.people_count,
+            accommodation_tier=request.accommodation_tier,
+            travel_month=request.travel_month,
+            currency=currency,
+            origin_city_name=origin_city_name,
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
+            origin_source=origin_source,
+            travel_distance_km=travel_distance_km,
+            travel_cost_source=travel_cost_source,
+            origin_iata=origin_iata,
+            destination_iata=destination_iata,
+            flight_fare_strategy=fare_strategy,
+            flight_trip_class=fare_trip_class,
+            flight_fare_found_at=fare_found_at,
+            flight_fare_expires_at=fare_expires_at,
+        ),
         model_version=str(result["model_version"]),
     )

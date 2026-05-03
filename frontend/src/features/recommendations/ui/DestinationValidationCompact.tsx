@@ -1,0 +1,146 @@
+import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useDestinationValidation } from '../model/useDestinationValidation';
+import type { DestinationValidationStatus, DestinationValidationWarning } from '../model/types';
+
+type Props = {
+  destinationId: string | null;
+  travelMonth: number;
+  budgetPerDayUsd?: number | null;
+  className?: string;
+};
+
+const STATUS_META: Record<
+  DestinationValidationStatus,
+  { label: string; classes: string; icon: typeof CheckCircle2 }
+> = {
+  suitable: {
+    label: 'Подходит',
+    classes: 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300',
+    icon: CheckCircle2,
+  },
+  caution: {
+    label: 'Есть ограничения',
+    classes: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
+    icon: AlertTriangle,
+  },
+  not_recommended: {
+    label: 'Не рекомендуется',
+    classes: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300',
+    icon: ShieldAlert,
+  },
+};
+
+const statusFromWarning = (warning?: DestinationValidationWarning): DestinationValidationStatus => {
+  if (!warning) return 'suitable';
+  if (warning.severity === 'high') return 'not_recommended';
+  return 'caution';
+};
+
+const getOverallStatus = (warnings: DestinationValidationWarning[]): DestinationValidationStatus => {
+  if (warnings.some((warning) => warning.severity === 'high')) return 'not_recommended';
+  if (warnings.length > 0) return 'caution';
+  return 'suitable';
+};
+
+const FACTORS = [
+  { key: 'visa', label: 'Виза' },
+  { key: 'season', label: 'Сезон' },
+  { key: 'budget', label: 'Бюджет' },
+  { key: 'safety', label: 'Риск' },
+];
+
+export const DestinationValidationCompact = ({
+  destinationId,
+  travelMonth,
+  budgetPerDayUsd,
+  className = '',
+}: Props) => {
+  const { data, isLoading, isError } = useDestinationValidation(
+    destinationId
+      ? {
+          destination_id: destinationId,
+          citizenship_code: 'RU',
+          travel_month: travelMonth,
+          budget_per_day_usd: budgetPerDayUsd ?? null,
+        }
+      : null
+  );
+
+  if (!destinationId) {
+    return (
+      <div className={`rounded-2xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
+        <p className="text-[12px] font-bold text-stone-700 dark:text-stone-200">Проверка направления</p>
+        <p className="mt-1 text-[12px] text-stone-400 dark:text-stone-500">
+          Выберите направление из подсказок, чтобы проверить визу, сезон, бюджет и риск.
+        </p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={`rounded-2xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
+        <div className="h-4 w-36 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {[0, 1, 2, 3].map((item) => (
+            <div key={item} className="h-7 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-700" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className={`rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/30 ${className}`}>
+        <p className="text-[12px] font-bold text-amber-700 dark:text-amber-300">Проверка временно недоступна</p>
+      </div>
+    );
+  }
+
+  const warningsByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
+  const missingBudget = budgetPerDayUsd === null || budgetPerDayUsd === undefined;
+  const overallStatus = missingBudget && data.warnings.length === 0 ? 'caution' : getOverallStatus(data.warnings);
+  const overallMeta = STATUS_META[overallStatus];
+  const OverallIcon = overallMeta.icon;
+
+  return (
+    <div className={`rounded-2xl border border-stone-200 bg-white p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
+            Проверка направления
+          </p>
+          <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
+            Виза, сезон, бюджет и риск
+          </p>
+        </div>
+        <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-extrabold ${overallMeta.classes}`}>
+          <OverallIcon className="h-3.5 w-3.5" />
+          {overallMeta.label}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {FACTORS.map((factor) => {
+          const status = factor.key === 'budget' && missingBudget
+            ? 'caution'
+            : statusFromWarning(warningsByType.get(factor.key));
+          const meta = STATUS_META[status];
+          const title = factor.key === 'budget' && missingBudget
+            ? 'Бюджет не проверен: нужен лимит поездки'
+            : warningsByType.get(factor.key)?.message ?? meta.label;
+          return (
+            <div
+              key={factor.key}
+              className={`truncate rounded-xl border px-2 py-1.5 text-center text-[11px] font-bold ${meta.classes}`}
+              title={title}
+            >
+              {factor.label}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};

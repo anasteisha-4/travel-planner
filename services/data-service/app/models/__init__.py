@@ -1,4 +1,5 @@
 from app.models.activities import ActivityType, DestinationActivity
+from app.models.airport import Airport
 from app.models.attributes import DestinationAttributes
 from app.models.connectivity import DestinationConnectivity
 from app.models.costs import DestinationCosts
@@ -18,6 +19,7 @@ from app.models.visa import VisaRule, VisaType
 __all__ = [
     "Destination",
     "DestinationSeasonality",
+    "Airport",
     "DestinationCosts",
     "DestinationSafety",
     "VisaRule",

@@ -1,26 +1,66 @@
 import type { Trip, TripCreate, TripUpdate } from '@/entities/trip';
 import { tripApi, TripCreateSchema } from '@/entities/trip';
+import type { DestinationSearchResult } from '@/entities/destination';
 import { expenseApi } from '@/entities/expense';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import { sendEvent } from '@/shared/api';
 import { useToast } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
+
+type SelectedDestination = {
+  id: string | null;
+  lat: number | null;
+  lng: number | null;
+};
 
 export type TripFormInitialValues = Partial<
   Pick<
     TripCreate,
     'destination' | 'start_date' | 'end_date' | 'budget' | 'currency' | 'people_count' | 'departure_city' | 'notes'
   >
->;
+> & {
+  destination_id?: string | null;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
+  departure_destination_id?: string | null;
+  departure_lat?: number | null;
+  departure_lng?: number | null;
+};
 
-export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitialValues) => {
+export type TripFormSnapshot = {
+  destination: string;
+  start_date: string;
+  end_date: string;
+  budget: number;
+  currency: string;
+  people_count: number;
+  departure_city: string;
+  notes: string;
+  destination_id: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
+  departure_destination_id: string | null;
+  departure_lat: number | null;
+  departure_lng: number | null;
+};
+
+export const useTripForm = (
+  existingTrip?: Trip,
+  initialValues?: TripFormInitialValues,
+  onSnapshotChange?: (snapshot: TripFormSnapshot) => void
+) => {
   const queryClient = useQueryClient();
   const [destination, setDestination] = useState(
     existingTrip?.destination ?? initialValues?.destination ?? ''
   );
+  const [selectedDestination, setSelectedDestination] = useState<SelectedDestination>({
+    id: existingTrip?.destination_id ?? initialValues?.destination_id ?? null,
+    lat: initialValues?.destination_lat ?? null,
+    lng: initialValues?.destination_lng ?? null,
+  });
   const [startDate, setStartDate] = useState(existingTrip?.start_date ?? initialValues?.start_date ?? '');
   const [endDate, setEndDate] = useState(existingTrip?.end_date ?? initialValues?.end_date ?? '');
   const [currency, setCurrency] = useState(existingTrip?.currency ?? initialValues?.currency ?? 'RUB');
@@ -28,6 +68,11 @@ export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitial
   const [departureCity, setDepartureCity] = useState(
     existingTrip?.departure_city ?? initialValues?.departure_city ?? ''
   );
+  const [selectedDepartureCity, setSelectedDepartureCity] = useState<SelectedDestination>({
+    id: initialValues?.departure_destination_id ?? null,
+    lat: initialValues?.departure_lat ?? null,
+    lng: initialValues?.departure_lng ?? null,
+  });
   const [peopleCount, setPeopleCount] = useState(
     existingTrip?.people_count ?? initialValues?.people_count ?? 1
   );
@@ -42,6 +87,61 @@ export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitial
 
   const currencySymbol =
     CURRENCIES.find((c) => c.value === currency)?.label.split(' ')[0] ?? currency;
+
+  useEffect(() => {
+    onSnapshotChange?.({
+      destination,
+      start_date: startDate,
+      end_date: endDate,
+      budget,
+      currency,
+      people_count: peopleCount,
+      departure_city: departureCity,
+      notes,
+      destination_id: selectedDestination.id,
+      destination_lat: selectedDestination.lat,
+      destination_lng: selectedDestination.lng,
+      departure_destination_id: selectedDepartureCity.id,
+      departure_lat: selectedDepartureCity.lat,
+      departure_lng: selectedDepartureCity.lng,
+    });
+  }, [
+    budget,
+    currency,
+    departureCity,
+    destination,
+    endDate,
+    notes,
+    onSnapshotChange,
+    peopleCount,
+    selectedDepartureCity.id,
+    selectedDepartureCity.lat,
+    selectedDepartureCity.lng,
+    selectedDestination.id,
+    selectedDestination.lat,
+    selectedDestination.lng,
+    startDate,
+  ]);
+
+  const handleDestinationInput = (value: string) => {
+    setDestination(value);
+    setSelectedDestination({ id: null, lat: null, lng: null });
+  };
+
+  const handleDestinationSelect = (dest: DestinationSearchResult) => {
+    setDestination(dest.name);
+    setSelectedDestination({ id: dest.id, lat: dest.lat, lng: dest.lng });
+  };
+
+  const handleDepartureCityInput = (value: string) => {
+    setDepartureCity(value);
+    setSelectedDepartureCity({ id: null, lat: null, lng: null });
+  };
+
+  const handleDepartureCitySelect = (dest: DestinationSearchResult) => {
+    setDepartureCity(dest.name);
+    setSelectedDepartureCity({ id: dest.id, lat: dest.lat, lng: dest.lng });
+  };
 
   const handleStartDateChange = (value: string) => {
     setStartDate(value);
@@ -105,6 +205,7 @@ export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitial
 
     const raw = {
       destination: trimmedDestination,
+      destination_id: selectedDestination.id,
       start_date: startDate,
       end_date: endDate,
       budget: budget > 0 ? budget : null,
@@ -174,13 +275,15 @@ export const useTripForm = (existingTrip?: Trip, initialValues?: TripFormInitial
 
   return {
     destination,
-    setDestination,
+    handleDestinationInput,
+    handleDestinationSelect,
     startDate,
     handleStartDateChange,
     endDate,
     setEndDate,
     departureCity,
-    setDepartureCity,
+    handleDepartureCityInput,
+    handleDepartureCitySelect,
     budget,
     setBudget,
     currency,

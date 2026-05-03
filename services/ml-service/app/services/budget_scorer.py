@@ -171,7 +171,11 @@ class BudgetScorer:
         dest_lat = float(dest_features.get("lat") or 0.0)
         dest_lng = float(dest_features.get("lng") or 0.0)
         travel_cost = estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people_count, travel_month)
-        distance_km = haversine(origin_lat or 0.0, origin_lng or 0.0, dest_lat, dest_lng) if origin_lat else 0.0
+        distance_km = (
+            haversine(origin_lat, origin_lng, dest_lat, dest_lng)
+            if origin_lat is not None and origin_lng is not None
+            else 0.0
+        )
 
         baseline = _formula_baseline(
             costs,

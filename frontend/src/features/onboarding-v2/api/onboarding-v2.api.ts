@@ -1,14 +1,9 @@
+import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
 import { apiClient } from '@/shared/api';
 
 import type { OnboardingStepData, UserProfileV2 } from '../model/types';
 
-export type DestinationSearchResult = {
-  id: string;
-  name: string;
-  country_code: string;
-  lat: number;
-  lng: number;
-};
+export type { DestinationSearchResult };
 
 export const onboardingV2Api = {
   getProfile: async (): Promise<UserProfileV2> => {
@@ -26,16 +21,7 @@ export const onboardingV2Api = {
     return response.data;
   },
 
-  searchDestinations: async (query: string, limit = 10): Promise<DestinationSearchResult[]> => {
-    const response = await apiClient.get('/api/destinations/search', {
-      params: { q: query, limit },
-    });
-    return response.data;
-  },
+  searchDestinations: destinationApi.searchDestinations,
 
-  fetchDestinationsByIds: async (ids: string[]): Promise<DestinationSearchResult[]> => {
-    if (ids.length === 0) return [];
-    const response = await apiClient.post('/api/destinations/by-ids', ids);
-    return response.data;
-  },
+  fetchDestinationsByIds: destinationApi.fetchDestinationsByIds,
 };

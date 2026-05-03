@@ -2,6 +2,8 @@ import { apiClient } from '@/shared/api';
 import type {
   BudgetPredictRequest,
   BudgetPredictResponse,
+  DestinationValidationRequest,
+  DestinationValidationResponse,
   RecommendRequest,
   RecommendationsResponse,
 } from '../model/types';
@@ -14,6 +16,11 @@ export const recommendationsApi = {
 
   getBudgetPrediction: async (params: BudgetPredictRequest): Promise<BudgetPredictResponse> => {
     const { data } = await apiClient.post<BudgetPredictResponse>('/api/v1/budget/predict', params);
+    return data;
+  },
+
+  validateDestination: async (params: DestinationValidationRequest): Promise<DestinationValidationResponse> => {
+    const { data } = await apiClient.post<DestinationValidationResponse>('/api/v1/validate', params);
     return data;
   },
 };

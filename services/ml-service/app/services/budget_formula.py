@@ -34,12 +34,14 @@ ACC_TIER_ENCODING: dict[str, int] = {"hostel": 0, "budget": 1, "mid": 2, "luxury
 
 # Round-trip economy fare calibrated to 2024-2025 averages (USD per person).
 _TRAVEL_COST_BRACKETS: list[tuple[float, float]] = [
+    (80, 0),
+    (250, 25),
     (500, 60),
-    (1500, 180),
-    (3000, 320),
-    (6000, 500),
-    (10000, 750),
-    (float("inf"), 1100),
+    (1500, 160),
+    (3000, 290),
+    (6000, 470),
+    (10000, 700),
+    (float("inf"), 980),
 ]
 
 _TRAVEL_SEASON_MULT: dict[int, float] = {6: 1.15, 7: 1.30, 8: 1.30, 12: 1.40, 1: 1.20}

@@ -46,6 +46,7 @@ def seed_costs(db: Session):
             CREATE TABLE IF NOT EXISTS user_profiles (
                 user_id UUID PRIMARY KEY,
                 onboarding_completed BOOLEAN DEFAULT FALSE,
+                origin_city_name TEXT,
                 origin_lat NUMERIC,
                 origin_lng NUMERIC
             )
@@ -103,6 +104,9 @@ def test_budget_predict_basic(client: TestClient):
     assert "transport" in data["breakdown"]
     assert "accommodation" in data["breakdown"]
     assert "travel_to_destination" in data["breakdown"]
+    assert data["assumptions"]["origin_source"] == "unknown"
+    assert data["assumptions"]["travel_distance_km"] is None
+    assert data["assumptions"]["travel_cost_source"] == "none"
     assert data["model_version"] == "formula-v1"
 
 
@@ -146,3 +150,23 @@ def test_budget_predict_longer_trip_costs_more(client: TestClient):
 def test_budget_predict_unknown_destination(client: TestClient):
     resp = client.post("/api/v1/budget/predict", json=_payload(destination_id=str(uuid.uuid4())))
     assert resp.status_code == 404
+
+
+def test_budget_predict_uses_request_origin(client: TestClient):
+    resp_near = client.post(
+        "/api/v1/budget/predict",
+        json=_payload(origin_city_name="Near Origin", origin_lat=48.0, origin_lng=16.0),
+    )
+    resp_far = client.post(
+        "/api/v1/budget/predict",
+        json=_payload(origin_city_name="Far Origin", origin_lat=55.75, origin_lng=37.62),
+    )
+    assert resp_near.status_code == 200
+    assert resp_far.status_code == 200
+    near_data = resp_near.json()
+    far_data = resp_far.json()
+    assert near_data["assumptions"]["origin_source"] == "request"
+    assert near_data["assumptions"]["origin_city_name"] == "Near Origin"
+    assert near_data["breakdown"]["travel_to_destination"] == 0
+    assert far_data["breakdown"]["travel_to_destination"] > near_data["breakdown"]["travel_to_destination"]
+    assert far_data["total_mid"] > near_data["total_mid"]

@@ -8,6 +8,16 @@ class TestCreateTrip:
         assert data["people_count"] == 2
         assert "id" in data
 
+    def test_create_with_destination_id(self, client, auth_headers, trip_data):
+        destination_id = "11111111-1111-1111-1111-111111111111"
+        response = client.post(
+            "/api/trips/",
+            json={**trip_data, "destination_id": destination_id},
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        assert response.json()["destination_id"] == destination_id
+
     def test_create_with_type_and_season(self, client, auth_headers, trip_data):
         extended_data = {**trip_data, "trip_type": "beach", "season": "summer"}
         response = client.post("/api/trips/", json=extended_data, headers=auth_headers)
@@ -102,6 +112,15 @@ class TestUpdateTrip:
         assert response.status_code == 200
         assert response.json()["destination"] == "Барселона"
         assert response.json()["people_count"] == trip_data["people_count"]
+
+    def test_update_destination_id(self, client, auth_headers, trip_data):
+        resp = client.post("/api/trips/", json=trip_data, headers=auth_headers)
+        trip_id = resp.json()["id"]
+        destination_id = "22222222-2222-2222-2222-222222222222"
+
+        response = client.put(f"/api/trips/{trip_id}", json={"destination_id": destination_id}, headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["destination_id"] == destination_id
 
     def test_update_status(self, client, auth_headers, trip_data):
         resp = client.post("/api/trips/", json=trip_data, headers=auth_headers)

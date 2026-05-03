@@ -38,6 +38,27 @@ def list_destinations_internal(
     return result
 
 
+@router.get("/airports/resolve-iata")
+def resolve_airport_iata(
+    city_name: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    country_code: str | None = None,
+    db: Session = Depends(get_internal_db),
+):
+    from app.services.airport_service import resolve_iata
+
+    return {
+        "iata_code": resolve_iata(
+            db,
+            city_name,
+            lat=lat,
+            lng=lng,
+            country_code=country_code,
+        )
+    }
+
+
 @router.post("/recommendations")
 def get_recommendations(
     citizenship_code: str,

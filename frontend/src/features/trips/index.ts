@@ -1,7 +1,7 @@
 export { useTripDetail } from './model/useTripDetail';
 export { useTripAnalytics } from './model/useTripAnalytics';
 export { useTripForm } from './model/useTripForm';
-export type { TripFormInitialValues } from './model/useTripForm';
+export type { TripFormInitialValues, TripFormSnapshot } from './model/useTripForm';
 export { useTrips } from './model/useTrips';
 export { TripForm } from './ui/TripForm';
 export { TripsPreview } from './ui/TripsPreview';

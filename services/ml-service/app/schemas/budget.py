@@ -11,6 +11,29 @@ class BudgetPredictRequest(BaseModel):
     travel_month: int = Field(..., ge=1, le=12)
     accommodation_tier: str = "mid"
     currency: str = "USD"
+    origin_city_name: str | None = None
+    origin_lat: float | None = Field(default=None, ge=-90, le=90)
+    origin_lng: float | None = Field(default=None, ge=-180, le=180)
+
+
+class BudgetAssumptions(BaseModel):
+    duration_days: int
+    people_count: int
+    accommodation_tier: str
+    travel_month: int
+    currency: str
+    origin_city_name: str | None
+    origin_lat: float | None
+    origin_lng: float | None
+    origin_source: str
+    travel_distance_km: float | None
+    travel_cost_source: str
+    origin_iata: str | None = None
+    destination_iata: str | None = None
+    flight_fare_strategy: str | None = None
+    flight_trip_class: int | None = None
+    flight_fare_found_at: str | None = None
+    flight_fare_expires_at: str | None = None
 
 
 class BudgetPredictResponse(BaseModel):
@@ -23,6 +46,7 @@ class BudgetPredictResponse(BaseModel):
     total_max: float
     daily_cost_usd: float
     breakdown: dict[str, float]
+    assumptions: BudgetAssumptions
     model_version: str
 
 

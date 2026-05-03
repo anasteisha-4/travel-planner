@@ -71,6 +71,7 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             "crowd_preference": None,
             "climate_preferences": [],
             "liked_destination_ids": [],
+            "origin_city_name": None,
             "origin_lat": None,
             "origin_lng": None,
         }
@@ -94,6 +95,7 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             "crowd_preference": m.get("crowd_preference"),
             "climate_preferences": m.get("climate_preferences") or [],
             "liked_destination_ids": m.get("liked_destination_ids") or [],
+            "origin_city_name": m.get("origin_city_name"),
             "origin_lat": float(m["origin_lat"]) if m.get("origin_lat") else None,
             "origin_lng": float(m["origin_lng"]) if m.get("origin_lng") else None,
         }
