@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user_id
+from app.lib.russian_names import translate_destination_name
 from app.models.recommendation_log import RecommendationLog
 from app.schemas.recommendation import RecommendRequest, RecommendResponse
 from app.services.content_scorer import BaseScorer, ContentScorer
@@ -85,6 +86,17 @@ def get_recommendations(
     )
 
     top_results = scored[: request.limit]
+    top_results = [
+        item.model_copy(
+            update={
+                "name": item.display_name or item.name_ru or translate_destination_name(item.name),
+                "name_original": item.name_original or item.name,
+                "name_ru": item.name_ru or translate_destination_name(item.name),
+                "display_name": item.display_name or item.name_ru or translate_destination_name(item.name),
+            }
+        )
+        for item in top_results
+    ]
     latency_ms = int((time.monotonic() - t_start) * 1000)
     recommendation_id = uuid.uuid4()
 

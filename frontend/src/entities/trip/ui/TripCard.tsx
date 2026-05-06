@@ -1,4 +1,5 @@
 import type { Trip } from '../model/types';
+import { localizeDestinationName } from '@/shared/lib';
 import { StatusBadge } from '@/shared/ui';
 import { Calendar, Users, Wallet } from 'lucide-react';
 
@@ -15,7 +16,7 @@ export const TripCard = ({ trip, onClick }: { trip: Trip; onClick: () => void })
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h3 className="truncate text-[17px] font-extrabold tracking-tight text-stone-900 dark:text-white">
-          {trip.destination}
+          {localizeDestinationName(trip.destination)}
         </h3>
         {trip.departure_city && (
           <p className="truncate text-[13px] font-medium text-stone-400 dark:text-stone-500">

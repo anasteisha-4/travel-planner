@@ -15,6 +15,9 @@ class RecommendRequest(BaseModel):
 class ScoredDestination(BaseModel):
     destination_id: uuid.UUID
     name: str
+    name_original: str | None = None
+    name_ru: str | None = None
+    display_name: str | None = None
     country_code: str
     region: str
     score: float

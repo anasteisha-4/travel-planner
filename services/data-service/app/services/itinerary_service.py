@@ -6,6 +6,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.lib import OpeningHoursParser
+from app.models import NameTranslationEntity
+from app.services.name_translation_service import load_translations, poi_display_payload
 
 
 def generate_itinerary(
@@ -56,6 +58,7 @@ def generate_itinerary(
     # Enrich POI data
     all_poi_ids = [poi_id for day_data in template.sequence_of_poi for poi_id in day_data.get("poi_ids", [])]
     poi_map = {str(p.id): p for p in db.query(POI).filter(POI.id.in_(all_poi_ids)).all()}
+    poi_translations = load_translations(db, NameTranslationEntity.poi, [p.id for p in poi_map.values()])
 
     days = []
     for day_idx, day_data in enumerate(template.sequence_of_poi[:duration_days]):
@@ -79,7 +82,6 @@ def generate_itinerary(
                 day_poi.append(
                     {
                         "id": str(poi.id),
-                        "name": poi.name,
                         "category": poi.category,
                         "lat": poi.lat,
                         "lng": poi.lng,
@@ -88,6 +90,7 @@ def generate_itinerary(
                         "opening_hours": poi.opening_hours,
                         "is_open_at_midday": is_open,
                         "visit_duration_minutes": poi.visit_duration_minutes,
+                        **poi_display_payload(str(poi.id), poi.name, poi_translations),
                     }
                 )
         days.append(

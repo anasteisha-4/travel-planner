@@ -1,5 +1,7 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { useFeedback } from '@/features/feedback';
+import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
+import { localizeDestinationName } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
@@ -52,7 +54,19 @@ export const TripInfoTab = () => {
   const isActive = trip.status === 'active';
   const isPlanned = trip.status === 'planned';
 
-  const { deleteFeedback } = useFeedback(trip.id, trip.destination);
+  const { deleteFeedback } = useFeedback(trip.id, localizeDestinationName(trip.destination));
+  const {
+    budget,
+    budgetMonitoringStatus,
+    burnRatePerDay,
+    currency,
+    elapsedDays,
+    projectedBudgetDiff,
+    projectedBudgetPct,
+    projectedFinalSpend,
+    remainingDays,
+    totalSpent,
+  } = useTripAnalytics(trip);
 
   const handleContinueTrip = async () => {
     await deleteFeedback();
@@ -157,6 +171,21 @@ export const TripInfoTab = () => {
           </div>
         </div>
 
+        {(isActive || isPlanned) && (
+          <BudgetMonitoringCard
+            budget={budget}
+            budgetMonitoringStatus={budgetMonitoringStatus}
+            burnRatePerDay={burnRatePerDay}
+            currency={currency}
+            elapsedDays={elapsedDays}
+            projectedBudgetDiff={projectedBudgetDiff}
+            projectedBudgetPct={projectedBudgetPct}
+            projectedFinalSpend={projectedFinalSpend}
+            remainingDays={remainingDays}
+            totalSpent={totalSpent}
+          />
+        )}
+
         {trip.notes && (
           <div className={cardBase}>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
@@ -210,7 +239,7 @@ export const TripInfoTab = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+                  className="h-[52px] flex-1 rounded-2xl border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-foreground"
                   onClick={onCancelOpen}
                   disabled={isStatusChanging}
                 >
@@ -220,7 +249,7 @@ export const TripInfoTab = () => {
               {isActive && (
                 <Button
                   variant="outline"
-                  className="h-[52px] w-full rounded-2xl border-stone-200 bg-stone-100 text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                  className="h-[52px] w-full rounded-2xl border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-foreground"
                   onClick={() => onStatusChange('planned')}
                   disabled={isStatusChanging}
                 >
@@ -234,7 +263,7 @@ export const TripInfoTab = () => {
             {!isCancelled && !isCompleted && (
               <Button
                 variant="ghost"
-                className="h-[52px] flex-1 rounded-2xl border border-stone-200 text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-800"
+                className="h-[52px] flex-1 rounded-2xl border border-[hsl(var(--surface-border))] text-foreground hover:bg-[hsl(var(--surface-muted))]"
                 onClick={onEditOpen}
               >
                 <Edit className="mr-2 h-4 w-4" />

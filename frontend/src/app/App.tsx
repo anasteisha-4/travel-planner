@@ -7,7 +7,7 @@ import { ProfilePage } from '@/pages/profile';
 import { RegisterPage } from '@/pages/register';
 import { ResetPasswordPage } from '@/pages/reset-password';
 import { TripCreatePage } from '@/pages/trip-create';
-import { TripAnalyticsTab, TripDetailPage, TripDiaryTab, TripExpensesTab, TripInfoTab } from '@/pages/trip-detail';
+import { TripAnalyticsTab, TripDetailPage, TripDiaryTab, TripExpensesTab, TripInfoTab, TripItineraryTab } from '@/pages/trip-detail';
 import { TripsPage } from '@/pages/trips';
 import { queryClient } from '@/shared/lib';
 import { ThemeProvider } from '@/shared/ui';
@@ -124,6 +124,7 @@ export const App = () => {
             >
               <Route path="analytics" element={<TripAnalyticsTab />} />
               <Route path="info" element={<TripInfoTab />} />
+              <Route path="itinerary" element={<TripItineraryTab />} />
               <Route path="expenses" element={<TripExpensesTab />} />
               <Route path="diary" element={<TripDiaryTab />} />
             </Route>

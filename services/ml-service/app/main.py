@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import budget, models_info, recommendations, validation
+from app.routers import budget, itinerary, models_info, recommendations, validation
 
 app = FastAPI(
     title="Travel Planner ML Service",
@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(recommendations.router, prefix="/api/v1", tags=["Recommendations"])
 app.include_router(budget.router, prefix="/api/v1", tags=["Budget"])
 app.include_router(validation.router, prefix="/api/v1", tags=["Validation"])
+app.include_router(itinerary.router, prefix="/api/v1", tags=["Itinerary"])
 app.include_router(models_info.router, prefix="/api/v1", tags=["Models"])
 
 

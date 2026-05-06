@@ -7,10 +7,27 @@ from sqlalchemy.orm import Session
 register_uuid()
 
 
-def get_all_destinations(db: Session) -> list[dict]:
-    result = db.execute(
-        text("SELECT id, name, country_code, lat, lng, region, subregion FROM destinations WHERE is_active = true")
+def _destination_query(db: Session) -> str:
+    exists = db.execute(text("SELECT to_regclass('name_translations')")).scalar()
+    if not exists:
+        return (
+            "SELECT d.id, d.name AS name, d.name AS name_original, NULL AS name_ru, "
+            "d.name AS display_name, d.country_code, d.lat, d.lng, d.region, d.subregion "
+            "FROM destinations d WHERE d.is_active = true"
+        )
+    return (
+        "SELECT d.id, COALESCE(nt.translated_name, d.name) AS name, d.name AS name_original, "
+        "nt.translated_name AS name_ru, COALESCE(nt.translated_name, d.name) AS display_name, "
+        "d.country_code, d.lat, d.lng, d.region, d.subregion "
+        "FROM destinations d "
+        "LEFT JOIN name_translations nt ON nt.entity_type = 'destination' "
+        "AND nt.entity_id = d.id AND nt.locale = 'ru' "
+        "WHERE d.is_active = true"
     )
+
+
+def get_all_destinations(db: Session) -> list[dict]:
+    result = db.execute(text(_destination_query(db)))
     return [dict(row._mapping) for row in result]
 
 

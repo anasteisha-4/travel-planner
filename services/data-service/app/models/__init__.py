@@ -7,6 +7,7 @@ from app.models.destination import Destination, DestinationSeasonality
 from app.models.events import DestinationEvent, EventCategory
 from app.models.infrastructure import DestinationInfrastructure
 from app.models.language import DestinationLanguageAccessibility
+from app.models.name_translation import NameTranslation, NameTranslationEntity, NameTranslationQuality
 from app.models.poi import POI, POISource
 from app.models.popularity import DestinationPopularity
 from app.models.safety import DestinationSafety
@@ -32,6 +33,9 @@ __all__ = [
     "EventCategory",
     "DestinationInfrastructure",
     "DestinationLanguageAccessibility",
+    "NameTranslation",
+    "NameTranslationEntity",
+    "NameTranslationQuality",
     "POI",
     "POISource",
     "DestinationPopularity",

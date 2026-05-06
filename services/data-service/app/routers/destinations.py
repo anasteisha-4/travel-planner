@@ -3,7 +3,9 @@ from rapidfuzz import fuzz, process
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db
-from app.models import Destination
+from app.lib.russian_names import translate_destination_name
+from app.models import Destination, NameTranslationEntity
+from app.services.name_translation_service import destination_display_payload, load_translations
 
 router = APIRouter(prefix="/destinations", tags=["destinations"])
 
@@ -25,12 +27,16 @@ def search_destinations(
     for d in destinations:
         key_en = f"{d.name}|{d.id}"
         candidates.append((d.name, key_en))
+        name_ru = translate_destination_name(d.name)
+        if name_ru and name_ru != d.name:
+            candidates.append((name_ru, key_en))
         dest_map[key_en] = d
 
     results = process.extract(q, [c[0] for c in candidates], scorer=fuzz.WRatio, limit=limit * 3)
 
     seen: set[str] = set()
     output = []
+    selected: list[Destination] = []
     for _match_name, score, idx in results:
         if score < 40:
             continue
@@ -39,17 +45,21 @@ def search_destinations(
             continue
         seen.add(key)
         d = dest_map[key]
+        selected.append(d)
+        if len(selected) >= limit:
+            break
+
+    translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in selected])
+    for d in selected:
         output.append(
             {
                 "id": str(d.id),
-                "name": d.name,
                 "country_code": d.country_code,
                 "lat": d.lat,
                 "lng": d.lng,
+                **destination_display_payload(str(d.id), d.name, translations),
             }
         )
-        if len(output) >= limit:
-            break
 
     return output
 
@@ -69,16 +79,17 @@ def list_destinations(
     if region:
         q = q.filter(Destination.region == region)
     destinations = q.order_by(Destination.name).all()
+    translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in destinations])
     return [
         {
             "id": str(d.id),
-            "name": d.name,
             "country_code": d.country_code,
             "lat": d.lat,
             "lng": d.lng,
             "region": d.region,
             "subregion": d.subregion,
             "capital": d.capital,
+            **destination_display_payload(str(d.id), d.name, translations),
         }
         for d in destinations
     ]
@@ -97,7 +108,16 @@ def get_destinations_by_ids(
         return []
     destinations = db.query(Destination).filter(Destination.id.in_(uuid_ids)).all()
     dest_map = {str(d.id): d for d in destinations}
-    return [{"id": i, "name": dest_map[i].name, "country_code": dest_map[i].country_code} for i in ids if i in dest_map]
+    translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in destinations])
+    return [
+        {
+            "id": i,
+            "country_code": dest_map[i].country_code,
+            **destination_display_payload(i, dest_map[i].name, translations),
+        }
+        for i in ids
+        if i in dest_map
+    ]
 
 
 @router.get("/{destination_id}")
@@ -115,7 +135,6 @@ def get_destination(destination_id: str, db: Session = Depends(get_internal_db))
 
     return {
         "id": str(dest.id),
-        "name": dest.name,
         "country_code": dest.country_code,
         "lat": dest.lat,
         "lng": dest.lng,
@@ -123,4 +142,9 @@ def get_destination(destination_id: str, db: Session = Depends(get_internal_db))
         "avg_daily_cost_usd": costs.avg_daily_cost_usd if costs else None,
         "cost_index": costs.cost_index if costs else None,
         "safety_score": safety.safety_score if safety else None,
+        **destination_display_payload(
+            str(dest.id),
+            dest.name,
+            load_translations(db, NameTranslationEntity.destination, [dest.id]),
+        ),
     }

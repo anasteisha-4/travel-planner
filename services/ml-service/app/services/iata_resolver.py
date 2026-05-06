@@ -99,7 +99,8 @@ def _resolve_iata_from_data_service(
     lng: float | None,
     country_code: str | None,
 ) -> str | None:
-    if not settings.DATA_SERVICE_SECRET:
+    secret = settings.INTERNAL_API_SECRET or settings.DATA_SERVICE_SECRET
+    if not secret:
         return None
     try:
         response = httpx.get(
@@ -110,7 +111,7 @@ def _resolve_iata_from_data_service(
                 "lng": lng,
                 "country_code": country_code,
             },
-            headers={"X-Internal-Secret": settings.DATA_SERVICE_SECRET},
+            headers={"X-Internal-Secret": secret},
             timeout=2.0,
         )
         response.raise_for_status()

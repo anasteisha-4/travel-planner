@@ -3,6 +3,7 @@ export { useTripAnalytics } from './model/useTripAnalytics';
 export { useTripForm } from './model/useTripForm';
 export type { TripFormInitialValues, TripFormSnapshot } from './model/useTripForm';
 export { useTrips } from './model/useTrips';
+export { BudgetMonitoringCard } from './ui/BudgetMonitoringCard';
 export { TripForm } from './ui/TripForm';
 export { TripsPreview } from './ui/TripsPreview';
 export { TripStatusBadge } from './ui/TripStatusBadge';

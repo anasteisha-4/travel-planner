@@ -2,6 +2,7 @@ import type { TripStatus } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
 import { DestinationValidationCompact } from '@/features/recommendations';
 import { CancelTripSheet, DeleteTripSheet, EditTripSheet, useTripDetail, type TripFormSnapshot } from '@/features/trips';
+import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { StatusBadge, TabBar } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Loader2, MapPin } from 'lucide-react';
@@ -17,7 +18,7 @@ export type TripDetailOutletContext = {
   onDeleteOpen: () => void;
 };
 
-type TabId = 'analytics' | 'info' | 'expenses' | 'diary';
+type TabId = 'analytics' | 'info' | 'itinerary' | 'expenses' | 'diary';
 
 const getDurationDays = (startDate?: string, endDate?: string) => {
   if (!startDate || !endDate) return 1;
@@ -46,14 +47,15 @@ export const TripDetailPage = () => {
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [showDeleteSheet, setShowDeleteSheet] = useState(false);
   const [editSnapshot, setEditSnapshot] = useState<TripFormSnapshot | null>(null);
+  const debouncedEditSnapshot = useDebouncedValue(editSnapshot, 450);
 
-  const validationBudget = editSnapshot?.budget ?? trip?.budget ?? 0;
-  const validationCurrency = editSnapshot?.currency ?? trip?.currency ?? 'RUB';
-  const validationPeopleCount = editSnapshot?.people_count ?? trip?.people_count ?? 1;
-  const validationStartDate = editSnapshot?.start_date ?? trip?.start_date;
-  const validationEndDate = editSnapshot?.end_date ?? trip?.end_date;
+  const validationBudget = debouncedEditSnapshot?.budget ?? trip?.budget ?? 0;
+  const validationCurrency = debouncedEditSnapshot?.currency ?? trip?.currency ?? 'RUB';
+  const validationPeopleCount = debouncedEditSnapshot?.people_count ?? trip?.people_count ?? 1;
+  const validationStartDate = debouncedEditSnapshot?.start_date ?? trip?.start_date;
+  const validationEndDate = debouncedEditSnapshot?.end_date ?? trip?.end_date;
   const validationDurationDays = getDurationDays(validationStartDate, validationEndDate);
-  const validationDestinationId = editSnapshot?.destination_id ?? trip?.destination_id ?? null;
+  const validationDestinationId = debouncedEditSnapshot?.destination_id ?? trip?.destination_id ?? null;
   const needsUsdRate = !!trip && validationBudget > 0 && validationCurrency !== 'USD';
   const { data: validationRates } = useQuery({
     queryKey: ['exchange-rates', validationCurrency],
@@ -90,6 +92,8 @@ export const TripDetailPage = () => {
 
   const activeTab: TabId = pathname.endsWith('/analytics')
     ? 'analytics'
+    : pathname.endsWith('/itinerary')
+      ? 'itinerary'
     : pathname.endsWith('/diary')
       ? 'diary'
       : pathname.endsWith('/expenses')
@@ -101,6 +105,7 @@ export const TripDetailPage = () => {
   const TABS: { id: TabId; label: string }[] = [
     ...(isCompleted ? [{ id: 'analytics' as const, label: 'Итоги' }] : []),
     { id: 'info', label: 'О\u00a0поездке' },
+    { id: 'itinerary', label: 'Маршрут' },
     { id: 'expenses', label: 'Расходы' },
     { id: 'diary', label: 'Дневник' },
   ];
@@ -129,7 +134,7 @@ export const TripDetailPage = () => {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-[hsl(var(--app-bg))]">
       <div
         className="shrink-0 px-5 pb-2"
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 20px)' }}
@@ -147,24 +152,24 @@ export const TripDetailPage = () => {
 
         <div className="mt-3">
           <h1
-            className={`text-[38px] font-extrabold leading-none tracking-tight ${
+            className={`line-clamp-2 text-[38px] font-extrabold leading-none tracking-tight ${
               trip.status === 'cancelled'
                 ? 'text-stone-400 dark:text-stone-500'
                 : 'text-stone-900 dark:text-white'
             }`}
             style={{ letterSpacing: '-0.02em' }}
           >
-            {trip.destination}
+            {localizeDestinationName(trip.destination)}
           </h1>
           {trip.departure_city && (
-            <p className="mt-2 flex items-center gap-1 text-[14px] font-medium text-stone-400 dark:text-stone-500">
+            <p className="mt-2 flex items-center gap-1 text-[14px] font-medium text-stone-400 dark:text-slate-500">
               <MapPin className="h-3.5 w-3.5 shrink-0" />
-              {trip.departure_city} → {trip.destination}
+              <span className="line-clamp-2">{trip.departure_city} → {localizeDestinationName(trip.destination)}</span>
             </p>
           )}
         </div>
 
-        <div className="mt-4 border-b border-stone-200 dark:border-stone-700">
+        <div className="mt-4 overflow-x-auto border-b border-[hsl(var(--surface-border))] no-scrollbar">
           <TabBar
             tabs={TABS}
             active={activeTab}
@@ -194,7 +199,7 @@ export const TripDetailPage = () => {
       <CancelTripSheet
         open={showCancelSheet}
         onOpenChange={setShowCancelSheet}
-        destinationName={trip.destination}
+        destinationName={localizeDestinationName(trip.destination)}
         onConfirm={handleCancelConfirm}
         loading={isStatusChanging}
       />
@@ -202,7 +207,7 @@ export const TripDetailPage = () => {
       <DeleteTripSheet
         open={showDeleteSheet}
         onOpenChange={setShowDeleteSheet}
-        destinationName={trip.destination}
+        destinationName={localizeDestinationName(trip.destination)}
         onConfirm={handleDeleteConfirm}
         loading={isDeleting}
       />

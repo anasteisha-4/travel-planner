@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db, verify_internal_secret
@@ -118,7 +118,7 @@ def validate_trip(
 def generate_itinerary(
     destination_id: str,
     duration_days: int,
-    preferred_activities: list[str],
+    preferred_activities: list[str] = Query(default_factory=list),
     start_date: str | None = None,
     db: Session = Depends(get_internal_db),
 ):
