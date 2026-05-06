@@ -2,19 +2,20 @@
 
 # Docker
 up:
-	docker-compose up -d
+	docker compose --env-file .env.docker up -d
 
 down:
-	docker-compose down -v
+	docker compose --env-file .env.docker down -v
 
 build:
-	docker-compose build --no-cache
+	docker compose --env-file .env.docker build --no-cache
 
 up-front:
-	docker compose build --no-cache frontend && docker compose up -d frontend
+	docker compose --env-file .env.docker build --no-cache frontend
+	docker compose --env-file .env.docker up -d frontend
 
 logs:
-	docker-compose logs -f
+	docker compose --env-file .env.docker logs -f
 
 # Development (local)
 dev:
@@ -139,30 +140,30 @@ deploy-sync:
 	@echo "  4. make deploy-up"
 
 deploy-up:
-	docker compose -f docker-compose.prod.yml up -d
+	docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 deploy-logs:
-	docker compose -f docker-compose.prod.yml logs -f
+	docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f
 
 deploy-ps:
-	docker compose -f docker-compose.prod.yml ps
+	docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 
 deploy-restore-db:
 	@echo "Starting postgres..."
-	docker compose -f docker-compose.prod.yml up -d postgres
+	docker compose -f docker-compose.prod.yml --env-file .env.prod up -d postgres
 	@echo "Waiting for postgres to be ready..."
-	@until docker compose -f docker-compose.prod.yml exec postgres pg_isready -U postgres; do sleep 2; done
+	@until docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres pg_isready -U postgres; do sleep 2; done
 	@echo "Restoring dump (this may take 10-30 minutes for large DBs)..."
-	docker compose -f docker-compose.prod.yml exec -T postgres \
+	docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
 		pg_restore -U postgres -d travel_planner --no-owner --role=postgres < ~/travel_planner.dump
 	@echo "DB restored. Verifying..."
-	docker compose -f docker-compose.prod.yml exec postgres \
+	docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres \
 		psql -U postgres -d travel_planner -c "SELECT count(*) AS destinations FROM destinations;"
 
 deploy-restore-redis:
 	@echo "Restoring Redis RDB..."
-	docker compose -f docker-compose.prod.yml up -d redis
-	docker compose -f docker-compose.prod.yml stop redis
-	docker compose -f docker-compose.prod.yml cp ~/dump.rdb redis:/data/dump.rdb
-	docker compose -f docker-compose.prod.yml start redis
+	docker compose -f docker-compose.prod.yml --env-file .env.prod up -d redis
+	docker compose -f docker-compose.prod.yml --env-file .env.prod stop redis
+	docker compose -f docker-compose.prod.yml --env-file .env.prod cp ~/dump.rdb redis:/data/dump.rdb
+	docker compose -f docker-compose.prod.yml --env-file .env.prod start redis
 	@echo "Redis restored."

@@ -25,13 +25,12 @@
 
 ```bash
 # Настройте переменные окружения
-cp .env.example .env
-cp .env.example .env.docker
+cp .env.docker.example .env.docker
 ```
 
 > [!IMPORTANT]
 > В `.env.docker` хосты БД и Redis указывайте как имена сервисов Docker (`postgres`, `redis`), а не `localhost`.
-> Для карты укажите `VITE_YANDEX_MAPS_API_KEY` (Яндекс Карты JS API v3) и `VITE_GEOAPIFY_API_KEY` (геокодинг).
+> Для карты укажите `VITE_YANDEX_MAPS_API_TOKEN` (Яндекс Карты JS API v3), `VITE_YANDEX_GEOSUGGEST_API_KEY` (Yandex Geosuggest) и `VITE_GEOAPIFY_API_KEY` (геокодинг).
 > Для валют: `FXR_API_KEY` (fxratesapi.com).
 
 ### 2. Запуск (Docker Compose)
@@ -63,6 +62,8 @@ cd services/analytics-service && uvicorn app.main:app --reload --port 8005
 # Фронтенд
 cd frontend && npm run dev
 ```
+
+`npm run dev` и `npm run build` для фронтенда читают корневой `.env.docker` через Vite mode `docker`.
 
 ---
 
