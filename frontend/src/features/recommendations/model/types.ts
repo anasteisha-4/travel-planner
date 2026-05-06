@@ -1,14 +1,19 @@
 export type ScoreBreakdown = {
-  activity_match: number;
-  budget_fit: number;
-  season: number;
-  safety: number;
-  visa: number;
-  language: number;
-  crowd: number;
-  climate: number;
-  connectivity: number;
-  [key: string]: number;
+  activity_match?: number;
+  budget_fit?: number;
+  season_fit?: number;
+  visa_effort?: number;
+  safety_modulation?: number;
+  language_match?: number;
+  crowd_fit?: number;
+  climate_match?: number;
+  origin_proximity?: number;
+  liked_similarity?: number;
+  liked_dest_similarity?: number;
+  connectivity?: number;
+  ltr_score?: number;
+  ltr_score_raw?: number;
+  [key: string]: number | undefined;
 };
 
 export type ScoredDestination = {

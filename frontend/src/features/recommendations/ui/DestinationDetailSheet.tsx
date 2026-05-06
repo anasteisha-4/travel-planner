@@ -11,7 +11,6 @@ import type {
   DestinationValidationResponse,
   DestinationValidationStatus,
   DestinationValidationWarning,
-  ScoreBreakdown,
   ScoredDestination,
 } from '../model/types';
 import { useBudgetPrediction } from '../model/useBudgetPrediction';
@@ -43,13 +42,36 @@ const COUNTRY_FLAGS: Record<string, string> = {
 const BREAKDOWN_LABELS: Record<string, string> = {
   activity_match: 'Активности',
   budget_fit: 'Бюджет',
-  season: 'Сезон',
-  safety: 'Безопасность',
-  visa: 'Виза',
-  language: 'Язык',
-  crowd: 'Людность',
-  climate: 'Климат',
+  season_fit: 'Сезон',
+  safety_modulation: 'Безопасность',
+  visa_effort: 'Виза',
+  language_match: 'Язык',
+  crowd_fit: 'Людность',
+  climate_match: 'Климат',
+  origin_proximity: 'Близость',
+  liked_similarity: 'Похожее на ваши места',
+  liked_dest_similarity: 'Похожее на ваши места',
   connectivity: 'Доступность',
+};
+
+const TAG_REASON_LABELS: Record<string, string> = {
+  visa_free: 'Безвизовый или самый простой въезд',
+  easy_visa: 'Визовые условия не выглядят сложными',
+  beach: 'Есть выраженный пляжный сценарий',
+  skiing: 'Подходит для горнолыжного отдыха',
+  hot_springs: 'Есть термальные источники',
+  mountains: 'Есть горный и природный сценарий',
+  safe: 'Хороший уровень безопасности',
+  affordable: 'Стоимость ниже многих альтернатив',
+  premium: 'Подходит для премиального формата',
+  perfect_season: 'Сейчас сильный сезон для поездки',
+  great_match: 'Хорошо совпадает с вашими интересами',
+};
+
+const FALLBACK_REASON_LABELS: Record<string, string> = {
+  season_score: 'Сезон',
+  safety_score: 'Безопасность',
+  avg_daily_cost: 'Стоимость',
 };
 
 const TYPICAL_DURATION_MAP: Record<string, number> = {
@@ -146,6 +168,8 @@ const getMatchTone = (score: number) => {
 const formatPercent = (value: unknown) =>
   typeof value === 'number' ? `${Math.round(value * 100)}%` : 'нет данных';
 
+const clampPercent = (value: number) => Math.max(0, Math.min(100, Math.round(value * 100)));
+
 const formatVisa = (value: unknown) => {
   if (typeof value !== 'string') return 'нет данных';
   const labels: Record<string, string> = {
@@ -159,11 +183,80 @@ const formatVisa = (value: unknown) => {
   return labels[value] ?? value.replace(/_/g, ' ');
 };
 
-const getTopReasons = (breakdown: ScoreBreakdown) =>
-  Object.entries(breakdown)
-    .filter(([key, value]) => key in BREAKDOWN_LABELS && typeof value === 'number')
+type RecommendationReason = {
+  key: string;
+  label: string;
+  value: number;
+  note?: string;
+};
+
+const getTopReasons = (destination: ScoredDestination): RecommendationReason[] => {
+  const factorReasons = Object.entries(destination.score_breakdown)
+    .filter(
+      (entry): entry is [string, number] =>
+        entry[0] in BREAKDOWN_LABELS && typeof entry[1] === 'number'
+    )
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+    .map(([key, value]) => ({
+      key,
+      label: BREAKDOWN_LABELS[key],
+      value,
+    }));
+
+  const tagReasons = destination.explanation_tags
+    .filter((tag) => tag in TAG_REASON_LABELS)
+    .map((tag) => ({
+      key: `tag:${tag}`,
+      label: TAG_REASON_LABELS[tag],
+      value: 0.75,
+      note: 'по признакам направления',
+    }));
+
+  const fallbackReasons: RecommendationReason[] = [];
+  if (typeof destination.season_score === 'number') {
+    fallbackReasons.push({
+      key: 'fallback:season',
+      label: FALLBACK_REASON_LABELS.season_score,
+      value: destination.season_score,
+    });
+  }
+  if (typeof destination.safety_score === 'number') {
+    fallbackReasons.push({
+      key: 'fallback:safety',
+      label: FALLBACK_REASON_LABELS.safety_score,
+      value: destination.safety_score,
+    });
+  }
+  if (typeof destination.avg_daily_cost_usd === 'number') {
+    fallbackReasons.push({
+      key: 'fallback:cost',
+      label: FALLBACK_REASON_LABELS.avg_daily_cost,
+      value:
+        destination.avg_daily_cost_usd < 60
+          ? 0.85
+          : destination.avg_daily_cost_usd < 140
+            ? 0.68
+            : 0.52,
+      note: `~$${Math.round(destination.avg_daily_cost_usd)}/день`,
+    });
+  }
+
+  const uniqueReasons = [...factorReasons, ...tagReasons, ...fallbackReasons].filter(
+    (reason, index, reasons) => reasons.findIndex((item) => item.label === reason.label) === index
+  );
+
+  if (uniqueReasons.length === 0) {
+    return [
+      {
+        key: 'fallback:score',
+        label: 'Общая совместимость',
+        value: destination.score,
+      },
+    ];
+  }
+
+  return uniqueReasons.slice(0, 4);
+};
 
 const ValidationBlock = ({
   data,
@@ -200,7 +293,7 @@ const ValidationBlock = ({
   }
 
   const warningByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
-  const languageStatus = statusFromScore(destination.score_breakdown.language);
+  const languageStatus = statusFromScore(destination.score_breakdown.language_match);
   const rows = [
     {
       key: 'visa',
@@ -230,7 +323,7 @@ const ValidationBlock = ({
       key: 'language',
       label: 'Язык',
       status: languageStatus,
-      value: formatPercent(destination.score_breakdown.language),
+      value: formatPercent(destination.score_breakdown.language_match),
     },
   ];
   const overallMeta = STATUS_META[getOverallStatus(rows.map((row) => row.status))];
@@ -388,13 +481,21 @@ export const DestinationDetailSheet = ({
       'destination',
       destination.destination_id
     );
-  }, [budgetPerDayUsd, destination, destinationValidation, modelVersion, month, open, recommendationId]);
+  }, [
+    budgetPerDayUsd,
+    destination,
+    destinationValidation,
+    modelVersion,
+    month,
+    open,
+    recommendationId,
+  ]);
 
   if (!destination) return null;
 
   const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
   const matchPct = Math.round(destination.score * 100);
-  const topReasons = getTopReasons(destination.score_breakdown);
+  const topReasons = getTopReasons(destination);
 
   const handleCreateTrip = () => {
     const dates = getSuggestedTripDates(month, tripParams.duration_days);
@@ -471,19 +572,19 @@ export const DestinationDetailSheet = ({
             Почему подходит
           </p>
           <div className="flex flex-col gap-2.5">
-            {topReasons.map(([key, value]) => (
-              <div key={key} className="flex items-center gap-3">
-                <span className="w-24 shrink-0 text-[12px] font-bold text-foreground">
-                  {BREAKDOWN_LABELS[key]}
+            {topReasons.map((reason) => (
+              <div key={reason.key} className="flex items-center gap-3">
+                <span className="w-28 shrink-0 text-[12px] font-bold leading-tight text-foreground">
+                  {reason.label}
                 </span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
                   <div
                     className="h-full rounded-full bg-primary"
-                    style={{ width: `${Math.round(value * 100)}%` }}
+                    style={{ width: `${clampPercent(reason.value)}%` }}
                   />
                 </div>
-                <span className="w-9 text-right text-[12px] font-extrabold text-primary">
-                  {Math.round(value * 100)}%
+                <span className="w-16 text-right text-[12px] font-extrabold text-primary">
+                  {reason.note ?? `${clampPercent(reason.value)}%`}
                 </span>
               </div>
             ))}

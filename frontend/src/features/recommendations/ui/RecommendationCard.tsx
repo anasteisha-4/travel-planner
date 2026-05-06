@@ -106,18 +106,37 @@ const TAG_CONFIG: Record<string, { label: string; className: string }> = {
     label: 'Без визы',
     className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
+  easy_visa: {
+    label: 'Простая виза',
+    className: 'bg-teal-500/10 text-teal-700 dark:text-teal-300',
+  },
   safe: {
     label: 'Безопасно',
     className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
+  skiing: { label: 'Горные лыжи', className: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300' },
+  hot_springs: {
+    label: 'Термальные источники',
+    className: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+  },
+  mountains: { label: 'Горы', className: 'bg-lime-500/10 text-lime-700 dark:text-lime-300' },
+  premium: { label: 'Премиум', className: 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-300' },
   popular: { label: 'Популярно', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },
   hot_season: {
+    label: 'Лучший сезон',
+    className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  perfect_season: {
     label: 'Лучший сезон',
     className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
   },
   good_season: {
     label: 'Хороший сезон',
     className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  great_match: {
+    label: 'Сильное совпадение',
+    className: 'bg-primary/10 text-primary',
   },
 };
 
