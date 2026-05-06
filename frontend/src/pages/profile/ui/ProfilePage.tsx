@@ -12,14 +12,16 @@ import {
   useToast,
 } from '@/shared/ui';
 import { ProfileEditWizard } from '@/widgets/profile-edit-wizard';
+import { sendEvent } from '@/shared/api';
 import { ClipboardList, Loader2, Pencil, Trash2 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDrawerOpen, setIsDeleteDrawerOpen] = useState(false);
+  const didTrackProfileView = useRef(false);
   const { toast } = useToast();
 
   const handleUnauthenticated = useCallback(() => {
@@ -45,6 +47,16 @@ export const ProfilePage = () => {
     await authApi.logout();
     navigate('/login', { replace: true });
   }, [navigate]);
+
+  useEffect(() => {
+    if (!authProfile || didTrackProfileView.current) return;
+    didTrackProfileView.current = true;
+    sendEvent('profile_viewed', {
+      has_preferences: hasPreferences,
+      onboarding_completed: profile?.onboarding_completed ?? false,
+      preferred_currency: profile?.preferred_currency ?? null,
+    });
+  }, [authProfile, hasPreferences, profile?.onboarding_completed, profile?.preferred_currency]);
 
   const handleSaved = () => setIsEditing(false);
 

@@ -54,14 +54,69 @@ export const RecommendationsPage = () => {
         month,
         region: region ?? null,
       });
+      data.results.forEach((dest, index) => {
+        sendEvent(
+          'recommendation_impression',
+          {
+            recommendation_id: data.recommendation_id,
+            model_version: data.model_version,
+            destination_id: dest.destination_id,
+            score: dest.score,
+            rank: index + 1,
+            month,
+            region: region ?? null,
+          },
+          'destination',
+          dest.destination_id
+        );
+      });
     }
   }, [data?.model_version, data?.recommendation_id, data?.results, month, region]);
 
   const handleSelect = (dest: ScoredDestination) => {
-    sendEvent('recommendation_clicked', { destination_id: dest.destination_id, score: dest.score, month }, 'destination', dest.destination_id);
-    sendEvent('destination_detail_opened', { destination_id: dest.destination_id }, 'destination', dest.destination_id);
+    sendEvent(
+      'recommendation_clicked',
+      {
+        recommendation_id: data?.recommendation_id,
+        model_version: data?.model_version,
+        destination_id: dest.destination_id,
+        score: dest.score,
+        month,
+        region: region ?? null,
+      },
+      'destination',
+      dest.destination_id
+    );
+    sendEvent(
+      'destination_detail_opened',
+      {
+        recommendation_id: data?.recommendation_id,
+        model_version: data?.model_version,
+        destination_id: dest.destination_id,
+      },
+      'destination',
+      dest.destination_id
+    );
     setSelected(dest);
     setSheetOpen(true);
+  };
+
+  const handleMonthChange = (nextMonth: number) => {
+    setMonth(nextMonth);
+    sendEvent('recommendation_filter_changed', {
+      filter: 'month',
+      previous_value: month,
+      value: nextMonth,
+    });
+  };
+
+  const handleRegionChange = (nextRegion: string | null) => {
+    setRegion(nextRegion);
+    sendEvent('recommendation_filter_changed', {
+      filter: 'region',
+      previous_value: region,
+      value: nextRegion,
+    });
   };
 
   const handleSheetClose = () => {
@@ -83,8 +138,8 @@ export const RecommendationsPage = () => {
         <RecommendationFiltersUI
           month={month}
           region={region}
-          onMonthChange={setMonth}
-          onRegionChange={setRegion}
+          onMonthChange={handleMonthChange}
+          onRegionChange={handleRegionChange}
         />
       </AppPageHeader>
 
@@ -127,6 +182,8 @@ export const RecommendationsPage = () => {
       <DestinationDetailSheet
         destination={selected}
         month={month}
+        recommendationId={data?.recommendation_id}
+        modelVersion={data?.model_version}
         open={sheetOpen}
         onClose={handleSheetClose}
       />

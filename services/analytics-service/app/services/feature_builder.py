@@ -92,7 +92,7 @@ def _build_layer2(user_id: uuid.UUID, db: Session) -> dict:
         db.query(UserEvent.entity_id)
         .filter(
             UserEvent.user_id == user_id,
-            UserEvent.event_type == "recommendation_shown",
+            UserEvent.event_type.in_(["recommendation_impression", "recommendation_shown"]),
             UserEvent.entity_id.isnot(None),
         )
         .distinct()

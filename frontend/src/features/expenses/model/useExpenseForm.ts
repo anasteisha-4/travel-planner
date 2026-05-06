@@ -1,5 +1,6 @@
 import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { expenseApi, ExpenseCreateSchema } from '@/entities/expense';
+import { sendEvent } from '@/shared/api';
 import { useToast } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -71,6 +72,19 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
       const expense = await expenseApi.createExpense(tripId, data);
       queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
       queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
+      sendEvent(
+        'expense_added',
+        {
+          trip_id: tripId,
+          expense_id: expense.id,
+          amount: expense.amount,
+          currency: expense.currency,
+          category: expense.category,
+          expense_date: expense.expense_date,
+        },
+        'trip',
+        tripId
+      );
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось добавить расход' });
@@ -88,6 +102,19 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
       const expense = await expenseApi.updateExpense(expenseId, data);
       queryClient.invalidateQueries({ queryKey: ['expenses', tripId] });
       queryClient.invalidateQueries({ queryKey: ['expenses-summary', tripId] });
+      sendEvent(
+        'expense_updated',
+        {
+          trip_id: tripId,
+          expense_id: expense.id,
+          amount: expense.amount,
+          currency: expense.currency,
+          category: expense.category,
+          expense_date: expense.expense_date,
+        },
+        'trip',
+        tripId
+      );
       return expense;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось обновить расход' });

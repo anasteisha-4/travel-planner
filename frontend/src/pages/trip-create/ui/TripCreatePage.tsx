@@ -3,11 +3,12 @@ import { expenseApi } from '@/entities/expense';
 import { profileApi } from '@/features/profile';
 import { DestinationValidationCompact, useBudgetPrediction } from '@/features/recommendations';
 import { TripForm, type TripFormInitialValues, type TripFormSnapshot } from '@/features/trips';
+import { sendEvent } from '@/shared/api';
 import { useDebouncedValue } from '@/shared/lib';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const getParamNumber = (value: string | null): number | undefined => {
@@ -62,6 +63,7 @@ const formatBudgetAmount = (value: number, currency: string) => {
 export const TripCreatePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const trackedBudgetKeys = useRef<Set<string>>(new Set());
 
   const hasRecommendationPrefill = searchParams.has('destination');
   const { data: profile, isLoading: isProfileLoading } = useQuery({
@@ -192,7 +194,48 @@ export const TripCreatePage = () => {
       ? `${Math.round(budgetAssumptions.travel_distance_km).toLocaleString('ru-RU')} км`
       : 'Расстояние неизвестно';
 
+  useEffect(() => {
+    if (!budgetPrediction || !destinationId) return;
+    const key = `${destinationId}:${budgetPrediction.duration_days}:${budgetPrediction.people_count}:${budgetPrediction.currency}:${getTravelMonth(previewStartDate)}`;
+    if (trackedBudgetKeys.current.has(key)) return;
+    trackedBudgetKeys.current.add(key);
+    sendEvent(
+      'budget_prediction_changed',
+      {
+        destination_id: destinationId,
+        recommendation_id: searchParams.get('recommendation_id') || null,
+        model_version: searchParams.get('model_version') || null,
+        duration_days: budgetPrediction.duration_days,
+        people_count: budgetPrediction.people_count,
+        currency: budgetPrediction.currency,
+        total_mid: budgetPrediction.total_mid,
+        origin_city_name: budgetPrediction.assumptions?.origin_city_name,
+        travel_cost_source: budgetPrediction.assumptions?.travel_cost_source,
+      },
+      'destination',
+      destinationId
+    );
+  }, [budgetPrediction, destinationId, previewStartDate, searchParams]);
+
   const handleSuccess = (trip: Trip) => {
+    const recommendationId = searchParams.get('recommendation_id');
+    if (recommendationId) {
+      sendEvent(
+        'trip_created_from_recommendation',
+        {
+          trip_id: trip.id,
+          recommendation_id: recommendationId,
+          model_version: searchParams.get('model_version') || null,
+          destination_id: trip.destination_id,
+          destination: trip.destination,
+          currency: trip.currency,
+          people_count: trip.people_count,
+          budget: trip.budget,
+        },
+        'trip',
+        trip.id
+      );
+    }
     navigate(`/trips/${trip.id}`, { replace: true });
   };
 

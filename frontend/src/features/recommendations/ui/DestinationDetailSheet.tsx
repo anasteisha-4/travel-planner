@@ -1,9 +1,11 @@
 import type { UserProfileV2 } from '@/entities/user';
 import { localizeDestinationName } from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
+import { sendEvent } from '@/shared/api';
 import { AdaptiveSheet, Button } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Plane, ShieldAlert } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type {
   DestinationValidationResponse,
@@ -88,6 +90,8 @@ type TripParams = {
 type DestinationDetailSheetProps = {
   destination: ScoredDestination | null;
   month: number;
+  recommendationId?: string;
+  modelVersion?: string;
   open: boolean;
   onClose: () => void;
 };
@@ -285,11 +289,15 @@ const ValidationBlock = ({
 export const DestinationDetailSheet = ({
   destination,
   month,
+  recommendationId,
+  modelVersion,
   open,
   onClose,
 }: DestinationDetailSheetProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const trackedBudgetKeys = useRef<Set<string>>(new Set());
+  const trackedValidationKeys = useRef<Set<string>>(new Set());
   const profileCached = queryClient.getQueryData<UserProfileV2>(['profile']);
   const defaultDuration = TYPICAL_DURATION_MAP[profileCached?.typical_duration ?? 'standard'] ?? 7;
   const defaultTier: 'budget' | 'mid' | 'luxury' = (() => {
@@ -337,6 +345,51 @@ export const DestinationDetailSheet = ({
     isError: isValidationError,
   } = useDestinationValidation(destinationValidationParams);
 
+  useEffect(() => {
+    if (!open || !destination || !budgetPrediction) return;
+    const key = `${destination.destination_id}:${budgetPrediction.duration_days}:${budgetPrediction.people_count}:${budgetPrediction.currency}:${month}`;
+    if (trackedBudgetKeys.current.has(key)) return;
+    trackedBudgetKeys.current.add(key);
+    sendEvent(
+      'budget_prediction_viewed',
+      {
+        recommendation_id: recommendationId,
+        model_version: modelVersion,
+        destination_id: destination.destination_id,
+        duration_days: budgetPrediction.duration_days,
+        people_count: budgetPrediction.people_count,
+        currency: budgetPrediction.currency,
+        travel_month: month,
+        total_mid: budgetPrediction.total_mid,
+        origin_city_name: budgetPrediction.assumptions?.origin_city_name,
+        travel_cost_source: budgetPrediction.assumptions?.travel_cost_source,
+      },
+      'destination',
+      destination.destination_id
+    );
+  }, [budgetPrediction, destination, modelVersion, month, open, recommendationId]);
+
+  useEffect(() => {
+    if (!open || !destination || !destinationValidation) return;
+    const key = `${destination.destination_id}:${month}:${budgetPerDayUsd ?? 'none'}`;
+    if (trackedValidationKeys.current.has(key)) return;
+    trackedValidationKeys.current.add(key);
+    sendEvent(
+      'validation_viewed',
+      {
+        recommendation_id: recommendationId,
+        model_version: modelVersion,
+        destination_id: destination.destination_id,
+        travel_month: month,
+        warnings_count: destinationValidation.warnings.length,
+        warning_types: destinationValidation.warnings.map((warning) => warning.type),
+        budget_per_day_usd: budgetPerDayUsd,
+      },
+      'destination',
+      destination.destination_id
+    );
+  }, [budgetPerDayUsd, destination, destinationValidation, modelVersion, month, open, recommendationId]);
+
   if (!destination) return null;
 
   const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
@@ -359,6 +412,8 @@ export const DestinationDetailSheet = ({
     });
     if (profileCached?.origin_city_name)
       params.set('departure_city', profileCached.origin_city_name);
+    if (recommendationId) params.set('recommendation_id', recommendationId);
+    if (modelVersion) params.set('model_version', modelVersion);
     if (budgetPrediction?.total_mid)
       params.set('budget', String(Math.round(budgetPrediction.total_mid)));
     onClose();

@@ -252,7 +252,19 @@ export const useTripForm = (
     try {
       const trip = await tripApi.createTrip(data);
       queryClient.invalidateQueries({ queryKey: ['trips'] });
-      sendEvent('trip_created', { destination: data.destination, currency: data.currency, people_count: data.people_count }, 'trip', trip.id);
+      sendEvent(
+        'trip_created',
+        {
+          destination: data.destination,
+          destination_id: data.destination_id,
+          currency: data.currency,
+          people_count: data.people_count,
+          budget: data.budget,
+          departure_city: data.departure_city,
+        },
+        'trip',
+        trip.id
+      );
       return trip;
     } catch {
       toast({ variant: 'destructive', title: 'Ошибка', description: 'Не удалось создать поездку' });

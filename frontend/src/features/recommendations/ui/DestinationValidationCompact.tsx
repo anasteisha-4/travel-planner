@@ -1,4 +1,6 @@
+import { sendEvent } from '@/shared/api';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useDestinationValidation } from '../model/useDestinationValidation';
 import type { DestinationValidationStatus, DestinationValidationWarning } from '../model/types';
 
@@ -55,6 +57,7 @@ export const DestinationValidationCompact = ({
   budgetPerDayUsd,
   className = '',
 }: Props) => {
+  const trackedKeys = useRef<Set<string>>(new Set());
   const { data, isLoading, isError } = useDestinationValidation(
     destinationId
       ? {
@@ -65,6 +68,26 @@ export const DestinationValidationCompact = ({
         }
       : null
   );
+
+  useEffect(() => {
+    if (!destinationId || !data) return;
+    const key = `${destinationId}:${travelMonth}:${budgetPerDayUsd ?? 'none'}`;
+    if (trackedKeys.current.has(key)) return;
+    trackedKeys.current.add(key);
+    sendEvent(
+      'validation_viewed',
+      {
+        destination_id: destinationId,
+        travel_month: travelMonth,
+        budget_per_day_usd: budgetPerDayUsd ?? null,
+        warnings_count: data.warnings.length,
+        warning_types: data.warnings.map((warning) => warning.type),
+        source: 'trip_form',
+      },
+      'destination',
+      destinationId
+    );
+  }, [budgetPerDayUsd, data, destinationId, travelMonth]);
 
   if (!destinationId) {
     return (

@@ -1,10 +1,11 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { itineraryQueryKey, useGenerateItinerary, type ItineraryGenerateResponse, type ItineraryPlace } from '@/features/itinerary';
+import { sendEvent } from '@/shared/api';
 import { localizePoiName } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CalendarDays, Clock3, Loader2, Map, MapPinned, RefreshCw, Route } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 
 const getDurationDays = (startDate: string, endDate: string) => {
@@ -224,7 +225,27 @@ export const TripItineraryTab = () => {
     : null;
   const cached = cacheKey ? queryClient.getQueryData<ItineraryGenerateResponse>(cacheKey) : undefined;
   const [generated, setGenerated] = useState<ItineraryGenerateResponse | null>(cached ?? null);
+  const trackedViewKeys = useRef<Set<string>>(new Set());
   const errorMessage = mutation.isError ? getErrorMessage(mutation.error) : null;
+
+  useEffect(() => {
+    if (!trip.destination_id) return;
+    const key = `${trip.id}:${trip.destination_id}:${trip.start_date}:${durationDays}`;
+    if (trackedViewKeys.current.has(key)) return;
+    trackedViewKeys.current.add(key);
+    sendEvent(
+      'itinerary_viewed',
+      {
+        trip_id: trip.id,
+        destination_id: trip.destination_id,
+        start_date: trip.start_date,
+        duration_days: durationDays,
+        has_generated_itinerary: Boolean(generated),
+      },
+      'trip',
+      trip.id
+    );
+  }, [durationDays, generated, trip.destination_id, trip.id, trip.start_date]);
 
   const handleGenerate = () => {
     if (!trip.destination_id) return;
@@ -238,7 +259,23 @@ export const TripItineraryTab = () => {
         },
       },
       {
-        onSuccess: setGenerated,
+        onSuccess: (data) => {
+          setGenerated(data);
+          sendEvent(
+            'itinerary_generated',
+            {
+              trip_id: trip.id,
+              destination_id: trip.destination_id,
+              start_date: trip.start_date,
+              duration_days: durationDays,
+              days_count: data.days.length,
+              places_count: getPlacesCount(data),
+              has_template: data.has_template,
+            },
+            'trip',
+            trip.id
+          );
+        },
       }
     );
   };

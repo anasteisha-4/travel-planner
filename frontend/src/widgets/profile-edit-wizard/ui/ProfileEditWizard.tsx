@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { BUDGET_LIMITS } from '@/shared/config';
 import { expenseApi } from '@/entities/expense';
+import { sendEvent } from '@/shared/api';
 import {
   Button,
   Drawer,
@@ -68,6 +69,9 @@ const profileToEditState = (p: Partial<UserProfileV2>): EditState => ({
   freeTextNotes: p.free_text_notes ?? '',
 });
 
+const hasArrayChanged = <T,>(prev: T[], next: T[]) =>
+  prev.length !== next.length || prev.some((item, index) => item !== next[index]);
+
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -119,6 +123,67 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
   const patchMutation = useMutation({
     mutationFn: (data: Partial<UserProfileV2>) => profileApi.patchProfile(data),
     onSuccess: (updated) => {
+      const initial = profileToEditState(initialData);
+      const changedFields = [
+        hasArrayChanged(initial.vacationPreferencesRanked, state.vacationPreferencesRanked)
+          ? 'vacation_preferences_ranked'
+          : null,
+        initial.preferredCurrency !== state.preferredCurrency ? 'preferred_currency' : null,
+        initial.budgetMin !== state.budgetMin ? 'budget_min' : null,
+        initial.budgetMax !== state.budgetMax ? 'budget_max' : null,
+        initial.typicalDuration !== state.typicalDuration ? 'typical_duration' : null,
+        initial.originCityName !== state.originCityName ? 'origin_city_name' : null,
+        hasArrayChanged(
+          initial.likedDests.map((dest) => dest.id),
+          state.likedDests.map((dest) => dest.id)
+        )
+          ? 'liked_destination_ids'
+          : null,
+        initial.riskTolerance !== state.riskTolerance ? 'risk_tolerance' : null,
+        initial.visaTolerance !== state.visaTolerance ? 'visa_tolerance' : null,
+        hasArrayChanged(initial.languageComfort, state.languageComfort) ? 'language_comfort' : null,
+        initial.crowdPreference !== state.crowdPreference ? 'crowd_preference' : null,
+        hasArrayChanged(initial.climatePreferences, state.climatePreferences) ? 'climate_preferences' : null,
+      ].filter((field): field is string => field !== null);
+
+      sendEvent('profile_updated', {
+        changed_fields: changedFields,
+        preferred_currency: updated.preferred_currency,
+        onboarding_completed: updated.onboarding_completed,
+      });
+      if (changedFields.some((field) => field === 'origin_city_name' || field === 'typical_duration')) {
+        sendEvent('profile_origin_changed', {
+          origin_city_name: updated.origin_city_name,
+          has_origin_coords: updated.origin_lat != null && updated.origin_lng != null,
+          typical_duration: updated.typical_duration,
+        });
+      }
+      if (changedFields.some((field) => field === 'budget_min' || field === 'budget_max' || field === 'preferred_currency')) {
+        sendEvent('profile_budget_changed', {
+          preferred_currency: updated.preferred_currency,
+          has_budget_min: updated.budget_min !== null,
+          has_budget_max: updated.budget_max !== null,
+        });
+      }
+      if (
+        changedFields.some((field) =>
+          [
+            'vacation_preferences_ranked',
+            'liked_destination_ids',
+            'risk_tolerance',
+            'visa_tolerance',
+            'language_comfort',
+            'crowd_preference',
+            'climate_preferences',
+          ].includes(field)
+        )
+      ) {
+        sendEvent('profile_preferences_changed', {
+          vacation_preferences_count: updated.vacation_preferences_ranked?.length ?? 0,
+          liked_destinations_count: updated.liked_destination_ids?.length ?? 0,
+          language_comfort_count: updated.language_comfort?.length ?? 0,
+        });
+      }
       qc.setQueryData(['profile'], updated);
       onSaved();
       onOpenChange(false);

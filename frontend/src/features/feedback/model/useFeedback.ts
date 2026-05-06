@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { sendEvent } from '@/shared/api';
 import { feedbackApi, type PostTripFeedbackPayload } from '../api/feedback.api';
 
 export const useFeedback = (tripId: string, destination: string) => {
@@ -17,6 +18,21 @@ export const useFeedback = (tripId: string, destination: string) => {
     mutationFn: (payload: PostTripFeedbackPayload) => feedbackApi.submitPostTrip(payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['feedback', tripId], data);
+      sendEvent(
+        'post_trip_feedback_submitted',
+        {
+          trip_id: tripId,
+          destination: data.destination,
+          overall_rating: data.overall_rating,
+          destination_rating: data.destination_rating,
+          would_revisit: data.would_revisit,
+          value_rating: data.value_rating,
+          actual_total_cost: data.actual_total_cost,
+          actual_currency: data.actual_currency,
+        },
+        'trip',
+        tripId
+      );
     },
   });
 
@@ -25,6 +41,21 @@ export const useFeedback = (tripId: string, destination: string) => {
       feedbackApi.updatePostTrip(tripId, payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['feedback', tripId], data);
+      sendEvent(
+        'post_trip_feedback_updated',
+        {
+          trip_id: tripId,
+          destination: data.destination,
+          overall_rating: data.overall_rating,
+          destination_rating: data.destination_rating,
+          would_revisit: data.would_revisit,
+          value_rating: data.value_rating,
+          actual_total_cost: data.actual_total_cost,
+          actual_currency: data.actual_currency,
+        },
+        'trip',
+        tripId
+      );
     },
   });
 

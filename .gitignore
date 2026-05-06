@@ -44,6 +44,7 @@ htmlcov/
 pip-log.txt
 pip-delete-this-directory.txt
 
+docs/*/*
 *.dump
 dump.rdb
 travel_planner_dump_*.dump
