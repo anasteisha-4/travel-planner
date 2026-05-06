@@ -1,21 +1,67 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const envDir = path.resolve(__dirname, '..');
+
+const escapeJsString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+const buildRuntimeEnvSource = (env: Record<string, string>): string => {
+  const entries = Object.entries(env)
+    .filter(([key]) => key.startsWith('VITE_'))
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  const body = entries
+    .map(([key, value]) => `  ${JSON.stringify(key)}: "${escapeJsString(value)}"`)
+    .join(',\n');
+
+  return `window.__TRIPLY_ENV__ = {\n${body}\n};\n`;
+};
+
+const runtimeEnvPlugin = (mode: string): Plugin => {
+  const modeEnv = loadEnv(mode, envDir, 'VITE_');
+  const runtimeEnv = { ...modeEnv };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('VITE_') && value !== undefined) {
+      runtimeEnv[key] = value;
+    }
+  }
+
+  return {
+    name: 'triply-runtime-env',
+    configureServer(server) {
+      server.middlewares.use('/env.js', (_req, res) => {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.end(buildRuntimeEnvSource(runtimeEnv));
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'env.js',
+        source: buildRuntimeEnvSource(runtimeEnv),
+      });
+    },
+  };
+};
+
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const isDev = command === 'serve';
 
   return {
-    envDir: path.resolve(__dirname, '..'),
+    envDir,
     plugins: [
       react(),
+      runtimeEnvPlugin(mode),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globIgnores: ['**/env.js'],
           runtimeCaching: [
             {
               urlPattern: /^\/api\/.*$/i,

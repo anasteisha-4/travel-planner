@@ -121,10 +121,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        - VITE_API_URL
         - VITE_YANDEX_MAPS_API_TOKEN
         - VITE_GEOAPIFY_API_KEY
         - VITE_YANDEX_GEOSUGGEST_API_KEY
     container_name: travel-planner-frontend
+    env_file:
+      - .env.docker
     ports:
       - "80:80"
     depends_on:

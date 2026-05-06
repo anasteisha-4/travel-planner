@@ -7,6 +7,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 ARG VITE_YANDEX_MAPS_API_TOKEN
 ENV VITE_YANDEX_MAPS_API_TOKEN=$VITE_YANDEX_MAPS_API_TOKEN
 
@@ -28,6 +31,8 @@ RUN rm -rf /usr/share/nginx/html/*
 
 # Copy built React files from the build stage
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY docker-entrypoint.d/ /docker-entrypoint.d/
+RUN chmod +x /docker-entrypoint.d/*.sh
 
 # Replace default Nginx configuration with our custom config.
 # Local builds use HTTP-only nginx.conf; production compose selects nginx.prod.conf.

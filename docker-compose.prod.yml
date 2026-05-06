@@ -112,11 +112,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        - VITE_API_URL
         - VITE_YANDEX_MAPS_API_TOKEN
         - VITE_GEOAPIFY_API_KEY
         - VITE_YANDEX_GEOSUGGEST_API_KEY
         - NGINX_CONF=nginx.prod.conf
     container_name: travel-planner-frontend
+    env_file:
+      - .env.prod
     ports:
       - "80:80"
       - "443:443"

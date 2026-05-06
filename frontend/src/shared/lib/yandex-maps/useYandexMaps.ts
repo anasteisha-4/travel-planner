@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { getRuntimeEnv } from '../runtime-env'
 import type { YMaps3 } from './types'
 
 const SCRIPT_ID = 'yandex-maps-v3-script'
@@ -15,7 +16,7 @@ const loadYandexMaps = (): Promise<void> => {
       return
     }
 
-    const apiKey = import.meta.env.VITE_YANDEX_MAPS_API_TOKEN ?? ''
+    const apiKey = getRuntimeEnv('VITE_YANDEX_MAPS_API_TOKEN')
 
     const script = document.createElement('script')
     script.id = SCRIPT_ID

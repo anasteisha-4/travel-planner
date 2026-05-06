@@ -3,6 +3,7 @@ const YANDEX_GEOSUGGEST_URL = 'https://suggest-maps.yandex.ru/v1/suggest'
 const GEOAPIFY_URL = 'https://api.geoapify.com/v1/geocode'
 
 import type { LngLat } from '../yandex-maps/types'
+import { getRuntimeEnv } from '../runtime-env'
 
 export type GeocoderResult = {
   name: string
@@ -78,7 +79,7 @@ const parseGeoapify = (feature: GeoapifyFeature): GeocoderResult => {
 }
 
 const searchYandexGeosuggest = async (query: string, results: number, bias?: LngLat): Promise<GeocoderResult[]> => {
-  const apiKey = import.meta.env.VITE_YANDEX_GEOSUGGEST_API_KEY ?? ''
+  const apiKey = getRuntimeEnv('VITE_YANDEX_GEOSUGGEST_API_KEY')
   const params = new URLSearchParams({
     apikey: apiKey,
     text: query,
@@ -114,7 +115,7 @@ const searchYandexGeosuggest = async (query: string, results: number, bias?: Lng
 }
 
 const searchYandex = async (query: string, results: number, bias?: LngLat): Promise<GeocoderResult[]> => {
-  const apiKey = import.meta.env.VITE_YANDEX_MAPS_API_TOKEN ?? ''
+  const apiKey = getRuntimeEnv('VITE_YANDEX_MAPS_API_TOKEN')
   const params = new URLSearchParams({
     apikey: apiKey,
     format: 'json',
@@ -147,7 +148,7 @@ const searchYandex = async (query: string, results: number, bias?: LngLat): Prom
 const isProperName = (name: string): boolean => /[а-яёa-z]{3,}/i.test(name)
 
 const reverseYandex = async (lat: number, lon: number): Promise<string | null> => {
-  const apiKey = import.meta.env.VITE_YANDEX_MAPS_API_TOKEN ?? ''
+  const apiKey = getRuntimeEnv('VITE_YANDEX_MAPS_API_TOKEN')
   const params = new URLSearchParams({
     apikey: apiKey,
     format: 'json',
@@ -173,7 +174,7 @@ const reverseYandex = async (lat: number, lon: number): Promise<string | null> =
 
   if (geocoderName && isProperName(geocoderName)) return geocoderName
 
-  const geosuggestKey = import.meta.env.VITE_YANDEX_GEOSUGGEST_API_KEY ?? ''
+  const geosuggestKey = getRuntimeEnv('VITE_YANDEX_GEOSUGGEST_API_KEY')
   if (addressText && geosuggestKey) {
     try {
       const suggestParams = new URLSearchParams({
@@ -201,7 +202,7 @@ const reverseYandex = async (lat: number, lon: number): Promise<string | null> =
 }
 
 const searchGeoapify = async (query: string, results: number, bias?: LngLat): Promise<GeocoderResult[]> => {
-  const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY ?? ''
+  const apiKey = getRuntimeEnv('VITE_GEOAPIFY_API_KEY')
   const params = new URLSearchParams({
     text: query,
     limit: String(results),
@@ -225,7 +226,7 @@ const searchGeoapify = async (query: string, results: number, bias?: LngLat): Pr
 }
 
 const reverseGeoapify = async (lat: number, lon: number): Promise<string | null> => {
-  const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY ?? ''
+  const apiKey = getRuntimeEnv('VITE_GEOAPIFY_API_KEY')
   const base = new URLSearchParams({ lat: String(lat), lon: String(lon), lang: 'ru', apiKey })
   try {
     const poiParams = new URLSearchParams(base)
@@ -252,7 +253,7 @@ export { useReverseGeocode } from './useReverseGeocode';
 export const searchAddress = async (query: string, results = 5, bias?: LngLat): Promise<GeocoderResult[]> => {
   const useYandex = bias ? isRussiaOrCIS(bias) : false
   if (useYandex) {
-    const geosuggestKey = import.meta.env.VITE_YANDEX_GEOSUGGEST_API_KEY ?? ''
+    const geosuggestKey = getRuntimeEnv('VITE_YANDEX_GEOSUGGEST_API_KEY')
     const raw = geosuggestKey
       ? await searchYandexGeosuggest(query, results, bias)
       : await searchYandex(query, results, bias)
@@ -268,6 +269,6 @@ export const reverseGeocode = async (lat: number, lon: number): Promise<string |
   if (isRussiaOrCIS([lon, lat])) {
     return reverseYandex(lat, lon)
   }
-  const geoapifyKey = import.meta.env.VITE_GEOAPIFY_API_KEY ?? ''
+  const geoapifyKey = getRuntimeEnv('VITE_GEOAPIFY_API_KEY')
   return geoapifyKey ? reverseGeoapify(lat, lon) : reverseYandex(lat, lon)
 }

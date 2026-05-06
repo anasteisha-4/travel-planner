@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+import { getRuntimeEnv } from '../lib/runtime-env';
+
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: getRuntimeEnv('VITE_API_URL'),
   headers: {
     'Content-Type': 'application/json',
   },
