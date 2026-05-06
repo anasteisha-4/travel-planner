@@ -14,6 +14,7 @@ export const useDestinationValidation = (params: DestinationValidationRequest | 
     queryFn: () => recommendationsApi.validateDestination(params!),
     enabled: params !== null,
     staleTime: 10 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
     retry: 1,
   });
 };

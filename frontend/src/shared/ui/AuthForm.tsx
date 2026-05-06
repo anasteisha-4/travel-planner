@@ -45,11 +45,11 @@ export const AuthForm = ({
         </form>
 
         <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-stone-100 dark:bg-stone-800" />
+          <div className="h-px flex-1 bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
           <span className="text-[11px] font-bold uppercase tracking-widest text-stone-300 dark:text-stone-600">
             или
           </span>
-          <div className="h-px flex-1 bg-stone-100 dark:bg-stone-800" />
+          <div className="h-px flex-1 bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
         </div>
 
         <button

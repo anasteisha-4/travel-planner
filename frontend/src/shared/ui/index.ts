@@ -1,4 +1,5 @@
 export * from './action-card';
+export * from './adaptive-sheet';
 export * from './app-input';
 export * from './AuthForm';
 export * from './badge';

@@ -15,14 +15,14 @@ export const DiaryHintSheet = ({ open, onClose }: DiaryHintSheetProps) => {
 
   return (
     <Drawer open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DrawerContent className="bg-white pb-8 dark:bg-stone-950">
+      <DrawerContent className="bg-white pb-8 dark:bg-[hsl(var(--surface-elevated))]">
         <div className="px-5 pb-2 pt-1">
           <p className="mb-5 text-center text-[20px] font-extrabold text-stone-900 dark:text-white">
             Дневник поездки
           </p>
 
           <div className="mb-6 flex flex-col gap-3">
-            <div className="flex items-start gap-3 rounded-2xl bg-stone-100 px-4 py-3.5 dark:bg-stone-800">
+            <div className="flex items-start gap-3 rounded-2xl bg-stone-100 px-4 py-3.5 dark:bg-[hsl(var(--surface-muted))]">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
                 <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
@@ -34,7 +34,7 @@ export const DiaryHintSheet = ({ open, onClose }: DiaryHintSheetProps) => {
               </div>
             </div>
 
-            <div className="flex items-start gap-3 rounded-2xl bg-stone-100 px-4 py-3.5 dark:bg-stone-800">
+            <div className="flex items-start gap-3 rounded-2xl bg-stone-100 px-4 py-3.5 dark:bg-[hsl(var(--surface-muted))]">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
                 <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>

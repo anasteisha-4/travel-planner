@@ -46,12 +46,12 @@ export const TripsPage = () => {
               <div key={i} className="trip-info-card animate-pulse">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <div className="h-4 w-36 rounded-lg bg-stone-100 dark:bg-stone-800" />
-                    <div className="h-3 w-24 rounded-lg bg-stone-100 dark:bg-stone-800" />
+                    <div className="h-4 w-36 rounded-lg bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
+                    <div className="h-3 w-24 rounded-lg bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
                   </div>
-                  <div className="h-5 w-20 rounded-full bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-5 w-20 rounded-full bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
                 </div>
-                <div className="h-3 w-48 rounded-lg bg-stone-100 dark:bg-stone-800" />
+                <div className="h-3 w-48 rounded-lg bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
               </div>
             ))}
           </div>

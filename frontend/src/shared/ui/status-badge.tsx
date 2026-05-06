@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<TripStatus, { label: string; className: string }> = 
   completed: {
     label: 'Завершена',
     className:
-      'border-stone-200 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400',
+      'border-stone-200 bg-stone-100 text-stone-500 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-400',
   },
   cancelled: {
     label: 'Отменена',

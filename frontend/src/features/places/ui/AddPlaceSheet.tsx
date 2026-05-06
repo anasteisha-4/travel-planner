@@ -37,7 +37,7 @@ export const AddPlaceSheet = ({ open, tripId, defaultDate, initialCoords, initia
 
   return (
     <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerContent className="flex max-h-[88dvh] flex-col bg-white p-0 dark:bg-stone-950">
+      <DrawerContent className="flex max-h-[88dvh] flex-col bg-white p-0 dark:bg-[hsl(var(--surface-elevated))]">
         <DrawerHeader className="shrink-0 px-5 pb-0 pt-4">
           <DrawerTitle className="text-[20px] font-extrabold text-stone-900 dark:text-white">
             {editingPlace ? 'Редактировать место' : 'Добавить место'}
@@ -67,7 +67,7 @@ export const AddPlaceSheet = ({ open, tripId, defaultDate, initialCoords, initia
             <div>
               <FieldLabel>Заметки</FieldLabel>
               <textarea
-                className="h-20 w-full resize-none rounded-[14px] border border-stone-200 bg-stone-100 px-3.5 py-3 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-[1.5px] focus:border-primary dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
+                className="h-20 w-full resize-none rounded-[14px] border border-stone-200 bg-stone-100 px-3.5 py-3 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-[1.5px] focus:border-primary dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-white dark:placeholder:text-stone-500"
                 placeholder="Впечатления, что запомнилось..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

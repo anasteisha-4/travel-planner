@@ -1,97 +1,147 @@
+import { localizeDestinationName } from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
 import type { ScoredDestination } from '../model/types';
 
 const COUNTRY_FLAGS: Record<string, string> = {
-  AF: '🇦🇫', AL: '🇦🇱', DZ: '🇩🇿', AD: '🇦🇩', AO: '🇦🇴', AG: '🇦🇬', AR: '🇦🇷', AM: '🇦🇲',
-  AU: '🇦🇺', AT: '🇦🇹', AZ: '🇦🇿', BS: '🇧🇸', BH: '🇧🇭', BD: '🇧🇩', BB: '🇧🇧', BY: '🇧🇾',
-  BE: '🇧🇪', BZ: '🇧🇿', BJ: '🇧🇯', BT: '🇧🇹', BO: '🇧🇴', BA: '🇧🇦', BW: '🇧🇼', BR: '🇧🇷',
-  BN: '🇧🇳', BG: '🇧🇬', BF: '🇧🇫', BI: '🇧🇮', CV: '🇨🇻', KH: '🇰🇭', CM: '🇨🇲', CA: '🇨🇦',
-  CF: '🇨🇫', TD: '🇹🇩', CL: '🇨🇱', CN: '🇨🇳', CO: '🇨🇴', KM: '🇰🇲', CG: '🇨🇬', CR: '🇨🇷',
-  HR: '🇭🇷', CU: '🇨🇺', CY: '🇨🇾', CZ: '🇨🇿', DK: '🇩🇰', DJ: '🇩🇯', DM: '🇩🇲', DO: '🇩🇴',
-  EC: '🇪🇨', EG: '🇪🇬', SV: '🇸🇻', GQ: '🇬🇶', ER: '🇪🇷', EE: '🇪🇪', SZ: '🇸🇿', ET: '🇪🇹',
-  FJ: '🇫🇯', FI: '🇫🇮', FR: '🇫🇷', GA: '🇬🇦', GM: '🇬🇲', GE: '🇬🇪', DE: '🇩🇪', GH: '🇬🇭',
-  GR: '🇬🇷', GD: '🇬🇩', GT: '🇬🇹', GN: '🇬🇳', GW: '🇬🇼', GY: '🇬🇾', HT: '🇭🇹', HN: '🇭🇳',
-  HU: '🇭🇺', IS: '🇮🇸', IN: '🇮🇳', ID: '🇮🇩', IR: '🇮🇷', IQ: '🇮🇶', IE: '🇮🇪', IL: '🇮🇱',
-  IT: '🇮🇹', JM: '🇯🇲', JP: '🇯🇵', JO: '🇯🇴', KZ: '🇰🇿', KE: '🇰🇪', KI: '🇰🇮', KP: '🇰🇵',
-  KR: '🇰🇷', KW: '🇰🇼', KG: '🇰🇬', LA: '🇱🇦', LV: '🇱🇻', LB: '🇱🇧', LS: '🇱🇸', LR: '🇱🇷',
-  LY: '🇱🇾', LI: '🇱🇮', LT: '🇱🇹', LU: '🇱🇺', MG: '🇲🇬', MW: '🇲🇼', MY: '🇲🇾', MV: '🇲🇻',
-  ML: '🇲🇱', MT: '🇲🇹', MH: '🇲🇭', MR: '🇲🇷', MU: '🇲🇺', MX: '🇲🇽', FM: '🇫🇲', MD: '🇲🇩',
-  MC: '🇲🇨', MN: '🇲🇳', ME: '🇲🇪', MA: '🇲🇦', MZ: '🇲🇿', MM: '🇲🇲', NA: '🇳🇦', NR: '🇳🇷',
-  NP: '🇳🇵', NL: '🇳🇱', NZ: '🇳🇿', NI: '🇳🇮', NE: '🇳🇪', NG: '🇳🇬', NO: '🇳🇴', OM: '🇴🇲',
-  PK: '🇵🇰', PW: '🇵🇼', PA: '🇵🇦', PG: '🇵🇬', PY: '🇵🇾', PE: '🇵🇪', PH: '🇵🇭', PL: '🇵🇱',
-  PT: '🇵🇹', QA: '🇶🇦', RO: '🇷🇴', RU: '🇷🇺', RW: '🇷🇼', KN: '🇰🇳', LC: '🇱🇨', VC: '🇻🇨',
-  WS: '🇼🇸', SM: '🇸🇲', ST: '🇸🇹', SA: '🇸🇦', SN: '🇸🇳', RS: '🇷🇸', SC: '🇸🇨', SL: '🇸🇱',
-  SG: '🇸🇬', SK: '🇸🇰', SI: '🇸🇮', SB: '🇸🇧', SO: '🇸🇴', ZA: '🇿🇦', SS: '🇸🇸', ES: '🇪🇸',
-  LK: '🇱🇰', SD: '🇸🇩', SR: '🇸🇷', SE: '🇸🇪', CH: '🇨🇭', SY: '🇸🇾', TW: '🇹🇼', TJ: '🇹🇯',
-  TZ: '🇹🇿', TH: '🇹🇭', TL: '🇹🇱', TG: '🇹🇬', TO: '🇹🇴', TT: '🇹🇹', TN: '🇹🇳', TR: '🇹🇷',
-  TM: '🇹🇲', TV: '🇹🇻', UG: '🇺🇬', UA: '🇺🇦', AE: '🇦🇪', GB: '🇬🇧', US: '🇺🇸', UY: '🇺🇾',
-  UZ: '🇺🇿', VU: '🇻🇺', VE: '🇻🇪', VN: '🇻🇳', YE: '🇾🇪', ZM: '🇿🇲', ZW: '🇿🇼',
+  AF: '🇦🇫',
+  AL: '🇦🇱',
+  DZ: '🇩🇿',
+  AD: '🇦🇩',
+  AO: '🇦🇴',
+  AG: '🇦🇬',
+  AR: '🇦🇷',
+  AM: '🇦🇲',
+  AU: '🇦🇺',
+  AT: '🇦🇹',
+  AZ: '🇦🇿',
+  BS: '🇧🇸',
+  BH: '🇧🇭',
+  BD: '🇧🇩',
+  BB: '🇧🇧',
+  BY: '🇧🇾',
+  BE: '🇧🇪',
+  BR: '🇧🇷',
+  BG: '🇧🇬',
+  CA: '🇨🇦',
+  CH: '🇨🇭',
+  CL: '🇨🇱',
+  CN: '🇨🇳',
+  CO: '🇨🇴',
+  CY: '🇨🇾',
+  CZ: '🇨🇿',
+  DE: '🇩🇪',
+  DK: '🇩🇰',
+  EE: '🇪🇪',
+  EG: '🇪🇬',
+  ES: '🇪🇸',
+  FI: '🇫🇮',
+  FR: '🇫🇷',
+  GB: '🇬🇧',
+  GE: '🇬🇪',
+  GR: '🇬🇷',
+  HR: '🇭🇷',
+  HU: '🇭🇺',
+  ID: '🇮🇩',
+  IE: '🇮🇪',
+  IL: '🇮🇱',
+  IN: '🇮🇳',
+  IT: '🇮🇹',
+  JP: '🇯🇵',
+  KR: '🇰🇷',
+  KZ: '🇰🇿',
+  LT: '🇱🇹',
+  LV: '🇱🇻',
+  MA: '🇲🇦',
+  MD: '🇲🇩',
+  ME: '🇲🇪',
+  MX: '🇲🇽',
+  MY: '🇲🇾',
+  NL: '🇳🇱',
+  NO: '🇳🇴',
+  NZ: '🇳🇿',
+  PL: '🇵🇱',
+  PT: '🇵🇹',
+  RO: '🇷🇴',
+  RS: '🇷🇸',
+  RU: '🇷🇺',
+  SE: '🇸🇪',
+  SG: '🇸🇬',
+  TH: '🇹🇭',
+  TR: '🇹🇷',
+  UA: '🇺🇦',
+  US: '🇺🇸',
+  UZ: '🇺🇿',
+  VN: '🇻🇳',
+  ZA: '🇿🇦',
 };
 
-const TAG_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  beach: { label: 'Пляж', color: '#0369A1', bg: 'rgba(3,105,161,0.08)' },
-  culture: { label: 'Культура', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)' },
-  nature: { label: 'Природа', color: '#15803D', bg: 'rgba(21,128,61,0.08)' },
-  adventure: { label: 'Активный', color: '#B45309', bg: 'rgba(180,83,9,0.08)' },
-  food: { label: 'Гастро', color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
-  nightlife: { label: 'Ночная жизнь', color: '#9333EA', bg: 'rgba(147,51,234,0.08)' },
-  wellness: { label: 'Велнес', color: '#0891B2', bg: 'rgba(8,145,178,0.08)' },
-  shopping: { label: 'Шопинг', color: '#B45309', bg: 'rgba(180,83,9,0.08)' },
-  family: { label: 'Семейный', color: '#2563EB', bg: 'rgba(37,99,235,0.08)' },
-  urban: { label: 'Городской', color: '#475569', bg: 'rgba(71,85,105,0.08)' },
-  affordable: { label: 'Доступно', color: '#15803D', bg: 'rgba(21,128,61,0.08)' },
-  visa_free: { label: 'Без визы', color: '#15803D', bg: 'rgba(21,128,61,0.08)' },
-  safe: { label: 'Безопасно', color: '#15803D', bg: 'rgba(21,128,61,0.08)' },
-  popular: { label: 'Популярно', color: '#2563EB', bg: 'rgba(37,99,235,0.08)' },
-  hot_season: { label: 'Лучший сезон', color: '#B45309', bg: 'rgba(180,83,9,0.08)' },
-  good_season: { label: 'Хороший сезон', color: '#15803D', bg: 'rgba(21,128,61,0.08)' },
+const TAG_CONFIG: Record<string, { label: string; className: string }> = {
+  beach: { label: 'Пляж', className: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
+  culture: {
+    label: 'Культура',
+    className: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+  },
+  nature: {
+    label: 'Природа',
+    className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  adventure: {
+    label: 'Активный',
+    className: 'bg-orange-500/10 text-orange-700 dark:text-orange-300',
+  },
+  food: { label: 'Гастро', className: 'bg-red-500/10 text-red-700 dark:text-red-300' },
+  nightlife: {
+    label: 'Ночная жизнь',
+    className: 'bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
+  },
+  wellness: { label: 'Велнес', className: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300' },
+  shopping: { label: 'Шопинг', className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+  family: { label: 'Семейный', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },
+  urban: { label: 'Городской', className: 'bg-slate-500/10 text-slate-700 dark:text-slate-300' },
+  affordable: {
+    label: 'Доступно',
+    className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  visa_free: {
+    label: 'Без визы',
+    className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  safe: {
+    label: 'Безопасно',
+    className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  popular: { label: 'Популярно', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },
+  hot_season: {
+    label: 'Лучший сезон',
+    className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  good_season: {
+    label: 'Хороший сезон',
+    className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
 };
 
-const getSeasonMeta = (score: number): { label: string; color: string; dotColor: string } => {
-  if (score >= 0.8) return { label: 'Лучший сезон', color: '#15803D', dotColor: '#22C55E' };
-  if (score >= 0.6) return { label: 'Хороший сезон', color: '#B45309', dotColor: '#F59E0B' };
-  return { label: 'Не сезон', color: '#A8A29E', dotColor: '#D6D3D1' };
+const getSeasonMeta = (score: number) => {
+  if (score >= 0.8)
+    return {
+      label: 'Лучший сезон',
+      className: 'text-emerald-600 dark:text-emerald-300',
+      dot: 'bg-emerald-500',
+    };
+  if (score >= 0.6)
+    return {
+      label: 'Хороший сезон',
+      className: 'text-amber-600 dark:text-amber-300',
+      dot: 'bg-amber-500',
+    };
+  return { label: 'Не сезон', className: 'text-muted-foreground', dot: 'bg-muted-foreground' };
 };
 
-const getMatchColor = (score: number) => {
-  if (score >= 0.8) return { text: '#15803D', bg: 'rgba(21,128,61,0.08)', ring: 'rgba(21,128,61,0.2)' };
-  if (score >= 0.6) return { text: '#2563EB', bg: 'rgba(37,99,235,0.08)', ring: 'rgba(37,99,235,0.2)' };
-  return { text: '#B45309', bg: 'rgba(245,158,11,0.1)', ring: 'rgba(245,158,11,0.25)' };
-};
-
-const MatchRing = ({ score }: { score: number }) => {
-  const pct = Math.round(score * 100);
-  const { text, bg, ring } = getMatchColor(score);
-  const r = 18;
-  const circ = 2 * Math.PI * r;
-  const dash = (pct / 100) * circ;
-
-  return (
-    <div
-      className="relative flex shrink-0 items-center justify-center"
-      style={{ width: 48, height: 48 }}
-    >
-      <svg width={48} height={48} style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
-        <circle cx={24} cy={24} r={r} fill="none" stroke={ring} strokeWidth={4} />
-        <circle
-          cx={24} cy={24} r={r}
-          fill="none"
-          stroke={text}
-          strokeWidth={4}
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ - dash}`}
-          strokeDashoffset={0}
-        />
-      </svg>
-      <div
-        className="relative flex flex-col items-center justify-center rounded-full"
-        style={{ width: 36, height: 36, background: bg }}
-      >
-        <span style={{ fontSize: 11, fontWeight: 800, color: text, lineHeight: 1 }}>{pct}</span>
-        <span style={{ fontSize: 7, fontWeight: 700, color: text, opacity: 0.7, lineHeight: 1 }}>%</span>
-      </div>
-    </div>
-  );
+const getMatchTone = (score: number) => {
+  if (score >= 0.8)
+    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
+  if (score >= 0.6) return 'border-primary/40 bg-primary/10 text-primary';
+  return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300';
 };
 
 type RecommendationCardProps = {
@@ -100,121 +150,76 @@ type RecommendationCardProps = {
   className?: string;
 };
 
-export const RecommendationCard = ({ destination, onClick, className }: RecommendationCardProps) => {
+export const RecommendationCard = ({
+  destination,
+  onClick,
+  className,
+}: RecommendationCardProps) => {
   const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
   const season = getSeasonMeta(destination.season_score ?? 0);
   const topTags = destination.explanation_tags.slice(0, 3);
+  const score = Math.round(destination.score * 100);
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left transition-all active:scale-[0.98]',
+        'trip-info-card w-full text-left transition active:scale-[0.99]',
+        'hover:border-primary/30',
         className
       )}
-      style={{
-        background: '#fff',
-        border: '1px solid rgba(0,0,0,0.06)',
-        borderRadius: 20,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
     >
-      {/* Top row: flag + name + match ring */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 14,
-              background: 'rgba(28,25,23,0.04)',
-              border: '1px solid rgba(0,0,0,0.06)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 24,
-              flexShrink: 0,
-            }}
-          >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-[25px]">
             {flag}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <p
-              style={{
-                fontSize: 17,
-                fontWeight: 800,
-                color: '#1C1917',
-                letterSpacing: '-0.01em',
-                lineHeight: 1.2,
-                marginBottom: 2,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {destination.name}
+          <div className="min-w-0">
+            <p className="line-clamp-2 text-[17px] font-extrabold leading-tight text-foreground">
+              {destination.display_name ??
+                destination.name_ru ??
+                localizeDestinationName(destination.name)}
             </p>
-            <p style={{ fontSize: 13, fontWeight: 500, color: '#A8A29E', lineHeight: 1 }}>
+            <p className="mt-1 text-[13px] font-semibold text-muted-foreground">
               {destination.region}
             </p>
           </div>
         </div>
-        <MatchRing score={destination.score} />
+        <div
+          className={cn(
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border font-extrabold leading-none',
+            getMatchTone(destination.score)
+          )}
+        >
+          <span className="text-[15px]">{score}</span>
+          <span className="text-[13px]">%</span>
+        </div>
       </div>
 
-      {/* Divider */}
-      <div style={{ height: 1, background: 'rgba(0,0,0,0.04)', margin: '0 -16px' }} />
+      <div className="my-3 h-px bg-[hsl(var(--surface-border))]" />
 
-      {/* Bottom row: season + cost + tags */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        {/* Left: season indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: season.dotColor,
-              flexShrink: 0,
-              display: 'inline-block',
-            }}
-          />
-          <span style={{ fontSize: 12, fontWeight: 600, color: season.color }}>
-            {season.label}
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn('h-2 w-2 shrink-0 rounded-full', season.dot)} />
+          <span className={cn('text-[12px] font-bold', season.className)}>{season.label}</span>
         </div>
-
-        {/* Right: daily cost */}
         {destination.avg_daily_cost_usd !== null && (
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#A8A29E', flexShrink: 0 }}>
+          <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
             ~${Math.round(destination.avg_daily_cost_usd)}/день · USD
           </span>
         )}
       </div>
 
-      {/* Tags */}
       {topTags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {topTags.map((tag) => {
             const cfg = TAG_CONFIG[tag];
             if (!cfg) return null;
             return (
               <span
                 key={tag}
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: cfg.color,
-                  background: cfg.bg,
-                  borderRadius: 8,
-                  padding: '4px 8px',
-                  letterSpacing: '0.01em',
-                }}
+                className={cn('rounded-lg px-2.5 py-1 text-[11px] font-extrabold', cfg.className)}
               >
                 {cfg.label}
               </span>

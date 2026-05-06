@@ -1,83 +1,53 @@
-import {
-  Drawer,
-  DrawerContent,
-  DrawerOverlay,
-  DrawerPortal,
-} from '@/shared/ui';
 import type { UserProfileV2 } from '@/entities/user';
+import { localizeDestinationName } from '@/shared/lib';
+import { cn } from '@/shared/lib/utils';
+import { AdaptiveSheet, Button } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CheckCircle2, Plane, ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { useBudgetPrediction } from '../model/useBudgetPrediction';
-import { useDestinationValidation } from '../model/useDestinationValidation';
 import type {
-  BudgetPredictResponse,
   DestinationValidationResponse,
   DestinationValidationStatus,
   DestinationValidationWarning,
   ScoreBreakdown,
   ScoredDestination,
 } from '../model/types';
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$', EUR: '€', RUB: '₽', GBP: '£', TRY: '₺',
-  THB: '฿', AED: 'AED', KZT: '₸', GEL: '₾', AMD: '֏',
-  JPY: '¥', CNY: '¥',
-};
+import { useBudgetPrediction } from '../model/useBudgetPrediction';
+import { useDestinationValidation } from '../model/useDestinationValidation';
 
 const COUNTRY_FLAGS: Record<string, string> = {
-  AF: '🇦🇫', AL: '🇦🇱', DZ: '🇩🇿', AD: '🇦🇩', AO: '🇦🇴', AR: '🇦🇷', AM: '🇦🇲',
-  AU: '🇦🇺', AT: '🇦🇹', AZ: '🇦🇿', BY: '🇧🇾', BE: '🇧🇪', BR: '🇧🇷', BG: '🇧🇬',
-  CA: '🇨🇦', CL: '🇨🇱', CN: '🇨🇳', CO: '🇨🇴', HR: '🇭🇷', CU: '🇨🇺', CY: '🇨🇾',
-  CZ: '🇨🇿', DK: '🇩🇰', EG: '🇪🇬', EE: '🇪🇪', FI: '🇫🇮', FR: '🇫🇷', GE: '🇬🇪',
-  DE: '🇩🇪', GR: '🇬🇷', HU: '🇭🇺', IS: '🇮🇸', IN: '🇮🇳', ID: '🇮🇩', IR: '🇮🇷',
-  IE: '🇮🇪', IL: '🇮🇱', IT: '🇮🇹', JP: '🇯🇵', JO: '🇯🇴', KZ: '🇰🇿', KE: '🇰🇪',
-  KR: '🇰🇷', KW: '🇰🇼', KG: '🇰🇬', LV: '🇱🇻', LB: '🇱🇧', LT: '🇱🇹', LU: '🇱🇺',
-  MY: '🇲🇾', MV: '🇲🇻', MT: '🇲🇹', MX: '🇲🇽', MD: '🇲🇩', MC: '🇲🇨', MN: '🇲🇳',
-  ME: '🇲🇪', MA: '🇲🇦', MM: '🇲🇲', NP: '🇳🇵', NL: '🇳🇱', NZ: '🇳🇿', NG: '🇳🇬',
-  NO: '🇳🇴', OM: '🇴🇲', PK: '🇵🇰', PA: '🇵🇦', PY: '🇵🇾', PE: '🇵🇪', PH: '🇵🇭',
-  PL: '🇵🇱', PT: '🇵🇹', QA: '🇶🇦', RO: '🇷🇴', RU: '🇷🇺', SA: '🇸🇦', SN: '🇸🇳',
-  RS: '🇷🇸', SG: '🇸🇬', SK: '🇸🇰', SI: '🇸🇮', ZA: '🇿🇦', ES: '🇪🇸', LK: '🇱🇰',
-  SE: '🇸🇪', CH: '🇨🇭', TW: '🇹🇼', TJ: '🇹🇯', TZ: '🇹🇿', TH: '🇹🇭', TN: '🇹🇳',
-  TR: '🇹🇷', TM: '🇹🇲', UA: '🇺🇦', AE: '🇦🇪', GB: '🇬🇧', US: '🇺🇸', UY: '🇺🇾',
-  UZ: '🇺🇿', VN: '🇻🇳', YE: '🇾🇪', ZM: '🇿🇲', ZW: '🇿🇼',
+  BS: '🇧🇸',
+  ZA: '🇿🇦',
+  AE: '🇦🇪',
+  AU: '🇦🇺',
+  CU: '🇨🇺',
+  TR: '🇹🇷',
+  GE: '🇬🇪',
+  TH: '🇹🇭',
+  JP: '🇯🇵',
+  KR: '🇰🇷',
+  FR: '🇫🇷',
+  IT: '🇮🇹',
+  ES: '🇪🇸',
+  RU: '🇷🇺',
+  US: '🇺🇸',
+  GB: '🇬🇧',
+  DE: '🇩🇪',
+  PT: '🇵🇹',
+  GR: '🇬🇷',
+  VN: '🇻🇳',
 };
 
-const BREAKDOWN_META: Record<
-  keyof ScoreBreakdown,
-  { label: string; icon: string; highColor: string; highBg: string; midColor: string; midBg: string }
-> = {
-  activity_match: { label: 'Активности', icon: '🎯', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
-  budget_fit:     { label: 'Бюджет',      icon: '💰', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
-  season:         { label: 'Сезон',       icon: '🌤', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
-  safety:         { label: 'Безопасность',icon: '🛡', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
-  visa:           { label: 'Виза',        icon: '🛂', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
-  language:       { label: 'Язык',        icon: '💬', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
-  crowd:          { label: 'Людность',    icon: '👥', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
-  climate:        { label: 'Климат',      icon: '🌡', highColor: '#16A34A', highBg: 'rgba(22,163,74,0.1)',  midColor: '#B45309', midBg: 'rgba(180,83,9,0.07)'  },
-  connectivity:   { label: 'Доступность', icon: '✈️', highColor: '#2563EB', highBg: 'rgba(37,99,235,0.1)', midColor: '#2563EB', midBg: 'rgba(37,99,235,0.06)' },
-};
-
-const DURATION_OPTIONS = [
-  { value: 3, label: '3 дня' },
-  { value: 5, label: '5 дней' },
-  { value: 7, label: '7 ночей' },
-  { value: 10, label: '10 дней' },
-  { value: 14, label: '2 недели' },
-  { value: 21, label: '3 недели' },
-];
-
-const TIER_OPTIONS: { value: 'budget' | 'mid' | 'luxury'; label: string }[] = [
-  { value: 'budget', label: 'Эконом' },
-  { value: 'mid', label: 'Комфорт' },
-  { value: 'luxury', label: 'Люкс' },
-];
-
-const TIER_LABELS: Record<string, string> = {
-  hostel: 'Хостел',
-  budget: 'Эконом',
-  mid: 'Комфорт',
-  luxury: 'Люкс',
+const BREAKDOWN_LABELS: Record<string, string> = {
+  activity_match: 'Активности',
+  budget_fit: 'Бюджет',
+  season: 'Сезон',
+  safety: 'Безопасность',
+  visa: 'Виза',
+  language: 'Язык',
+  crowd: 'Людность',
+  climate: 'Климат',
+  connectivity: 'Доступность',
 };
 
 const TYPICAL_DURATION_MAP: Record<string, number> = {
@@ -90,26 +60,36 @@ const TYPICAL_DURATION_MAP: Record<string, number> = {
 
 const STATUS_META: Record<
   DestinationValidationStatus,
-  { label: string; color: string; bg: string; border: string }
+  { label: string; className: string; icon: typeof CheckCircle2 }
 > = {
   suitable: {
     label: 'Подходит',
-    color: '#15803D',
-    bg: 'rgba(22,163,74,0.08)',
-    border: 'rgba(22,163,74,0.22)',
+    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    icon: CheckCircle2,
   },
   caution: {
     label: 'Есть ограничения',
-    color: '#B45309',
-    bg: 'rgba(245,158,11,0.09)',
-    border: 'rgba(245,158,11,0.28)',
+    className: 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    icon: AlertTriangle,
   },
   not_recommended: {
     label: 'Не рекомендуется',
-    color: '#DC2626',
-    bg: 'rgba(220,38,38,0.08)',
-    border: 'rgba(220,38,38,0.22)',
+    className: 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300',
+    icon: ShieldAlert,
   },
+};
+
+type TripParams = {
+  duration_days: number;
+  people_count: number;
+  accommodation_tier: 'budget' | 'mid' | 'luxury';
+};
+
+type DestinationDetailSheetProps = {
+  destination: ScoredDestination | null;
+  month: number;
+  open: boolean;
+  onClose: () => void;
 };
 
 const formatDateParam = (date: Date) => {
@@ -146,9 +126,21 @@ const statusFromScore = (score: number | undefined): DestinationValidationStatus
   return 'suitable';
 };
 
-const formatPercent = (value: unknown) => (
-  typeof value === 'number' ? `${Math.round(value * 100)}%` : 'нет данных'
-);
+const getOverallStatus = (statuses: DestinationValidationStatus[]): DestinationValidationStatus => {
+  if (statuses.includes('not_recommended')) return 'not_recommended';
+  if (statuses.includes('caution')) return 'caution';
+  return 'suitable';
+};
+
+const getMatchTone = (score: number) => {
+  if (score >= 0.8)
+    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
+  if (score >= 0.6) return 'border-primary/40 bg-primary/10 text-primary';
+  return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300';
+};
+
+const formatPercent = (value: unknown) =>
+  typeof value === 'number' ? `${Math.round(value * 100)}%` : 'нет данных';
 
 const formatVisa = (value: unknown) => {
   if (typeof value !== 'string') return 'нет данных';
@@ -163,81 +155,11 @@ const formatVisa = (value: unknown) => {
   return labels[value] ?? value.replace(/_/g, ' ');
 };
 
-const getOverallStatus = (statuses: DestinationValidationStatus[]): DestinationValidationStatus => {
-  if (statuses.includes('not_recommended')) return 'not_recommended';
-  if (statuses.includes('caution')) return 'caution';
-  return 'suitable';
-};
-
-const ScoreRow = ({
-  label,
-  icon,
-  value,
-  meta,
-}: {
-  label: string;
-  icon: string;
-  value: number;
-  meta: (typeof BREAKDOWN_META)[keyof ScoreBreakdown];
-}) => {
-  const pct = Math.round(value * 100);
-  const isHigh = value >= 0.65;
-  const barColor = value >= 0.65 ? meta.highColor : value >= 0.35 ? meta.midColor : '#D6D3D1';
-  const textColor = value >= 0.65 ? meta.highColor : value >= 0.35 ? meta.midColor : '#A8A29E';
-  const tileBg = value >= 0.65 ? meta.highBg : value >= 0.35 ? meta.midBg : 'rgba(28,25,23,0.04)';
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-      <div
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 10,
-          background: tileBg,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 16,
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
-            {label}
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 800, color: textColor, fontFamily: 'Manrope, sans-serif', minWidth: 32, textAlign: 'right' }}>
-            {pct}%
-          </span>
-        </div>
-        <div style={{ height: 4, borderRadius: 2, background: 'rgba(28,25,23,0.07)', overflow: 'hidden' }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${pct}%`,
-              borderRadius: 2,
-              background: barColor,
-              transition: 'width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}
-          />
-        </div>
-      </div>
-      {isHigh && (
-        <span style={{ fontSize: 11, color: meta.highColor, flexShrink: 0 }}>✓</span>
-      )}
-    </div>
-  );
-};
-
-type ValidationBlockProps = {
-  data?: DestinationValidationResponse;
-  destination: ScoredDestination;
-  budgetPerDayUsd: number | null;
-  isLoading: boolean;
-  isError: boolean;
-};
+const getTopReasons = (breakdown: ScoreBreakdown) =>
+  Object.entries(breakdown)
+    .filter(([key, value]) => key in BREAKDOWN_LABELS && typeof value === 'number')
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
 
 const ValidationBlock = ({
   data,
@@ -245,19 +167,20 @@ const ValidationBlock = ({
   budgetPerDayUsd,
   isLoading,
   isError,
-}: ValidationBlockProps) => {
+}: {
+  data?: DestinationValidationResponse;
+  destination: ScoredDestination;
+  budgetPerDayUsd: number | null;
+  isLoading: boolean;
+  isError: boolean;
+}) => {
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-2 gap-2">
+        {[0, 1, 2, 3].map((item) => (
           <div
-            key={i}
-            style={{
-              height: 48,
-              borderRadius: 14,
-              background: 'rgba(28,25,23,0.04)',
-              animation: 'pulse 1.5s ease-in-out infinite',
-            }}
+            key={item}
+            className="h-12 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]"
           />
         ))}
       </div>
@@ -266,476 +189,97 @@ const ValidationBlock = ({
 
   if (isError || !data) {
     return (
-      <div
-        style={{
-          padding: '14px',
-          borderRadius: 16,
-          background: 'rgba(245,158,11,0.08)',
-          border: '1px solid rgba(245,158,11,0.24)',
-        }}
-      >
-        <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', fontFamily: 'Manrope, sans-serif' }}>
-          Проверка временно недоступна
-        </p>
-        <p style={{ fontSize: 12, color: '#A8A29E', fontFamily: 'Manrope, sans-serif', marginTop: 3 }}>
-          Откройте направление позже, чтобы увидеть визовые, сезонные и бюджетные ограничения.
-        </p>
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-[13px] font-bold text-amber-700 dark:text-amber-300">
+        Проверка временно недоступна
       </div>
     );
   }
 
   const warningByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
-  const languageScore = destination.score_breakdown.language;
-  const languageStatus = statusFromScore(languageScore);
+  const languageStatus = statusFromScore(destination.score_breakdown.language);
   const rows = [
     {
       key: 'visa',
       label: 'Виза',
-      icon: '🛂',
       status: statusFromWarning(warningByType.get('visa')),
       value: formatVisa(data.info.visa_type),
-      note: warningByType.get('visa')?.message ?? (
-        data.info.max_stay_days ? `до ${data.info.max_stay_days} дней` : 'визовых ограничений не найдено'
-      ),
     },
     {
       key: 'season',
       label: 'Сезон',
-      icon: '🌤',
       status: statusFromWarning(warningByType.get('season')),
       value: formatPercent(data.info.season_score),
-      note: warningByType.get('season')?.message ?? (
-        typeof data.info.avg_temp_c === 'number'
-          ? `${Math.round(data.info.avg_temp_c)}°C · ${Math.round(Number(data.info.avg_precipitation_mm ?? 0))} мм осадков`
-          : 'месяц подходит для поездки'
-      ),
     },
     {
       key: 'budget',
       label: 'Бюджет',
-      icon: '💳',
       status: statusFromWarning(warningByType.get('budget')),
-      value: typeof data.info.avg_daily_cost_usd === 'number'
-        ? `$${Math.round(data.info.avg_daily_cost_usd)}/день`
-        : 'нет данных',
-      note: warningByType.get('budget')?.message ?? (
-        budgetPerDayUsd
-          ? `ваш ориентир: $${Math.round(budgetPerDayUsd)}/день на человека`
-          : 'сравнение с бюджетом недоступно'
-      ),
+      value: budgetPerDayUsd ? `$${Math.round(budgetPerDayUsd)}/день` : 'нет лимита',
     },
     {
       key: 'safety',
       label: 'Риск',
-      icon: '🛡',
       status: statusFromWarning(warningByType.get('safety')),
       value: formatPercent(data.info.safety_score),
-      note: warningByType.get('safety')?.message ?? 'критичных предупреждений нет',
     },
     {
       key: 'language',
       label: 'Язык',
-      icon: '💬',
       status: languageStatus,
-      value: formatPercent(languageScore),
-      note: languageStatus === 'suitable'
-        ? 'комфорт языка совпадает с профилем'
-        : 'проверьте языковой комфорт перед поездкой',
+      value: formatPercent(destination.score_breakdown.language),
     },
   ];
-  const overallStatus = getOverallStatus(rows.map((row) => row.status));
-  const overallMeta = STATUS_META[overallStatus];
+  const overallMeta = STATUS_META[getOverallStatus(rows.map((row) => row.status))];
+  const OverallIcon = overallMeta.icon;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          padding: '12px 14px',
-          borderRadius: 16,
-          background: overallMeta.bg,
-          border: `1px solid ${overallMeta.border}`,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+    <div className="overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))]">
+      <div className="flex items-center justify-between gap-3 border-b border-[hsl(var(--surface-border))] px-4 py-3.5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
             Проверка направления
-          </p>
-          <p style={{ fontSize: 12, color: '#78716C', fontFamily: 'Manrope, sans-serif', marginTop: 2 }}>
-            Виза, сезон, бюджет, риск и язык
           </p>
         </div>
         <span
-          style={{
-            flexShrink: 0,
-            padding: '7px 10px',
-            borderRadius: 999,
-            background: '#fff',
-            color: overallMeta.color,
-            border: `1px solid ${overallMeta.border}`,
-            fontSize: 11,
-            fontWeight: 800,
-            fontFamily: 'Manrope, sans-serif',
-            whiteSpace: 'nowrap',
-          }}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-extrabold',
+            overallMeta.className
+          )}
         >
+          <OverallIcon className="h-3.5 w-3.5" />
           {overallMeta.label}
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div className="divide-y divide-[hsl(var(--surface-border))] px-4">
         {rows.map((row) => {
           const meta = STATUS_META[row.status];
+          const StatusIcon = meta.icon;
           return (
-            <div
-              key={row.key}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 14,
-                background: '#fff',
-                border: '1px solid #E7E5E4',
-              }}
-            >
-              <div
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  background: meta.bg,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 16,
-                  flexShrink: 0,
-                }}
-              >
-                {row.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
-                    {row.label}
-                  </p>
-                  <p style={{ fontSize: 12, fontWeight: 800, color: meta.color, fontFamily: 'Manrope, sans-serif' }}>
-                    {row.value}
-                  </p>
-                </div>
-                <p style={{ fontSize: 11, color: '#78716C', fontFamily: 'Manrope, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {row.note}
+            <div key={row.key} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">
+                  {row.label}
+                </p>
+                <p className="mt-0.5 break-words text-[13px] font-extrabold leading-snug text-foreground">
+                  {row.value}
                 </p>
               </div>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: meta.color, flexShrink: 0 }} />
+              <span
+                className={cn(
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[0px]',
+                  meta.className
+                )}
+              >
+                <StatusIcon className="h-3.5 w-3.5" />
+                <span className="text-[11px] font-extrabold">{meta.label}</span>
+              </span>
             </div>
           );
         })}
       </div>
     </div>
   );
-};
-
-type TripParams = {
-  duration_days: number;
-  people_count: number;
-  accommodation_tier: 'budget' | 'mid' | 'luxury';
-};
-
-const TripParamsControls = ({
-  params,
-  onChange,
-}: {
-  params: TripParams;
-  onChange: (p: TripParams) => void;
-}) => {
-  const btnBase: React.CSSProperties = {
-    height: 30,
-    borderRadius: 8,
-    border: '1px solid #E7E5E4',
-    background: '#F5F5F4',
-    color: '#1C1917',
-    fontSize: 12,
-    fontWeight: 600,
-    fontFamily: 'Manrope, sans-serif',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '0 10px',
-    transition: 'all 0.15s',
-    whiteSpace: 'nowrap' as const,
-  };
-  const btnActive: React.CSSProperties = {
-    ...btnBase,
-    background: '#2563EB',
-    border: '1px solid #2563EB',
-    color: '#fff',
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Duration */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
-          СРОК
-        </span>
-        <div style={{ display: 'flex', gap: 5, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {DURATION_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              style={params.duration_days === opt.value ? btnActive : btnBase}
-              onClick={() => onChange({ ...params, duration_days: opt.value })}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* People */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
-          ЛЮДЕЙ
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button
-            type="button"
-            onClick={() => onChange({ ...params, people_count: Math.max(1, params.people_count - 1) })}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              border: '1px solid #E7E5E4',
-              background: '#fff',
-              color: '#1C1917',
-              fontSize: 16,
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            −
-          </button>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#1C1917', fontFamily: 'Manrope, sans-serif', minWidth: 20, textAlign: 'center' }}>
-            {params.people_count}
-          </span>
-          <button
-            type="button"
-            onClick={() => onChange({ ...params, people_count: Math.min(8, params.people_count + 1) })}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              border: '1px solid #2563EB',
-              background: '#2563EB',
-              color: '#fff',
-              fontSize: 16,
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* Tier */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', minWidth: 56 }}>
-          КЛАСС
-        </span>
-        <div style={{ display: 'flex', gap: 5 }}>
-          {TIER_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              style={params.accommodation_tier === opt.value ? btnActive : btnBase}
-              onClick={() => onChange({ ...params, accommodation_tier: opt.value })}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const BudgetBlock = ({
-  destination,
-  tripParams,
-  currency,
-  data,
-  isLoading,
-}: {
-  destination: ScoredDestination;
-  tripParams: TripParams;
-  currency: string;
-  data?: BudgetPredictResponse;
-  isLoading: boolean;
-}) => {
-  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
-
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              height: 78,
-              borderRadius: 16,
-              background: 'rgba(28,25,23,0.04)',
-              animation: 'pulse 1.5s ease-in-out infinite',
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (!data) {
-    return destination.avg_daily_cost_usd !== null ? (
-      <div
-        style={{
-          padding: '16px',
-          borderRadius: 16,
-          background: 'rgba(37,99,235,0.05)',
-          border: '1px solid rgba(37,99,235,0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.05em', fontFamily: 'Manrope, sans-serif', marginBottom: 2 }}>
-            В ДЕНЬ / ЧЕЛ
-          </p>
-          <p style={{ fontSize: 26, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif', letterSpacing: '-0.02em' }}>
-            ~${Math.round(destination.avg_daily_cost_usd)}
-          </p>
-        </div>
-        <span style={{ fontSize: 32 }}>💳</span>
-      </div>
-    ) : (
-      <div
-        style={{
-          padding: '14px',
-          borderRadius: 16,
-          background: 'rgba(28,25,23,0.03)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          textAlign: 'center',
-        }}
-      >
-        <p style={{ fontSize: 13, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-          Данные недоступны
-        </p>
-      </div>
-    );
-  }
-
-  const tiers = [
-    { label: 'ОПТИМИСТ', sublabel: 'лучший сценарий', value: data.total_min, color: '#16A34A', bg: 'rgba(22,163,74,0.07)', border: 'rgba(22,163,74,0.18)' },
-    { label: 'РЕАЛИСТ', sublabel: 'типичная поездка', value: data.total_mid, color: '#2563EB', bg: 'rgba(37,99,235,0.07)', border: 'rgba(37,99,235,0.18)' },
-    { label: 'ПЕССИМИСТ', sublabel: 'с запасом', value: data.total_max, color: '#7C3AED', bg: 'rgba(124,58,237,0.06)', border: 'rgba(124,58,237,0.18)' },
-  ];
-
-  const tierLabel = TIER_LABELS[tripParams.accommodation_tier] ?? tripParams.accommodation_tier;
-  const travelCost = data.breakdown.travel_to_destination ?? 0;
-  const assumptions = data.assumptions;
-  const originLabel = assumptions?.origin_city_name ?? 'не указан';
-  const strategyLabel = assumptions?.flight_fare_strategy === 'business_comfort'
-    ? 'бизнес'
-    : assumptions?.flight_fare_strategy === 'typical_economy'
-      ? 'средний тариф'
-      : 'дешевый тариф';
-  const hasTravelFareData = assumptions?.travel_cost_source?.startsWith('travelpayouts') ?? false;
-  const travelSourceLabel = hasTravelFareData
-    ? `кэш Aviasales · ${strategyLabel}`
-    : 'нет данных по стоимости пути';
-  const displayBudgetValue = (value: number) => (
-    hasTravelFareData ? value : Math.max(0, value - travelCost)
-  );
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {tiers.map((t) => (
-          <div
-            key={t.label}
-            style={{
-              flex: 1,
-              padding: '12px 8px 10px',
-              borderRadius: 16,
-              background: t.bg,
-              border: `1px solid ${t.border}`,
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 3,
-            }}
-          >
-            <p style={{ fontSize: 8, fontWeight: 800, color: t.color, letterSpacing: '0.06em', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase' as const }}>
-              {t.label}
-            </p>
-            <p style={{ fontSize: 18, fontWeight: 800, color: '#1C1917', fontFamily: 'Manrope, sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {currencySymbol}{Math.round(displayBudgetValue(t.value)).toLocaleString('ru-RU')}
-            </p>
-            <p style={{ fontSize: 9, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-              {t.sublabel}
-            </p>
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 6,
-          padding: '10px 12px',
-          borderRadius: 12,
-          background: '#F5F5F4',
-          border: '1px solid #E7E5E4',
-        }}
-      >
-        {[
-          ['Срок', `${tripParams.duration_days} ${tripParams.duration_days === 1 ? 'день' : tripParams.duration_days < 5 ? 'дня' : 'дней'}`],
-          ['Люди', `${tripParams.people_count} чел`],
-          ['Жилье', tierLabel],
-          ['Валюта', currency],
-          ['Откуда', originLabel],
-          ['Дорога', hasTravelFareData && travelCost > 0 ? `${currencySymbol}${Math.round(travelCost).toLocaleString('ru-RU')} · ${travelSourceLabel}` : travelSourceLabel],
-        ].map(([label, value]) => (
-          <div key={label} style={{ minWidth: 0 }}>
-            <p style={{ fontSize: 9, fontWeight: 800, color: '#A8A29E', letterSpacing: '0.06em', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase' as const }}>
-              {label}
-            </p>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#1C1917', fontFamily: 'Manrope, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {value}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-type DestinationDetailSheetProps = {
-  destination: ScoredDestination | null;
-  month: number;
-  open: boolean;
-  onClose: () => void;
 };
 
 export const DestinationDetailSheet = ({
@@ -745,22 +289,22 @@ export const DestinationDetailSheet = ({
   onClose,
 }: DestinationDetailSheetProps) => {
   const navigate = useNavigate();
-  const qc = useQueryClient();
-
-  const profileCached = qc.getQueryData<UserProfileV2>(['profile']);
+  const queryClient = useQueryClient();
+  const profileCached = queryClient.getQueryData<UserProfileV2>(['profile']);
   const defaultDuration = TYPICAL_DURATION_MAP[profileCached?.typical_duration ?? 'standard'] ?? 7;
   const defaultTier: 'budget' | 'mid' | 'luxury' = (() => {
-    const mid = ((profileCached?.budget_min_usd ?? 0) + (profileCached?.budget_max_usd ?? 2000)) / 2;
+    const mid =
+      ((profileCached?.budget_min_usd ?? 0) + (profileCached?.budget_max_usd ?? 2000)) / 2;
     if (mid < 800) return 'budget';
     if (mid < 5000) return 'mid';
     return 'luxury';
   })();
-
-  const [tripParams, setTripParams] = useState<TripParams>({
+  const tripParams: TripParams = {
     duration_days: defaultDuration,
     people_count: 2,
     accommodation_tier: defaultTier,
-  });
+  };
+
   const currency = profileCached?.preferred_currency ?? 'RUB';
   const budgetPredictionParams = destination
     ? {
@@ -775,8 +319,7 @@ export const DestinationDetailSheet = ({
         origin_lng: profileCached?.origin_lng,
       }
     : null;
-  const { data: budgetPrediction, isLoading: isBudgetLoading } =
-    useBudgetPrediction(budgetPredictionParams);
+  const { data: budgetPrediction } = useBudgetPrediction(budgetPredictionParams);
   const budgetPerDayUsd = profileCached?.budget_max_usd
     ? profileCached.budget_max_usd / Math.max(tripParams.duration_days * tripParams.people_count, 1)
     : null;
@@ -794,11 +337,19 @@ export const DestinationDetailSheet = ({
     isError: isValidationError,
   } = useDestinationValidation(destinationValidationParams);
 
+  if (!destination) return null;
+
+  const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
+  const matchPct = Math.round(destination.score * 100);
+  const topReasons = getTopReasons(destination.score_breakdown);
+
   const handleCreateTrip = () => {
-    if (!destination) return;
     const dates = getSuggestedTripDates(month, tripParams.duration_days);
     const params = new URLSearchParams({
-      destination: destination.name,
+      destination:
+        destination.display_name ??
+        destination.name_ru ??
+        localizeDestinationName(destination.name),
       destination_id: destination.destination_id,
       people_count: String(tripParams.people_count),
       accommodation_tier: tripParams.accommodation_tier,
@@ -806,211 +357,94 @@ export const DestinationDetailSheet = ({
       start_date: dates.startDate,
       end_date: dates.endDate,
     });
-    if (profileCached?.origin_city_name) {
+    if (profileCached?.origin_city_name)
       params.set('departure_city', profileCached.origin_city_name);
-    }
-    if (budgetPrediction?.total_mid) {
+    if (budgetPrediction?.total_mid)
       params.set('budget', String(Math.round(budgetPrediction.total_mid)));
-    }
     onClose();
     navigate(`/trips/new?${params.toString()}`);
   };
 
-  if (!destination) return null;
-
-  const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
-  const matchPct = Math.round(destination.score * 100);
-  const matchColor =
-    destination.score >= 0.8 ? '#16A34A' : destination.score >= 0.6 ? '#2563EB' : '#B45309';
-  const matchBg =
-    destination.score >= 0.8
-      ? 'rgba(22,163,74,0.08)'
-      : destination.score >= 0.6
-        ? 'rgba(37,99,235,0.08)'
-        : 'rgba(245,158,11,0.08)';
-  const matchBorder =
-    destination.score >= 0.8
-      ? 'rgba(22,163,74,0.25)'
-      : destination.score >= 0.6
-        ? 'rgba(37,99,235,0.25)'
-        : 'rgba(245,158,11,0.35)';
-
-  const breakdownEntries = (Object.entries(destination.score_breakdown) as [string, number][])
-    .filter(([key]) => key in BREAKDOWN_META)
-    .sort((a, b) => b[1] - a[1]) as [keyof typeof BREAKDOWN_META, number][];
-
   return (
-    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerPortal>
-        <DrawerOverlay />
-        <DrawerContent
-          style={{
-            maxHeight: '92dvh',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: 0,
-          }}
+    <AdaptiveSheet
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+      title={
+        destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name)
+      }
+      description="Совпадение с предпочтениями и проверка направления"
+      showHeader={false}
+      bodyClassName="px-5 pb-5"
+      footer={
+        <Button
+          className="h-[52px] w-full rounded-2xl text-[15px] font-extrabold"
+          onClick={handleCreateTrip}
         >
-          {/* Hero header */}
-          <div style={{ padding: '0 20px 18px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div
-                style={{
-                  width: 68,
-                  height: 68,
-                  borderRadius: 22,
-                  background: 'rgba(28,25,23,0.04)',
-                  border: '1px solid rgba(0,0,0,0.06)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 40,
-                  flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                }}
-              >
-                {flag}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p
-                  style={{
-                    fontSize: 24,
-                    fontWeight: 800,
-                    color: '#1C1917',
-                    letterSpacing: '-0.025em',
-                    lineHeight: 1.15,
-                    fontFamily: 'Manrope, sans-serif',
-                    marginBottom: 4,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {destination.name}
-                </p>
-                <p style={{ fontSize: 13, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                  {destination.region}
-                </p>
-              </div>
-              <div
-                style={{
-                  flexShrink: 0,
-                  padding: '10px 13px',
-                  borderRadius: 18,
-                  background: matchBg,
-                  border: `1.5px solid ${matchBorder}`,
-                  textAlign: 'center',
-                  minWidth: 56,
-                }}
-              >
-                <p style={{ fontSize: 22, fontWeight: 800, color: matchColor, fontFamily: 'Manrope, sans-serif', lineHeight: 1, marginBottom: 1 }}>
-                  {matchPct}
-                </p>
-                <p style={{ fontSize: 8, fontWeight: 800, color: matchColor, opacity: 0.65, fontFamily: 'Manrope, sans-serif', letterSpacing: '0.06em' }}>
-                  %СОВП
-                </p>
-              </div>
-            </div>
+          <Plane className="h-4 w-4" />
+          Создать поездку
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <section className="flex items-start gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-[34px]">
+            {flag}
           </div>
-
-          <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 20px', flexShrink: 0 }} />
-
-          {/* Scrollable body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 0' }}>
-            {/* Score breakdown */}
-            <p style={{ fontSize: 10, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.07em', textTransform: 'uppercase' as const, fontFamily: 'Manrope, sans-serif', marginBottom: 12 }}>
-              Совпадение по критериям
+          <div className="min-w-0 flex-1">
+            <h2 className="line-clamp-2 text-[24px] font-extrabold leading-tight tracking-tight text-foreground">
+              {destination.display_name ??
+                destination.name_ru ??
+                localizeDestinationName(destination.name)}
+            </h2>
+            <p className="mt-1 text-[13px] font-semibold text-muted-foreground">
+              {destination.region}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
-              {breakdownEntries.map(([key, value]) => {
-                const meta = BREAKDOWN_META[key];
-                return (
-                  <ScoreRow key={key} label={meta.label} icon={meta.icon} value={value} meta={meta} />
-                );
-              })}
-            </div>
-
-            <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 -20px 18px' }} />
-
-            {/* Budget section */}
-            <p style={{ fontSize: 10, fontWeight: 700, color: '#A8A29E', letterSpacing: '0.07em', textTransform: 'uppercase' as const, fontFamily: 'Manrope, sans-serif', marginBottom: 12 }}>
-              Прогноз бюджета
-            </p>
-
-            {/* Trip params controls */}
-            <div
-              style={{
-                marginBottom: 14,
-                padding: '12px 14px',
-                borderRadius: 14,
-                background: '#F5F5F4',
-                border: '1px solid #E7E5E4',
-              }}
-            >
-              <TripParamsControls params={tripParams} onChange={setTripParams} />
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <BudgetBlock
-                destination={destination}
-                tripParams={tripParams}
-                currency={currency}
-                data={budgetPrediction}
-                isLoading={isBudgetLoading}
-              />
-            </div>
-
-            <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '0 -20px 18px' }} />
-
-            <div style={{ marginBottom: 20 }}>
-              <ValidationBlock
-                data={destinationValidation}
-                destination={destination}
-                budgetPerDayUsd={budgetPerDayUsd}
-                isLoading={isValidationLoading}
-                isError={isValidationError}
-              />
-            </div>
           </div>
-
-          {/* Sticky CTA footer */}
           <div
-            style={{
-              flexShrink: 0,
-              padding: '12px 20px',
-              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-              background: '#fff',
-              borderTop: '1px solid rgba(0,0,0,0.05)',
-            }}
+            className={cn(
+              'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border',
+              getMatchTone(destination.score)
+            )}
           >
-            <button
-              type="button"
-              onClick={handleCreateTrip}
-              style={{
-                width: '100%',
-                height: 54,
-                borderRadius: 16,
-                background: '#2563EB',
-                border: 'none',
-                color: '#fff',
-                fontSize: 15,
-                fontWeight: 700,
-                fontFamily: 'Manrope, sans-serif',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(37,99,235,0.28)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                letterSpacing: '-0.01em',
-              }}
-            >
-              <span>✈️</span>
-              Создать поездку
-            </button>
+            <span className="text-[20px] font-extrabold leading-none">{matchPct}</span>
+            <span className="ml-0.5 text-[16px] font-extrabold leading-none">%</span>
           </div>
-        </DrawerContent>
-      </DrawerPortal>
-    </Drawer>
+        </section>
+
+        <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
+          <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+            Почему подходит
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {topReasons.map(([key, value]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="w-24 shrink-0 text-[12px] font-bold text-foreground">
+                  {BREAKDOWN_LABELS[key]}
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.round(value * 100)}%` }}
+                  />
+                </div>
+                <span className="w-9 text-right text-[12px] font-extrabold text-primary">
+                  {Math.round(value * 100)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <ValidationBlock
+            data={destinationValidation}
+            destination={destination}
+            budgetPerDayUsd={budgetPerDayUsd}
+            isLoading={isValidationLoading}
+            isError={isValidationError}
+          />
+        </section>
+      </div>
+    </AdaptiveSheet>
   );
 };

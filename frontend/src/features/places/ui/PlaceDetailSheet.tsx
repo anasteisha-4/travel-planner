@@ -48,7 +48,7 @@ export const PlaceDetailSheet = ({ place, onClose, onEdit, onDelete }: PlaceDeta
   return (
     <>
       <Drawer open={!!place && !confirmDelete} onOpenChange={handleOpenChange}>
-        <DrawerContent className="bg-white px-5 pb-10 dark:bg-stone-950">
+        <DrawerContent className="bg-white px-5 pb-10 dark:bg-[hsl(var(--surface-elevated))]">
           {place && (
             <>
               <DrawerHeader className="mb-4 pb-0">
@@ -64,7 +64,7 @@ export const PlaceDetailSheet = ({ place, onClose, onEdit, onDelete }: PlaceDeta
                 </div>
 
                 {place.notes && (
-                  <div className="mt-1 rounded-xl bg-stone-50 px-4 py-3 dark:bg-stone-900">
+                  <div className="mt-1 rounded-xl bg-stone-50 px-4 py-3 dark:bg-[hsl(var(--surface-elevated))]">
                     <p className="text-[14px] leading-relaxed text-stone-600 dark:text-stone-300">
                       {place.notes}
                     </p>
@@ -76,7 +76,7 @@ export const PlaceDetailSheet = ({ place, onClose, onEdit, onDelete }: PlaceDeta
                 <div className="flex gap-2.5">
                   <Button
                     variant="outline"
-                    className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+                    className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200"
                     onClick={() => onEdit(place)}
                   >
                     <Edit2 className="mr-2 h-4 w-4" />
@@ -84,7 +84,7 @@ export const PlaceDetailSheet = ({ place, onClose, onEdit, onDelete }: PlaceDeta
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+                    className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200"
                     onClick={() => openInYandexMaps(place.latitude, place.longitude)}
                   >
                     <ExternalLink className="mr-2 h-4 w-4" />

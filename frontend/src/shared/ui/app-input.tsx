@@ -10,8 +10,8 @@ export const AppInput = forwardRef<HTMLInputElement, AppInputProps>(
     <input
       ref={ref}
       className={cn(
-        'h-[52px] w-full rounded-[14px] border border-stone-200 bg-stone-100 px-3.5 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-[1.5px] focus:border-primary dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500',
-        error && 'border-red-300 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20',
+        'h-[52px] w-full rounded-[14px] app-field px-3.5 text-[15px] font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground focus:border-[1.5px] focus:border-primary',
+        error && 'border-red-300 bg-red-50 dark:border-red-500/50 dark:bg-red-950/30',
         className
       )}
       {...props}

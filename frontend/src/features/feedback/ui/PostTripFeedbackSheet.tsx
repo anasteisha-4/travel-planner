@@ -1,12 +1,6 @@
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerOverlay,
-  DrawerPortal,
-} from '@/shared/ui/drawer';
+import { AdaptiveSheet } from '@/shared/ui/adaptive-sheet';
 import { cn } from '@/shared/lib/utils';
-import { Loader2, MapPin, Star, X } from 'lucide-react';
+import { Loader2, MapPin, Star } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useFeedback } from '../model/useFeedback';
 
@@ -27,7 +21,7 @@ const StarRow = ({
   onChange: (v: number) => void;
 }) => (
   <div className="flex items-center justify-between gap-3">
-    <span className="text-[14px] font-medium text-[#1C1917]">{label}</span>
+    <span className="text-[14px] font-medium text-foreground">{label}</span>
     <div className="flex gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
         <button
@@ -68,9 +62,9 @@ const RevisitButton = ({
       'flex-1 rounded-[12px] border py-3 text-[14px] font-semibold transition-all active:scale-95',
       selected
         ? value
-          ? 'border-[#16A34A] bg-[rgba(22,163,74,0.1)] text-[#15803D]'
-          : 'border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.1)] text-[#DC2626]'
-        : 'border-stone-200 bg-stone-50 text-stone-500'
+          ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+          : 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300'
+        : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] text-muted-foreground'
     )}
   >
     {label}
@@ -141,54 +135,38 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
   };
 
   return (
-    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerPortal>
-        <DrawerOverlay />
-        <DrawerContent className="pb-10">
+    <AdaptiveSheet
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && onClose()}
+      title={alreadySubmitted ? 'Редактировать отзыв' : 'Как прошла поездка?'}
+      description={destination}
+      showHeader={false}
+      bodyClassName="pb-6"
+    >
           <div className="flex items-start justify-between pb-1 pt-0">
             <div className="flex items-center gap-2.5">
-              <div
-                className="flex h-10 w-10 items-center justify-center rounded-[13px]"
-                style={{
-                  background: 'rgba(37,99,235,0.08)',
-                  border: '1px solid rgba(37,99,235,0.15)',
-                }}
-              >
-                <MapPin className="h-5 w-5 text-[#2563EB]" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-primary/20 bg-primary/10">
+                <MapPin className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-[16px] font-bold text-[#1C1917]">
+                <p className="text-[16px] font-bold text-foreground">
                   {alreadySubmitted ? 'Редактировать отзыв' : 'Как прошла поездка?'}
                 </p>
-                <p className="text-[12px] font-medium text-[#A8A29E]">{destination}</p>
+                <p className="text-[12px] font-medium text-muted-foreground">{destination}</p>
               </div>
             </div>
-            <DrawerClose asChild>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100"
-              >
-                <X className="h-4 w-4 text-stone-500" />
-              </button>
-            </DrawerClose>
           </div>
 
           <div className="flex flex-col gap-5 pt-4">
-            <div
-              className="rounded-[18px] p-4"
-              style={{ background: '#FAFAF9', border: '1px solid #E7E5E4' }}
-            >
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#A8A29E]">
+            <div className="rounded-[18px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Общая оценка
               </p>
               <StarRow label="Поездка в целом" value={overall} onChange={setOverall} />
             </div>
 
-            <div
-              className="rounded-[18px] p-4"
-              style={{ background: '#FAFAF9', border: '1px solid #E7E5E4' }}
-            >
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#A8A29E]">
+            <div className="rounded-[18px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Детали
               </p>
               <div className="flex flex-col gap-3.5">
@@ -199,7 +177,7 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
             </div>
 
             <div>
-              <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-[#A8A29E]">
+              <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Вернётесь снова?
               </p>
               <div className="flex gap-2.5">
@@ -219,7 +197,7 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
             </div>
 
             <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#A8A29E]">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Впечатления (необязательно)
               </p>
               <textarea
@@ -227,7 +205,7 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
                 onChange={(e) => setFreeText(e.target.value)}
                 placeholder="Что запомнилось больше всего?"
                 rows={3}
-                className="w-full resize-none rounded-[14px] border border-[#E7E5E4] bg-[#F5F5F4] px-4 py-3 text-[14px] font-medium text-[#1C1917] placeholder:italic placeholder:text-[#C7C3BD] focus:border-[#2563EB] focus:outline-none"
+                className="w-full resize-none rounded-[14px] app-field px-4 py-3 text-[14px] font-medium text-foreground placeholder:italic placeholder:text-muted-foreground focus:border-primary focus:outline-none"
               />
             </div>
 
@@ -238,8 +216,8 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
               className={cn(
                 'flex h-[52px] w-full items-center justify-center rounded-[16px] text-[15px] font-bold transition-all',
                 canSubmit
-                  ? 'bg-[#2563EB] text-white shadow-[0_4px_16px_rgba(37,99,235,0.28)] active:scale-[0.98]'
-                  : 'cursor-not-allowed bg-stone-100 text-stone-400'
+                  ? 'bg-primary text-primary-foreground shadow-[0_4px_16px_rgba(37,99,235,0.28)] active:scale-[0.98]'
+                  : 'cursor-not-allowed bg-[hsl(var(--surface-muted))] text-muted-foreground'
               )}
             >
               {isPending ? (
@@ -249,8 +227,6 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
               )}
             </button>
           </div>
-        </DrawerContent>
-      </DrawerPortal>
-    </Drawer>
+    </AdaptiveSheet>
   );
 };

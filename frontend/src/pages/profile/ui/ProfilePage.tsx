@@ -52,11 +52,11 @@ export const ProfilePage = () => {
     return (
       <PageLayout>
         <AppPageHeader pb="pb-3">
-          <div className="h-7 w-24 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+          <div className="h-7 w-24 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
         </AppPageHeader>
         <PageContent pb="pb-0" className="pt-2">
           <div className="trip-info-card animate-pulse">
-            <div className="h-4 w-full rounded bg-stone-100 dark:bg-stone-800" />
+            <div className="h-4 w-full rounded bg-[hsl(var(--surface-muted))]" />
           </div>
         </PageContent>
       </PageLayout>
@@ -69,7 +69,7 @@ export const ProfilePage = () => {
     <PageLayout>
       <AppPageHeader pb="pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+          <h1 className="text-[22px] font-extrabold tracking-tight text-foreground">
             Профиль
           </h1>
           <LogoutButton onLogout={handleLogout} />
@@ -87,12 +87,12 @@ export const ProfilePage = () => {
                 </span>
                 <span className="text-[15px] font-bold text-primary">{authProfile.login}</span>
               </div>
-              <div className="my-2 h-px bg-stone-100 dark:bg-stone-800" />
+              <div className="my-2 h-px bg-[hsl(var(--surface-border))]" />
               <div className="flex items-center justify-between py-1">
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
                   Email
                 </span>
-                <span className="text-[15px] font-semibold text-stone-900 dark:text-white">
+                <span className="break-words text-right text-[15px] font-semibold text-foreground">
                   {authProfile.email}
                 </span>
               </div>
@@ -107,7 +107,7 @@ export const ProfilePage = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
-                    className="flex h-[30px] items-center gap-1.5 rounded-xl bg-stone-100 px-3 text-[13px] font-semibold text-stone-600 disabled:opacity-40 dark:bg-stone-800 dark:text-stone-300"
+                    className="flex h-[30px] items-center gap-1.5 rounded-xl bg-[hsl(var(--surface-muted))] px-3 text-[13px] font-semibold text-muted-foreground disabled:opacity-40"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                     Изменить
@@ -120,7 +120,7 @@ export const ProfilePage = () => {
 
             {isFetching ? (
               <div className="trip-info-card flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : hasPreferences && profile ? (
               <PreferencesView preferences={profile} />

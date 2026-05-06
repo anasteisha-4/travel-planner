@@ -33,7 +33,7 @@ export const StepBudgetDuration = ({
       <div>
         <FieldLabel>Валюта бюджета</FieldLabel>
         <Select value={currency} onValueChange={onCurrencyChange}>
-          <SelectTrigger className="h-[52px] w-full rounded-[14px] border-stone-200 bg-stone-100 text-[15px] font-semibold">
+          <SelectTrigger className="h-[52px] w-full rounded-[14px] border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-field))] text-[15px] font-semibold">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -48,15 +48,15 @@ export const StepBudgetDuration = ({
 
       <div>
         <FieldLabel>Бюджет поездки</FieldLabel>
-        <div className="mb-4 flex items-center justify-between rounded-2xl border border-stone-100 bg-stone-50 px-4 py-3">
+        <div className="mb-4 flex items-center justify-between rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
           <div className="text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">от</p>
-            <p className="text-[20px] font-bold text-stone-900">{cfg.format(min)}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">от</p>
+            <p className="text-[20px] font-bold text-foreground">{cfg.format(min)}</p>
           </div>
-          <div className="mx-4 h-px flex-1 bg-stone-200" />
+          <div className="mx-4 h-px flex-1 bg-[hsl(var(--surface-field))]" />
           <div className="text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">до</p>
-            <p className="text-[20px] font-bold text-stone-900">{cfg.format(max)}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">до</p>
+            <p className="text-[20px] font-bold text-foreground">{cfg.format(max)}</p>
           </div>
         </div>
         <div className="px-1">

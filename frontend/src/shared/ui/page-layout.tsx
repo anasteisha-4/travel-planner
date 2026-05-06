@@ -9,7 +9,7 @@ type PageLayoutProps = {
 export const PageLayout = ({ children, fullScreen, className }: PageLayoutProps) => (
   <div
     className={cn(
-      '-mx-4 flex flex-col bg-white dark:bg-stone-950',
+      '-mx-4 flex flex-col bg-[hsl(var(--app-bg))]',
       fullScreen ? 'h-[100dvh]' : 'h-full',
       className
     )}
@@ -40,5 +40,5 @@ type PageContentProps = {
 };
 
 export const PageContent = ({ children, pb = 'pb-24', className }: PageContentProps) => (
-  <div className={cn('flex-1 overflow-y-auto px-5', pb, className)}>{children}</div>
+  <div className={cn('flex-1 overflow-y-auto px-5 no-scrollbar', pb, className)}>{children}</div>
 );

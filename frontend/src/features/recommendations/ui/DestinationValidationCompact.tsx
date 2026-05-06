@@ -15,17 +15,17 @@ const STATUS_META: Record<
 > = {
   suitable: {
     label: 'Подходит',
-    classes: 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300',
+    classes: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     icon: CheckCircle2,
   },
   caution: {
     label: 'Есть ограничения',
-    classes: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
+    classes: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
     icon: AlertTriangle,
   },
   not_recommended: {
     label: 'Не рекомендуется',
-    classes: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300',
+    classes: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
     icon: ShieldAlert,
   },
 };
@@ -68,7 +68,7 @@ export const DestinationValidationCompact = ({
 
   if (!destinationId) {
     return (
-      <div className={`rounded-2xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
+      <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
         <p className="text-[12px] font-bold text-stone-700 dark:text-stone-200">Проверка направления</p>
         <p className="mt-1 text-[12px] text-stone-400 dark:text-stone-500">
           Выберите направление из подсказок, чтобы проверить визу, сезон, бюджет и риск.
@@ -79,11 +79,11 @@ export const DestinationValidationCompact = ({
 
   if (isLoading) {
     return (
-      <div className={`rounded-2xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
-        <div className="h-4 w-36 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+      <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
+        <div className="h-4 w-36 animate-pulse rounded bg-[hsl(var(--surface-field))]" />
         <div className="mt-3 grid grid-cols-4 gap-1.5">
           {[0, 1, 2, 3].map((item) => (
-            <div key={item} className="h-7 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-700" />
+            <div key={item} className="h-7 animate-pulse rounded-xl bg-[hsl(var(--surface-field))]" />
           ))}
         </div>
       </div>
@@ -92,7 +92,7 @@ export const DestinationValidationCompact = ({
 
   if (isError || !data) {
     return (
-      <div className={`rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/30 ${className}`}>
+      <div className={`rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
         <p className="text-[12px] font-bold text-amber-700 dark:text-amber-300">Проверка временно недоступна</p>
       </div>
     );
@@ -105,7 +105,7 @@ export const DestinationValidationCompact = ({
   const OverallIcon = overallMeta.icon;
 
   return (
-    <div className={`rounded-2xl border border-stone-200 bg-white p-3 dark:border-stone-700 dark:bg-stone-900 ${className}`}>
+    <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">

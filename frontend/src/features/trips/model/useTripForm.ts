@@ -4,11 +4,24 @@ import type { DestinationSearchResult } from '@/entities/destination';
 import { expenseApi } from '@/entities/expense';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import { sendEvent } from '@/shared/api';
+import { localizeDestinationName } from '@/shared/lib';
 import { useToast } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
+const hasCyrillic = (value: string) => /[А-Яа-яЁё]/.test(value);
+
+const getDestinationLabel = (dest: DestinationSearchResult, fallback?: string) => {
+  const displayName = dest.display_name ?? dest.name_ru ?? localizeDestinationName(dest.name);
+  if (fallback?.trim() && hasCyrillic(fallback) && !hasCyrillic(displayName)) {
+    return fallback.trim();
+  }
+  if (fallback?.trim().toLowerCase() === 'москва' && displayName.toLowerCase() === 'москоу') {
+    return fallback.trim();
+  }
+  return displayName;
+};
 
 type SelectedDestination = {
   id: string | null;
@@ -129,7 +142,7 @@ export const useTripForm = (
   };
 
   const handleDestinationSelect = (dest: DestinationSearchResult) => {
-    setDestination(dest.name);
+    setDestination(getDestinationLabel(dest, destination));
     setSelectedDestination({ id: dest.id, lat: dest.lat, lng: dest.lng });
   };
 
@@ -139,7 +152,7 @@ export const useTripForm = (
   };
 
   const handleDepartureCitySelect = (dest: DestinationSearchResult) => {
-    setDepartureCity(dest.name);
+    setDepartureCity(getDestinationLabel(dest, departureCity));
     setSelectedDepartureCity({ id: dest.id, lat: dest.lat, lng: dest.lng });
   };
 

@@ -38,7 +38,7 @@ export const PlaceList = ({ places, onSelectPlace, onReorder }: PlaceListProps) 
   if (places.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 pb-24 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-stone-100 dark:bg-stone-800">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
           <MapPin className="h-6 w-6 text-stone-400 dark:text-stone-500" />
         </div>
         <p className="text-[15px] font-semibold text-stone-500 dark:text-stone-400">Нет посещённых мест</p>

@@ -121,7 +121,7 @@ export const PlaceDiary = ({ trip }: PlaceDiaryProps) => {
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 py-3">
-        <div className="flex rounded-full bg-stone-100/80 p-1 dark:bg-stone-800/80">
+        <div className="flex rounded-full bg-stone-100/80 p-1 dark:bg-[hsl(var(--surface-muted))]/80">
           <button
             type="button"
             onClick={() => setViewMode('map')}
@@ -167,7 +167,7 @@ export const PlaceDiary = ({ trip }: PlaceDiaryProps) => {
 
         {viewMode === 'map' && (
           <div className="absolute left-3 right-3 top-3 z-10">
-            <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 shadow-md backdrop-blur-sm dark:bg-stone-900/95">
+            <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 shadow-md backdrop-blur-sm dark:bg-[hsl(var(--surface-elevated))]/95">
               {mapSearchLoading ? (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-stone-400" />
               ) : (
@@ -187,7 +187,7 @@ export const PlaceDiary = ({ trip }: PlaceDiaryProps) => {
             </div>
 
             {showMapSuggestions && (
-              <div className="mt-1 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-sm dark:bg-stone-900/95">
+              <div className="mt-1 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-sm dark:bg-[hsl(var(--surface-elevated))]/95">
                 {mapSuggestions.map((s, i) => (
                   <button
                     key={i}

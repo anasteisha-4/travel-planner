@@ -1,6 +1,7 @@
 import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { AdaptiveSheet } from './adaptive-sheet';
 import { Button } from './button';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from './drawer';
 
 type ConfirmDrawerVariant = 'delete' | 'warning';
 
@@ -63,13 +64,13 @@ const VARIANT_STYLES = {
   ConfirmDrawerVariant,
   {
     iconWrapper: string;
-    icon: React.ReactNode;
+    icon: ReactNode;
     confirmButton: (
       loading: boolean,
       label: string,
       onClick: () => void,
       disabled: boolean,
-    ) => React.ReactNode;
+    ) => ReactNode;
   }
 >;
 
@@ -87,31 +88,32 @@ export const ConfirmDrawer = ({
   const styles = VARIANT_STYLES[variant];
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="bg-white px-5 pb-10 dark:bg-stone-950">
+    <AdaptiveSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      showHeader={false}
+      bodyClassName="pb-6"
+    >
         <div className="mb-6 flex flex-col items-center text-center">
           <div className={`confirmation-sheet-icon mb-4 ${styles.iconWrapper}`}>
             {styles.icon}
           </div>
-          <DrawerHeader>
-            <DrawerTitle className="text-[22px] font-extrabold text-stone-900 dark:text-white">
-              {title}
-            </DrawerTitle>
-          </DrawerHeader>
-          <p className="mt-1.5 text-sm text-stone-400 dark:text-stone-500">{description}</p>
+          <p className="text-[22px] font-extrabold text-foreground">{title}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex flex-col gap-3">
           {styles.confirmButton(loading, confirmLabel, onConfirm, loading)}
           <Button
             variant="outline"
-            className="h-[52px] w-full rounded-2xl border-stone-200 bg-stone-100 text-base font-bold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+            className="h-[52px] w-full rounded-2xl border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-base font-bold text-foreground"
             onClick={() => onOpenChange(false)}
             disabled={loading}
           >
             {cancelLabel}
           </Button>
         </div>
-      </DrawerContent>
-    </Drawer>
+    </AdaptiveSheet>
   );
 };

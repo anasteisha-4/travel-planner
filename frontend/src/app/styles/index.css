@@ -36,36 +36,64 @@
     --radius: 0.5rem;
 
     --color-primary-500: #3b82f6;
+    --app-bg: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-elevated: 0 0% 100%;
+    --surface-muted: 210 20% 97%;
+    --surface-field: 210 20% 96%;
+    --surface-border: 214.3 31.8% 91.4%;
+    --status-success: 150 72% 35%;
+    --status-success-soft: 149 80% 96%;
+    --status-warning: 36 92% 45%;
+    --status-warning-soft: 48 96% 94%;
+    --status-danger: 0 72% 51%;
+    --status-danger-soft: 0 86% 97%;
+    --status-info: 221 83% 53%;
+    --status-info-soft: 214 100% 97%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 221 84% 5%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 218 49% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 218 49% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 219 58% 54%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 217 38% 18%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 217 38% 18%;
+    --muted-foreground: 215 22% 67%;
 
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 217 38% 18%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 215 30% 22%;
+    --input: 215 30% 22%;
+    --ring: 216 36% 70%;
+    --app-bg: 221 84% 5%;
+    --surface: 218 49% 10%;
+    --surface-elevated: 216 44% 13%;
+    --surface-muted: 216 35% 16%;
+    --surface-field: 216 26% 17%;
+    --surface-border: 215 30% 24%;
+    --status-success: 158 54% 47%;
+    --status-success-soft: 158 48% 13%;
+    --status-warning: 38 92% 56%;
+    --status-warning-soft: 35 72% 15%;
+    --status-danger: 0 84% 64%;
+    --status-danger-soft: 0 61% 16%;
+    --status-info: 219 58% 54%;
+    --status-info-soft: 221 67% 16%;
   }
 }
 
@@ -90,7 +118,7 @@
 
 @layer utilities {
   .glass-card {
-    @apply border border-white/20 bg-background/80 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:border-white/10 dark:shadow-black/40;
+    @apply border border-white/20 bg-background/80 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:border-white/10 dark:bg-[hsl(var(--surface-elevated))]/90 dark:shadow-black/40;
   }
 
   .glass-panel {
@@ -102,15 +130,15 @@
   }
 
   .trip-info-card {
-    @apply rounded-[20px] border border-black/[0.06] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-stone-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.4),0_4px_16px_rgba(0,0,0,0.3)];
+    @apply rounded-[20px] border border-black/[0.06] bg-[hsl(var(--surface))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface))] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35),0_16px_44px_rgba(0,0,0,0.22)];
   }
 
   .trip-info-card-muted {
-    @apply rounded-[20px] border border-stone-200 bg-stone-50 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.02)] dark:border-stone-700/60 dark:bg-stone-800/60;
+    @apply rounded-[20px] border border-stone-200 bg-[hsl(var(--surface-muted))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.02)] dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))];
   }
 
   .form-input-field {
-    @apply h-[52px] rounded-2xl border border-stone-200 bg-stone-100 px-3.5 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-[1.5px] focus:border-primary dark:border-stone-700 dark:bg-stone-800 dark:text-white;
+    @apply h-[52px] rounded-2xl border border-stone-200 bg-[hsl(var(--surface-field))] px-3.5 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-[1.5px] focus:border-primary dark:border-[hsl(var(--surface-border))] dark:text-white dark:placeholder:text-slate-500;
   }
 
   .confirmation-sheet-icon {
@@ -128,5 +156,55 @@
   }
   .safe-area-right {
     padding-right: env(safe-area-inset-right);
+  }
+
+  .app-surface {
+    @apply bg-[hsl(var(--surface))] text-foreground;
+  }
+
+  .app-surface-muted {
+    @apply bg-[hsl(var(--surface-muted))] text-foreground;
+  }
+
+  .app-border {
+    @apply border-[hsl(var(--surface-border))];
+  }
+
+  .app-field {
+    @apply border border-stone-200 bg-[hsl(var(--surface-field))] dark:border-[hsl(var(--surface-border))];
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dark .text-stone-400,
+  .dark .dark\:text-stone-400,
+  .dark .text-stone-500,
+  .dark .dark\:text-stone-500 {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .dark .dark\:text-slate-500 {
+    color: hsl(215 18% 58%);
+  }
+
+  .dark .dark\:text-emerald-300,
+  .dark .dark\:text-emerald-400 {
+    color: hsl(var(--status-success));
+  }
+
+  .dark .dark\:bg-emerald-950\/30,
+  .dark .dark\:bg-emerald-900\/20 {
+    background-color: hsl(var(--status-success-soft));
+  }
+
+  .dark .dark\:border-emerald-900\/50,
+  .dark .dark\:border-emerald-900\/60 {
+    border-color: hsl(var(--status-success) / 0.28);
   }
 }

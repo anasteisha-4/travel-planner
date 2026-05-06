@@ -33,7 +33,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
     border: 'border-emerald-600 dark:border-emerald-400',
   },
   other: {
-    bg: 'bg-stone-100 dark:bg-stone-800',
+    bg: 'bg-stone-100 dark:bg-[hsl(var(--surface-muted))]',
     text: 'text-stone-500 dark:text-stone-400',
     border: 'border-stone-500 dark:border-stone-400',
   },
@@ -118,7 +118,7 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
               cy={cy}
               r={RING_R}
               fill="none"
-              stroke="rgba(28,25,23,0.07)"
+              stroke="hsl(var(--surface-muted))"
               strokeWidth="10"
             />
             {budget && budget > 0 && (
@@ -146,7 +146,7 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
                   fontSize="18"
                   fontWeight="800"
                   fontFamily="Manrope, sans-serif"
-                  fill={hasExpenses ? (isOverBudget ? '#EF4444' : '#1C1917') : '#A8A29E'}
+                  fill={hasExpenses ? (isOverBudget ? '#EF4444' : 'currentColor') : '#A8A29E'}
                 >
                   {percentDisplay}%
                 </text>

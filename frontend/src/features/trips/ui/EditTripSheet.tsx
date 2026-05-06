@@ -1,5 +1,5 @@
 import type { Trip } from '@/entities/trip';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/shared/ui';
+import { AdaptiveSheet } from '@/shared/ui';
 import type { ReactNode } from 'react';
 import type { TripFormSnapshot } from '../model/useTripForm';
 import { TripForm } from './TripForm';
@@ -21,21 +21,20 @@ export const EditTripSheet = ({
   onSnapshotChange,
   validationSlot,
 }: EditTripSheetProps) => (
-  <Drawer open={open} onOpenChange={onOpenChange}>
-    <DrawerContent className="max-h-[92dvh] overflow-y-auto bg-white px-5 pb-10 dark:bg-stone-950">
-      <DrawerHeader className="mb-5 flex-row items-center justify-between">
-        <DrawerTitle className="text-[20px] font-extrabold text-stone-900 dark:text-white">
-          Редактировать
-        </DrawerTitle>
-      </DrawerHeader>
-      <TripForm
-        existingTrip={trip}
-        onSuccess={onSuccess}
-        onCancel={() => onOpenChange(false)}
-        onSnapshotChange={onSnapshotChange}
-        validationSlot={validationSlot}
-        asSheet
-      />
-    </DrawerContent>
-  </Drawer>
+  <AdaptiveSheet
+    open={open}
+    onOpenChange={onOpenChange}
+    title="Редактировать поездку"
+    description="Изменение дат, бюджета и деталей поездки"
+    bodyClassName="pb-6"
+  >
+    <TripForm
+      existingTrip={trip}
+      onSuccess={onSuccess}
+      onCancel={() => onOpenChange(false)}
+      onSnapshotChange={onSnapshotChange}
+      validationSlot={validationSlot}
+      asSheet
+    />
+  </AdaptiveSheet>
 );

@@ -26,7 +26,7 @@ export const BottomNav = () => {
   if (HIDDEN_EXACT.has(location.pathname)) return null;
 
   return (
-    <div className="fixed bottom-0 w-full border-t border-stone-100 bg-white pb-6 dark:border-stone-800 dark:bg-stone-950">
+    <div className="fixed bottom-0 w-full border-t border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))]/95 pb-6 shadow-[0_-16px_44px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:shadow-[0_-16px_44px_rgba(0,0,0,0.35)]">
       <nav className="mx-auto flex max-w-md items-start justify-around px-4 pt-2">
         {NAV_ITEMS.map(({ name, path, icon: Icon }) => {
           const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
@@ -43,7 +43,7 @@ export const BottomNav = () => {
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className="absolute inset-0 rounded-full bg-[#2563EB]"
+                    className="absolute inset-0 rounded-full bg-primary"
                     transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                   />
                 )}
@@ -66,7 +66,7 @@ export const BottomNav = () => {
               <span
                 className={cn(
                   'text-[10px] font-semibold leading-none tracking-wide transition-colors duration-200',
-                  isActive ? 'text-[#2563EB]' : 'text-stone-400 dark:text-stone-500'
+                  isActive ? 'text-primary' : 'text-stone-400 dark:text-slate-500'
                 )}
               >
                 {name}

@@ -12,29 +12,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 const SkeletonCard = () => (
-  <div
-    style={{
-      background: '#fff',
-      border: '1px solid rgba(0,0,0,0.06)',
-      borderRadius: 20,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      padding: 16,
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(28,25,23,0.06)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+  <div className="trip-info-card">
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
         <div>
-          <div style={{ width: 120, height: 14, borderRadius: 6, background: 'rgba(28,25,23,0.06)', marginBottom: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 70, height: 11, borderRadius: 6, background: 'rgba(28,25,23,0.04)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div className="mb-2 h-4 w-32 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+          <div className="h-3 w-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
         </div>
       </div>
-      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(28,25,23,0.06)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-12 w-12 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
     </div>
-    <div style={{ display: 'flex', gap: 6 }}>
-      <div style={{ width: 70, height: 22, borderRadius: 8, background: 'rgba(28,25,23,0.04)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div style={{ width: 60, height: 22, borderRadius: 8, background: 'rgba(28,25,23,0.04)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div style={{ width: 80, height: 22, borderRadius: 8, background: 'rgba(28,25,23,0.04)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+    <div className="flex gap-2">
+      <div className="h-6 w-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+      <div className="h-6 w-16 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+      <div className="h-6 w-24 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
     </div>
   </div>
 );
@@ -79,20 +71,11 @@ export const RecommendationsPage = () => {
   return (
     <PageLayout>
       <AppPageHeader pb="pb-3">
-        <div style={{ marginBottom: 14 }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: '#1C1917',
-              letterSpacing: '-0.02em',
-              fontFamily: 'Manrope, sans-serif',
-              marginBottom: 2,
-            }}
-          >
+        <div className="mb-3">
+          <h1 className="text-[24px] font-extrabold tracking-tight text-foreground">
             Рекомендации
           </h1>
-          <p style={{ fontSize: 14, fontWeight: 500, color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+          <p className="mt-1 text-[14px] font-semibold text-muted-foreground">
             Подобраны под ваши предпочтения
           </p>
         </div>
@@ -107,76 +90,27 @@ export const RecommendationsPage = () => {
 
       <PageContent className="pt-4">
         {isLoading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="flex flex-col gap-3">
             {[0, 1, 2, 3].map((i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
         ) : isError ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              paddingTop: 64,
-              gap: 16,
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 24,
-                background: 'rgba(239,68,68,0.07)',
-                border: '1px solid rgba(239,68,68,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 32,
-              }}
-            >
+          <div className="flex flex-col items-center gap-4 pt-16 text-center">
+            <div className="flex h-[72px] w-[72px] items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/10 text-[30px]">
               ⚡
             </div>
             <div>
-              <p
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: '#1C1917',
-                  marginBottom: 4,
-                  fontFamily: 'Manrope, sans-serif',
-                }}
-              >
+              <p className="mb-1 text-[16px] font-extrabold text-foreground">
                 Не удалось загрузить
               </p>
-              <p
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: '#A8A29E',
-                  marginBottom: 20,
-                  fontFamily: 'Manrope, sans-serif',
-                }}
-              >
+              <p className="mb-5 text-[13px] font-semibold text-muted-foreground">
                 Проверьте подключение и попробуйте снова
               </p>
               <button
                 type="button"
                 onClick={() => void refetch()}
-                style={{
-                  height: 44,
-                  paddingInline: 24,
-                  borderRadius: 14,
-                  background: '#2563EB',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  fontFamily: 'Manrope, sans-serif',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(37,99,235,0.28)',
-                }}
+                className="min-h-11 rounded-2xl bg-primary px-6 text-[14px] font-bold text-primary-foreground shadow-[0_8px_22px_rgba(37,99,235,0.25)]"
               >
                 Повторить
               </button>

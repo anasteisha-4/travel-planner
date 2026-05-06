@@ -28,10 +28,10 @@ const VISA_ICONS: Record<string, string> = {
 };
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400">{children}</p>
+  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{children}</p>
 );
 
-const Divider = () => <div className="my-3 h-px bg-stone-100" />;
+const Divider = () => <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />;
 
 export const PreferencesView = ({ preferences }: { preferences: Partial<UserProfileV2> }) => {
   const vacationPrefs = (preferences.vacation_preferences_ranked ?? []).filter(
@@ -78,12 +78,12 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               return (
                 <span
                   key={id}
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-100 bg-blue-50 py-1.5 pl-2 pr-3 text-[13px] font-semibold text-blue-800"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-100 bg-primary/10 py-1.5 pl-2 pr-3 text-[13px] font-semibold text-primary dark:border-[hsl(var(--surface-border))]"
                 >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                     {idx + 1}
                   </span>
-                  <Icon className="h-3.5 w-3.5 text-blue-500" />
+                  <Icon className="h-3.5 w-3.5 text-primary" />
                   {type.label}
                 </span>
               );
@@ -100,39 +100,39 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
         <div className="flex flex-col gap-0">
           {preferences.origin_city_name && (
             <div className="flex items-center justify-between py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 ✈️ Откуда
               </span>
-              <span className="text-[14px] font-semibold text-stone-900">
+              <span className="text-[14px] font-semibold text-foreground">
                 {preferences.origin_city_name}
               </span>
             </div>
           )}
           {preferences.origin_city_name && (hasBudget || preferences.typical_duration) && (
-            <div className="h-px bg-stone-100" />
+            <div className="h-px bg-[hsl(var(--surface-field))]" />
           )}
 
           {hasBudget && (
             <div className="flex items-center justify-between py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 💰 Бюджет
               </span>
               <div className="text-right">
-                <span className="text-[14px] font-bold text-stone-900">
+                <span className="text-[14px] font-bold text-foreground">
                   {budgetConfig.format(preferences.budget_min!)} —{' '}
                   {budgetConfig.format(preferences.budget_max!)}
                 </span>
               </div>
             </div>
           )}
-          {hasBudget && preferences.typical_duration && <div className="h-px bg-stone-100" />}
+          {hasBudget && preferences.typical_duration && <div className="h-px bg-[hsl(var(--surface-field))]" />}
 
           {preferences.typical_duration && (
             <div className="flex items-center justify-between py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-400">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 ⏱ Длительность
               </span>
-              <span className="text-[14px] font-semibold text-stone-900">
+              <span className="text-[14px] font-semibold text-foreground">
                 {getDurationLabel(preferences.typical_duration)}
               </span>
             </div>
@@ -149,9 +149,9 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
             {likedIds.map((id, i) => (
               <span
                 key={id}
-                className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 py-1.5 pl-2.5 pr-3 text-[13px] font-semibold text-stone-700"
+                className="flex items-center gap-1.5 rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] py-1.5 pl-2.5 pr-3 text-[13px] font-semibold text-foreground"
               >
-                <Globe className="h-3.5 w-3.5 text-stone-400" />
+                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                 {likedNames[i] ?? id}
               </span>
             ))}
@@ -166,13 +166,13 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
           <SectionTitle>Стиль и ограничения</SectionTitle>
           <div className="flex flex-col gap-2">
             {preferences.risk_tolerance && (
-              <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2.5">
-                <span className="text-[13px] font-semibold text-stone-600">Приключения</span>
+              <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                <span className="text-[13px] font-semibold text-muted-foreground">Приключения</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[18px] leading-none">
                     {RISK_ICONS[preferences.risk_tolerance]}
                   </span>
-                  <span className="text-[13px] font-semibold text-stone-900">
+                  <span className="text-[13px] font-semibold text-foreground">
                     {RISK_TOLERANCE_LABELS[preferences.risk_tolerance]}
                   </span>
                 </div>
@@ -182,27 +182,27 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               (() => {
                 const visa = VISA_OPTIONS.find((v) => v.id === preferences.visa_tolerance);
                 return visa ? (
-                  <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2.5">
-                    <span className="text-[13px] font-semibold text-stone-600">Виза</span>
+                  <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                    <span className="text-[13px] font-semibold text-muted-foreground">Виза</span>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[16px] leading-none">
                         {VISA_ICONS[preferences.visa_tolerance!] ?? '🌐'}
                       </span>
-                      <span className="text-[13px] font-semibold text-stone-900">{visa.label}</span>
+                      <span className="text-[13px] font-semibold text-foreground">{visa.label}</span>
                     </div>
                   </div>
                 ) : null;
               })()}
             {languageComfort.length > 0 && (
-              <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2.5">
-                <span className="text-[13px] font-semibold text-stone-600">Языки</span>
+              <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                <span className="text-[13px] font-semibold text-muted-foreground">Языки</span>
                 <div className="flex flex-wrap justify-end gap-1">
                   {languageComfort.map((id) => {
                     const opt = LANGUAGE_OPTIONS.find((l) => l.id === id);
                     return opt ? (
                       <span
                         key={id}
-                        className="rounded-lg bg-stone-200 px-2 py-0.5 text-[12px] font-semibold text-stone-700"
+                        className="rounded-lg bg-[hsl(var(--surface-field))] px-2 py-0.5 text-[12px] font-semibold text-foreground"
                       >
                         {opt.label}
                       </span>
@@ -222,13 +222,13 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
           <SectionTitle>Атмосфера</SectionTitle>
           <div className="flex flex-col gap-2">
             {preferences.crowd_preference && (
-              <div className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2.5">
-                <span className="text-[13px] font-semibold text-stone-600">Людность</span>
+              <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                <span className="text-[13px] font-semibold text-muted-foreground">Людность</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[18px] leading-none">
                     {CROWD_ICONS[preferences.crowd_preference]}
                   </span>
-                  <span className="text-[13px] font-semibold text-stone-900">
+                  <span className="text-[13px] font-semibold text-foreground">
                     {CROWD_LABELS[preferences.crowd_preference]}
                   </span>
                 </div>
@@ -241,7 +241,7 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
                   return opt ? (
                     <span
                       key={id}
-                      className="flex items-center gap-1 rounded-xl border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[13px] font-semibold text-stone-700"
+                      className="flex items-center gap-1 rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1.5 text-[13px] font-semibold text-foreground"
                     >
                       <span>{opt.emoji}</span>
                       {opt.label}
@@ -258,11 +258,11 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
       {preferences.free_text_notes && (
         <>
           <Divider />
-          <div className="rounded-xl bg-stone-50 px-3 py-2.5">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-stone-400">
+          <div className="rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               💬 Заметки
             </p>
-            <p className="text-[13px] text-stone-600">{preferences.free_text_notes}</p>
+            <p className="text-[13px] text-muted-foreground">{preferences.free_text_notes}</p>
           </div>
         </>
       )}

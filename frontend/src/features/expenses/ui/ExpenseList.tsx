@@ -33,7 +33,7 @@ const CATEGORY_STYLES: Record<string, { bg: string; icon: string }> = {
     bg: 'bg-emerald-50 dark:bg-emerald-900/25',
     icon: 'text-emerald-500 dark:text-emerald-400',
   },
-  other: { bg: 'bg-stone-100 dark:bg-stone-800', icon: 'text-stone-400 dark:text-stone-500' },
+  other: { bg: 'bg-stone-100 dark:bg-[hsl(var(--surface-muted))]', icon: 'text-stone-400 dark:text-stone-500' },
 };
 
 const CATEGORY_ICONS = {
@@ -61,7 +61,7 @@ export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) =>
   if (expenses.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-stone-100 dark:bg-stone-800">
+        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-[hsl(var(--surface-muted))]">
           <svg
             width="28"
             height="28"
@@ -98,7 +98,7 @@ export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) =>
             <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               {dateKey === 'no-date' ? 'Без даты' : formatDate(dateKey)}
             </p>
-            <div className="h-px flex-1 bg-stone-100 dark:bg-stone-800" />
+            <div className="h-px flex-1 bg-[hsl(var(--surface-border))]" />
           </div>
           <div className="flex flex-col gap-2">
             {items.map((expense) => {
@@ -106,7 +106,7 @@ export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) =>
               return (
                 <div
                   key={expense.id}
-                  className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-white px-3 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.05)] transition-all active:scale-[0.99] dark:border-white/[0.07] dark:bg-stone-900 dark:shadow-none"
+                  className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.05)] transition-all active:scale-[0.99] dark:shadow-none"
                   onClick={() => !readonly && onEdit(expense)}
                   role={readonly ? undefined : 'button'}
                   tabIndex={readonly ? undefined : 0}
@@ -114,7 +114,7 @@ export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) =>
                 >
                   <CategoryIcon category={expense.category} />
                   <div className="flex-1 overflow-hidden">
-                    <p className="truncate text-[15px] font-bold text-stone-900 dark:text-white">
+                    <p className="line-clamp-2 text-[15px] font-bold leading-snug text-stone-900 dark:text-white">
                       {expense.description || meta.label}
                     </p>
                     {expense.description && (

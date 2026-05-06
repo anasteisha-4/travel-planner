@@ -79,9 +79,9 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
             <button
               type="button"
               onClick={goBack}
-              className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-stone-200 bg-stone-100 transition-colors active:bg-stone-200"
+              className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] transition-colors active:bg-[hsl(var(--surface-field))]"
             >
-              <ChevronLeft className="h-5 w-5 text-stone-600" />
+              <ChevronLeft className="h-5 w-5 text-foreground" />
             </button>
           ) : (
             <div className="h-[38px] w-[38px]" />
@@ -90,13 +90,13 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
           <div className="h-[38px] w-[38px]" />
         </div>
         <div>
-          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.07em] text-stone-400">
+          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
             Шаг {currentStep} из 6
           </p>
-          <h1 className="text-[22px] font-extrabold tracking-tight text-stone-900">
+          <h1 className="text-[22px] font-extrabold tracking-tight text-foreground">
             {meta.title}
           </h1>
-          <p className="text-[14px] text-stone-400">{meta.subtitle}</p>
+          <p className="text-[14px] text-muted-foreground">{meta.subtitle}</p>
         </div>
       </AppPageHeader>
 
@@ -168,7 +168,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
       </PageContent>
 
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-stone-100 bg-white px-5 py-3"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-[hsl(var(--surface-border))] bg-[hsl(var(--app-bg))] px-5 py-3"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
       >
         <Button
@@ -183,7 +183,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
           variant="ghost"
           onClick={handleSaveAndExit}
           disabled={isSaving}
-          className="h-[44px] w-full text-[14px] text-stone-400"
+          className="h-[44px] w-full text-[14px] text-muted-foreground"
         >
           Заполнить позже
         </Button>

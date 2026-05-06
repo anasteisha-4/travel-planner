@@ -14,6 +14,9 @@ export type ScoreBreakdown = {
 export type ScoredDestination = {
   destination_id: string;
   name: string;
+  name_original?: string | null;
+  name_ru?: string | null;
+  display_name?: string | null;
   country_code: string;
   region: string;
   score: number;

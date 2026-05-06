@@ -37,7 +37,7 @@ export const PlaceCard = ({ place, index, onClick }: PlaceCardProps) => {
         className={cn(
           'flex min-w-0 flex-1 items-center gap-3.5 rounded-2xl px-2 py-3.5 text-left',
           'border border-white/20 bg-white/60 shadow-sm backdrop-blur-sm',
-          'dark:border-stone-700/40 dark:bg-stone-900/60',
+          'dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-elevated))]/60',
           'transition-transform active:scale-[0.98]'
         )}
       >

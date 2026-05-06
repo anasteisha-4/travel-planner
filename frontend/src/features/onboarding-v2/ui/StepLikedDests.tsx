@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Globe, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 
+import { useDebouncedValue } from '@/shared/lib';
 import { AppInput, FieldLabel } from '@/shared/ui';
 
 import { onboardingV2Api } from '../api/onboarding-v2.api';
@@ -16,12 +17,13 @@ type Props = {
 
 export const StepLikedDests = ({ dests, onChange }: Props) => {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 400);
   const [open, setOpen] = useState(false);
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['destination-search', query],
-    queryFn: () => onboardingV2Api.searchDestinations(query, 8),
-    enabled: query.trim().length >= 2,
+    queryKey: ['destination-search', debouncedQuery],
+    queryFn: () => onboardingV2Api.searchDestinations(debouncedQuery, 8),
+    enabled: debouncedQuery.trim().length >= 2,
     staleTime: 1000 * 60 * 10,
   });
 
@@ -38,13 +40,14 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
     onChange(dests.filter((d) => d.id !== id));
   };
 
-  const showDropdown = open && query.trim().length >= 2 && (results.length > 0 || isFetching);
+  const showDropdown =
+    open && query.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <FieldLabel>Любимые направления</FieldLabel>
-        <p className="mb-3 text-[13px] text-stone-400">
+        <p className="mb-3 text-[13px] text-muted-foreground">
           До 10 мест — поможет находить похожие направления (необязательно)
         </p>
 
@@ -53,7 +56,7 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
             {dests.map((dest) => (
               <span
                 key={dest.id}
-                className="flex items-center gap-1.5 rounded-xl border border-blue-100 bg-blue-50 py-1.5 pl-3 pr-2 text-[13px] font-semibold text-blue-800"
+                className="flex items-center gap-1.5 rounded-xl border border-blue-100 bg-primary/10 py-1.5 pl-3 pr-2 text-[13px] font-semibold text-primary"
               >
                 {dest.name}
                 {dest.country_code && (
@@ -75,9 +78,9 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
           <div className="relative">
             <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
               {isFetching ? (
-                <Loader2 className="h-4 w-4 animate-spin text-stone-400" />
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : (
-                <Globe className="h-4 w-4 text-stone-400" />
+                <Globe className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
             <AppInput
@@ -92,9 +95,9 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
         )}
 
         {showDropdown && (
-          <div className="mt-1.5 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
+          <div className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
             {isFetching && results.length === 0 ? (
-              <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-stone-400">
+              <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Поиск...
               </div>
@@ -106,14 +109,14 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
                     key={dest.id}
                     type="button"
                     onMouseDown={() => handleSelect(dest)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-stone-100"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100">
-                      <Globe className="h-3.5 w-3.5 text-stone-500" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-field))]">
+                      <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-[14px] font-semibold text-stone-900">{dest.name}</p>
-                      <p className="text-[12px] text-stone-400">{dest.country_code}</p>
+                      <p className="text-[14px] font-semibold text-foreground">{dest.name}</p>
+                      <p className="text-[12px] text-muted-foreground">{dest.country_code}</p>
                     </div>
                   </button>
                 ))
@@ -123,9 +126,9 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
       </div>
 
       {dests.length === 0 && (
-        <div className="rounded-2xl border border-stone-100 bg-stone-50 px-4 py-4 text-center">
-          <Globe className="mx-auto mb-2 h-8 w-8 text-stone-300" />
-          <p className="text-[13px] text-stone-400">Пропустите или добавьте любимые места</p>
+        <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-4 py-4 text-center">
+          <Globe className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+          <p className="text-[13px] text-muted-foreground">Пропустите или добавьте любимые места</p>
         </div>
       )}
     </div>

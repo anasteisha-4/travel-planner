@@ -1,6 +1,7 @@
 import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
 import type { Trip } from '@/entities/trip';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
+import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
 import {
   AppInput,
@@ -19,7 +20,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Check, Loader2, MapPin, Minus, Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { type TripFormInitialValues, type TripFormSnapshot, useTripForm } from '../model/useTripForm';
 
 type DestinationSearchInputProps = {
@@ -41,20 +42,9 @@ const DestinationSearchInput = ({
   onSelect,
   onClearError,
 }: DestinationSearchInputProps) => {
-  const [debouncedQuery, setDebouncedQuery] = useState(value);
+  const debouncedQuery = useDebouncedValue(value, 400);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setDebouncedQuery(value);
-    }, 400);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [value]);
 
   const { data: results = [], isFetching } = useQuery({
     queryKey: ['destination-search', debouncedQuery],
@@ -76,7 +66,8 @@ const DestinationSearchInput = ({
     inputRef.current?.blur();
   };
 
-  const showDropdown = open && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
+  const showDropdown =
+    open && value.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
 
   return (
     <div>
@@ -112,7 +103,7 @@ const DestinationSearchInput = ({
       <FormError message={error} />
 
       {showDropdown && (
-        <div className="mt-1.5 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.1)] dark:border-stone-700 dark:bg-stone-900">
+        <div className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] shadow-[0_16px_42px_rgba(0,0,0,0.18)]">
           {isFetching && results.length === 0 ? (
             <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-stone-400">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -127,14 +118,16 @@ const DestinationSearchInput = ({
                   event.preventDefault();
                   handleSelect(dest);
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50 active:bg-stone-100 dark:hover:bg-stone-800 dark:active:bg-stone-800 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-stone-100 dark:[&:not(:last-child)]:border-stone-800"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-stone-800">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
                   <MapPin className="h-3.5 w-3.5 text-stone-500" />
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold text-stone-900 dark:text-white">{dest.name}</p>
-                  <p className="text-[12px] text-stone-400">{dest.country_code}</p>
+                  <p className="line-clamp-2 text-[14px] font-semibold text-foreground">
+                    {dest.display_name ?? dest.name_ru ?? localizeDestinationName(dest.name)}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">{dest.country_code}</p>
                 </div>
               </button>
             ))
@@ -199,7 +192,7 @@ export const TripForm = ({
     if (trip) onSuccess(trip);
   };
 
-  const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-stone-700';
+  const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-[hsl(var(--surface-border))]';
 
   return (
     <div className="flex flex-col gap-2">
@@ -217,10 +210,10 @@ export const TripForm = ({
 
         <div>
           <FieldLabel>Люди</FieldLabel>
-          <div className="flex h-[52px] items-center gap-2 rounded-2xl border border-stone-200 bg-stone-100 px-2.5 dark:border-stone-700 dark:bg-stone-800">
+          <div className="flex h-[52px] items-center gap-2 rounded-2xl app-field px-2.5">
             <button
               type="button"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-700 disabled:opacity-40 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface-muted))] text-foreground disabled:opacity-40"
               onClick={decrementPeople}
               disabled={peopleCount <= 1}
             >
@@ -231,7 +224,7 @@ export const TripForm = ({
             </span>
             <button
               type="button"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white disabled:opacity-40"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
               onClick={incrementPeople}
               disabled={peopleCount >= 20}
             >
@@ -265,7 +258,7 @@ export const TripForm = ({
               clearError('start_date');
             }}
             className={cn(
-              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800',
+              'h-[52px] rounded-[14px] app-field',
               errors.start_date && inputError
             )}
           />
@@ -282,7 +275,7 @@ export const TripForm = ({
               clearError('end_date');
             }}
             className={cn(
-              'h-[52px] rounded-[14px] border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800',
+              'h-[52px] rounded-[14px] app-field',
               errors.end_date && inputError
             )}
           />
@@ -303,7 +296,7 @@ export const TripForm = ({
         </div>
         <div className="flex items-center gap-3">
           <Select value={currency} onValueChange={handleCurrencyChange}>
-            <SelectTrigger className="h-[52px] w-[120px] shrink-0 rounded-2xl border-stone-200 bg-stone-100 text-[13px] font-semibold dark:border-stone-700 dark:bg-stone-800 dark:text-white">
+            <SelectTrigger className="h-[52px] w-[120px] shrink-0 rounded-2xl app-field text-[13px] font-semibold text-foreground">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -334,7 +327,7 @@ export const TripForm = ({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Аллергии, особые пожелания"
-          className="mb-4 min-h-[92px] resize-none rounded-2xl border-stone-200 bg-stone-100 text-[15px] placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500"
+          className="mb-4 min-h-[112px] resize-none rounded-2xl app-field text-[15px] placeholder:text-muted-foreground"
         />
       </div>
 
@@ -343,7 +336,7 @@ export const TripForm = ({
         className={cn(
           'flex gap-3',
           !asSheet
-            ? 'fixed bottom-0 left-0 right-0 z-50 border-t border-stone-100 bg-white px-5 py-3 dark:border-stone-800 dark:bg-stone-950'
+            ? 'fixed bottom-0 left-0 right-0 z-50 border-t border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))]/95 px-5 py-3 shadow-[0_-16px_40px_rgba(0,0,0,0.14)] backdrop-blur-xl'
             : 'pt-2'
         )}
         style={
@@ -355,7 +348,7 @@ export const TripForm = ({
             variant="outline"
             onClick={onCancel}
             disabled={isLoading}
-            className="h-[52px] flex-1 rounded-2xl border-stone-200 bg-stone-100 text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+            className="h-[52px] flex-1 rounded-2xl border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-foreground"
           >
             Отмена
           </Button>

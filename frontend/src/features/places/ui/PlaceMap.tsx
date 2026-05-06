@@ -177,7 +177,7 @@ export const PlaceMap = ({
       <div ref={containerRef} className="h-full w-full" />
 
       {!isReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-stone-900">
+        <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[hsl(var(--surface-elevated))]">
           <Loader2 className="h-7 w-7 animate-spin text-stone-400" />
         </div>
       )}
@@ -186,7 +186,7 @@ export const PlaceMap = ({
         <button
           type="button"
           onClick={() => setShowRoute((v) => !v)}
-          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 shadow-md backdrop-blur-sm dark:bg-stone-800/90"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 shadow-md backdrop-blur-sm dark:bg-[hsl(var(--surface-muted))]/90"
           title={showRoute ? 'Скрыть маршрут' : 'Показать маршрут'}
         >
           <Route className={`h-4 w-4 ${showRoute ? 'text-[#2563EB]' : 'text-stone-400'}`} />

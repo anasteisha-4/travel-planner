@@ -5,7 +5,13 @@ import * as React from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
 
 export const Drawer = ({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
-  <DrawerPrimitive.Root {...props} />
+  <DrawerPrimitive.Root
+    fixed
+    handleOnly
+    repositionInputs={false}
+    scrollLockTimeout={0}
+    {...props}
+  />
 );
 
 export const DrawerTrigger = ({
@@ -18,6 +24,16 @@ export const DrawerPortal = ({ ...props }: React.ComponentProps<typeof DrawerPri
 
 export const DrawerClose = ({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Close>) => (
   <DrawerPrimitive.Close {...props} />
+);
+
+export const DrawerHandle = ({
+  className,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Handle>) => (
+  <DrawerPrimitive.Handle
+    className={cn('mx-auto mb-5 mt-3 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-slate-600/80', className)}
+    {...props}
+  />
 );
 
 export const DrawerOverlay = React.forwardRef<
@@ -41,13 +57,13 @@ export const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed inset-x-0 bottom-0 z-50 flex flex-col bg-background px-5',
-        'rounded-t-3xl border-t',
+        'fixed inset-x-0 bottom-0 z-50 flex w-screen flex-col bg-background px-5',
+        'max-h-[calc(100dvh-env(safe-area-inset-top,0px)-8px)] rounded-t-3xl border-t',
         className
       )}
       {...props}
     >
-      <div className="mx-auto mb-5 mt-3 h-1 w-9 shrink-0 rounded-full bg-stone-200 dark:bg-stone-700" />
+      <DrawerHandle />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

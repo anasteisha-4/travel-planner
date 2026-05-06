@@ -79,7 +79,7 @@ export const ForgotPasswordForm = ({ onBackToLogin }: { onBackToLogin: () => voi
           type="button"
           disabled={isLoading}
           onClick={onBackToLogin}
-          className="flex h-[52px] w-full items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-stone-100 text-[15px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
+          className="flex h-[52px] w-full items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-stone-100 text-[15px] font-semibold text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200"
         >
           <ChevronLeft className="h-5 w-5" />
           Вернуться к входу

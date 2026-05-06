@@ -3,6 +3,7 @@ import { expenseApi } from '@/entities/expense';
 import { profileApi } from '@/features/profile';
 import { DestinationValidationCompact, useBudgetPrediction } from '@/features/recommendations';
 import { TripForm, type TripFormInitialValues, type TripFormSnapshot } from '@/features/trips';
+import { useDebouncedValue } from '@/shared/lib';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
@@ -52,6 +53,12 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   CNY: '¥',
 };
 
+const formatBudgetAmount = (value: number, currency: string) => {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  const amount = Math.round(value).toLocaleString('ru-RU');
+  return symbol.length > 1 ? `${symbol} ${amount}` : `${symbol}${amount}`;
+};
+
 export const TripCreatePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -81,26 +88,27 @@ export const TripCreatePage = () => {
   }, [profile?.origin_city_name, profile?.preferred_currency, searchParams]);
 
   const [formSnapshot, setFormSnapshot] = useState<TripFormSnapshot | null>(null);
+  const debouncedFormSnapshot = useDebouncedValue(formSnapshot, 450);
   const handleFormSnapshotChange = useCallback((snapshot: TripFormSnapshot) => {
     setFormSnapshot(snapshot);
   }, []);
 
   const initialDestinationId = searchParams.get('destination_id');
-  const previewDestination = formSnapshot?.destination ?? initialValues.destination;
+  const previewDestination = debouncedFormSnapshot?.destination ?? initialValues.destination;
   const isInitialDestination = normalizeCity(previewDestination) === normalizeCity(initialValues.destination);
-  const destinationId = formSnapshot
-    ? formSnapshot.destination_id ?? (isInitialDestination ? initialDestinationId : null)
+  const destinationId = debouncedFormSnapshot
+    ? debouncedFormSnapshot.destination_id ?? (isInitialDestination ? initialDestinationId : null)
     : initialDestinationId;
-  const previewStartDate = formSnapshot?.start_date ?? initialValues.start_date;
-  const previewEndDate = formSnapshot?.end_date ?? initialValues.end_date;
-  const previewDepartureCity = formSnapshot?.departure_city ?? initialValues.departure_city ?? profile?.origin_city_name;
+  const previewStartDate = debouncedFormSnapshot?.start_date ?? initialValues.start_date;
+  const previewEndDate = debouncedFormSnapshot?.end_date ?? initialValues.end_date;
+  const previewDepartureCity = debouncedFormSnapshot?.departure_city ?? initialValues.departure_city ?? profile?.origin_city_name;
   const isProfileOrigin = normalizeCity(previewDepartureCity) === normalizeCity(profile?.origin_city_name);
-  const selectedOriginLat = formSnapshot?.departure_lat ?? null;
-  const selectedOriginLng = formSnapshot?.departure_lng ?? null;
+  const selectedOriginLat = debouncedFormSnapshot?.departure_lat ?? null;
+  const selectedOriginLng = debouncedFormSnapshot?.departure_lng ?? null;
   const budgetDurationDays = getDurationDays(previewStartDate, previewEndDate) ?? profile?.typical_duration_days ?? 7;
-  const budgetPeopleCount = formSnapshot?.people_count ?? initialValues.people_count ?? 1;
-  const budgetCurrency = formSnapshot?.currency ?? initialValues.currency ?? profile?.preferred_currency ?? 'RUB';
-  const budgetValue = formSnapshot?.budget ?? initialValues.budget ?? 0;
+  const budgetPeopleCount = debouncedFormSnapshot?.people_count ?? initialValues.people_count ?? 1;
+  const budgetCurrency = debouncedFormSnapshot?.currency ?? initialValues.currency ?? profile?.preferred_currency ?? 'RUB';
+  const budgetValue = debouncedFormSnapshot?.budget ?? initialValues.budget ?? 0;
   const budgetAccommodationTier = getAccommodationTier(searchParams.get('accommodation_tier'));
   const needsUsdRate = budgetValue > 0 && budgetCurrency !== 'USD';
   const { data: validationRates } = useQuery({
@@ -157,6 +165,32 @@ export const TripCreatePage = () => {
             : 'дешевый тариф'
       }`
     : 'нет данных по стоимости пути';
+  const budgetRangeItems = budgetPrediction
+    ? [
+        {
+          label: 'Нижняя граница',
+          value: formatBudgetAmount(budgetDisplayTotalMin, budgetPrediction.currency),
+          className: 'border-border/70 bg-background/50 text-muted-foreground',
+        },
+        {
+          label: 'Прогноз',
+          value: formatBudgetAmount(budgetDisplayTotalMid, budgetPrediction.currency),
+          className: 'border-primary/35 bg-primary/10 text-foreground shadow-[0_12px_34px_rgba(37,99,235,0.16)]',
+        },
+        {
+          label: 'Верхняя граница',
+          value: formatBudgetAmount(budgetDisplayTotalMax, budgetPrediction.currency),
+          className: 'border-border/70 bg-background/50 text-muted-foreground',
+        },
+      ]
+    : [];
+  const budgetRouteValue = hasBudgetTravelFareData
+    ? `${formatBudgetAmount(budgetTravelCost, budgetPrediction?.currency ?? budgetCurrency)} · ${budgetTravelSource}`
+    : budgetTravelSource;
+  const budgetDistanceValue =
+    budgetAssumptions?.travel_distance_km !== null && budgetAssumptions?.travel_distance_km !== undefined
+      ? `${Math.round(budgetAssumptions.travel_distance_km).toLocaleString('ru-RU')} км`
+      : 'Расстояние неизвестно';
 
   const handleSuccess = (trip: Trip) => {
     navigate(`/trips/${trip.id}`, { replace: true });
@@ -183,42 +217,67 @@ export const TripCreatePage = () => {
         </div>
       </AppPageHeader>
 
-      <PageContent pb="pb-5" className="pt-5">
+      <PageContent pb="pb-28" className="pt-4">
         {budgetPrediction && (
-          <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 dark:border-blue-900/40 dark:bg-blue-950/30">
-            <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="mb-4 overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_18px_44px_rgba(2,8,23,0.08)] transition-[opacity,transform,background-color,border-color] duration-300 ease-out dark:shadow-[0_22px_56px_rgba(0,0,0,0.32)]">
+            <div className="border-b border-[hsl(var(--surface-border))] bg-primary/10 px-4 py-4">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-blue-600 dark:text-blue-300">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-primary">
                   Прогноз Triply
                 </p>
-                <p className="mt-1 text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
-                  {(CURRENCY_SYMBOLS[budgetPrediction.currency] ?? budgetPrediction.currency)}
-                  {Math.round(budgetDisplayTotalMid).toLocaleString('ru-RU')}
+                <p className="mt-1 text-[26px] font-extrabold tracking-tight text-foreground">
+                  {formatBudgetAmount(budgetDisplayTotalMid, budgetPrediction.currency)}
+                </p>
+                <p className="mt-1 text-[12px] font-bold text-muted-foreground">
+                  {budgetAssumptions?.duration_days ?? budgetPrediction.duration_days} дн. ·{' '}
+                  {budgetAssumptions?.people_count ?? budgetPrediction.people_count} чел.
                 </p>
               </div>
-              <div className="text-right text-[12px] font-bold text-stone-500 dark:text-stone-400">
-                p10 {Math.round(budgetDisplayTotalMin).toLocaleString('ru-RU')}
-                <br />
-                p90 {Math.round(budgetDisplayTotalMax).toLocaleString('ru-RU')}
-              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[12px]">
-              <span className="truncate text-stone-500 dark:text-stone-400">
-                {budgetAssumptions?.duration_days ?? budgetPrediction.duration_days} дн. · {budgetAssumptions?.people_count ?? budgetPrediction.people_count} чел
-              </span>
-              <span className="truncate text-right text-stone-500 dark:text-stone-400">
-                {budgetAssumptions?.origin_city_name ?? 'origin не указан'}
-              </span>
-              <span className="truncate text-stone-500 dark:text-stone-400" title={budgetTravelSource}>
-                {hasBudgetTravelFareData
-                  ? `дорога: ${Math.round(budgetTravelCost).toLocaleString('ru-RU')} ${budgetPrediction.currency} · ${budgetTravelSource}`
-                  : budgetTravelSource}
-              </span>
-              <span className="truncate text-right text-stone-500 dark:text-stone-400">
-                {budgetAssumptions?.travel_distance_km !== null && budgetAssumptions?.travel_distance_km !== undefined
-                  ? `${Math.round(budgetAssumptions.travel_distance_km).toLocaleString('ru-RU')} км`
-                  : 'без расстояния'}
-              </span>
+
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-3 gap-2">
+                {budgetRangeItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className={`min-h-[70px] rounded-2xl border px-2.5 py-2.5 ${item.className}`}
+                  >
+                    <p className="text-[10px] font-extrabold uppercase leading-tight tracking-[0.04em]">
+                      {item.label}
+                    </p>
+                    <p className="mt-1.5 text-[13px] font-extrabold leading-tight">
+                      {item.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[12px]">
+                <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
+                    Откуда
+                  </p>
+                  <p className="mt-1 break-words font-extrabold leading-snug text-foreground">
+                    {budgetAssumptions?.origin_city_name ?? 'Не указано'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
+                    Расстояние
+                  </p>
+                  <p className="mt-1 break-words font-extrabold leading-snug text-foreground">
+                    {budgetDistanceValue}
+                  </p>
+                </div>
+                <div className="col-span-2 rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
+                    Дорога
+                  </p>
+                  <p className="mt-1 break-words font-extrabold leading-snug text-foreground" title={budgetRouteValue}>
+                    {budgetRouteValue}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

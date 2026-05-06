@@ -23,8 +23,8 @@ export const DashboardPage = () => {
     return (
       <PageLayout>
         <AppPageHeader pb="pb-3">
-          <div className="h-4 w-20 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
-          <div className="mt-1.5 h-7 w-40 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+          <div className="h-4 w-20 animate-pulse rounded-lg bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
+          <div className="mt-1.5 h-7 w-40 animate-pulse rounded-lg bg-stone-100 dark:bg-[hsl(var(--surface-muted))]" />
         </AppPageHeader>
       </PageLayout>
     );

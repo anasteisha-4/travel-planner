@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { cn } from '@/shared/lib/utils';
 
 const MONTHS = [
   { num: 1, short: 'Янв', season: 'winter' },
@@ -15,11 +15,11 @@ const MONTHS = [
   { num: 12, short: 'Дек', season: 'winter' },
 ] as const;
 
-const SEASON_COLOR: Record<string, string> = {
-  winter: '#2563EB',
-  spring: '#16A34A',
-  summer: '#F59E0B',
-  autumn: '#B45309',
+const SEASON_CLASS: Record<string, string> = {
+  winter: 'data-[active=true]:border-blue-400 data-[active=true]:bg-blue-500/10 data-[active=true]:text-blue-600 dark:data-[active=true]:text-blue-300',
+  spring: 'data-[active=true]:border-emerald-400 data-[active=true]:bg-emerald-500/10 data-[active=true]:text-emerald-600 dark:data-[active=true]:text-emerald-300',
+  summer: 'data-[active=true]:border-amber-400 data-[active=true]:bg-amber-500/10 data-[active=true]:text-amber-600 dark:data-[active=true]:text-amber-300',
+  autumn: 'data-[active=true]:border-orange-400 data-[active=true]:bg-orange-500/10 data-[active=true]:text-orange-600 dark:data-[active=true]:text-orange-300',
 };
 
 const REGIONS = [
@@ -44,113 +44,49 @@ export const RecommendationFilters = ({
   region,
   onMonthChange,
   onRegionChange,
-}: RecommendationFiltersProps) => {
-  const monthScrollRef = useRef<HTMLDivElement>(null);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Month selector */}
-      <div
-        ref={monthScrollRef}
-        style={{
-          display: 'flex',
-          gap: 6,
-          overflowX: 'auto',
-          paddingBottom: 4,
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-        className="hide-scrollbar"
-      >
-        {MONTHS.map((m) => {
-          const isActive = m.num === month;
-          const accentColor = SEASON_COLOR[m.season];
-          return (
-            <button
-              key={m.num}
-              type="button"
-              onClick={() => onMonthChange(m.num)}
-              style={{
-                flexShrink: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 4,
-                padding: '8px 10px',
-                borderRadius: 14,
-                border: isActive ? `1.5px solid ${accentColor}` : '1.5px solid rgba(0,0,0,0.06)',
-                background: isActive ? `${accentColor}14` : '#fff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                minWidth: 44,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: isActive ? 800 : 500,
-                  color: isActive ? accentColor : '#A8A29E',
-                  fontFamily: 'Manrope, sans-serif',
-                  lineHeight: 1,
-                }}
-              >
-                {m.short}
-              </span>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: isActive ? accentColor : '#C7C3BD',
-                  fontFamily: 'Manrope, sans-serif',
-                  lineHeight: 1,
-                }}
-              >
-                {m.num}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Region pills */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          overflowX: 'auto',
-          paddingBottom: 4,
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-        className="hide-scrollbar"
-      >
-        {REGIONS.map((r) => {
-          const isActive = region === r.key;
-          return (
-            <button
-              key={String(r.key)}
-              type="button"
-              onClick={() => onRegionChange(r.key)}
-              style={{
-                flexShrink: 0,
-                padding: '7px 14px',
-                borderRadius: 20,
-                border: isActive ? '1.5px solid #2563EB' : '1.5px solid rgba(0,0,0,0.06)',
-                background: isActive ? 'rgba(37,99,235,0.08)' : '#fff',
-                fontSize: 12,
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#2563EB' : '#A8A29E',
-                fontFamily: 'Manrope, sans-serif',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {r.label}
-            </button>
-          );
-        })}
-      </div>
+}: RecommendationFiltersProps) => (
+  <div className="flex flex-col gap-3">
+    <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+      {MONTHS.map((item) => {
+        const isActive = item.num === month;
+        return (
+          <button
+            key={item.num}
+            type="button"
+            data-active={isActive}
+            onClick={() => onMonthChange(item.num)}
+            className={cn(
+              'flex min-h-12 min-w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 text-muted-foreground transition active:scale-[0.98]',
+              SEASON_CLASS[item.season],
+              isActive && 'font-extrabold'
+            )}
+          >
+            <span className="text-[12px] leading-none">{item.short}</span>
+            <span className="mt-1 text-[10px] leading-none opacity-75">{item.num}</span>
+          </button>
+        );
+      })}
     </div>
-  );
-};
+
+    <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+      {REGIONS.map((item) => {
+        const isActive = region === item.key;
+        return (
+          <button
+            key={String(item.key)}
+            type="button"
+            onClick={() => onRegionChange(item.key)}
+            className={cn(
+              'min-h-9 shrink-0 rounded-full border px-4 text-[12px] font-bold transition active:scale-[0.98]',
+              isActive
+                ? 'border-primary/50 bg-primary/10 text-primary'
+                : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] text-muted-foreground'
+            )}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);

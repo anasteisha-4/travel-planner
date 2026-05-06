@@ -157,7 +157,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
 
   return (
     <Drawer open={open} onOpenChange={handleOpen}>
-      <DrawerContent className="h-[93dvh] flex flex-col overflow-hidden">
+      <DrawerContent className="flex h-[93dvh] flex-col overflow-hidden border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] px-0">
         <DrawerTitle className="sr-only">Редактирование предпочтений</DrawerTitle>
         <div className="shrink-0 px-5 pb-3 pt-4">
           <div className="mb-3 flex items-center gap-3">
@@ -165,9 +165,9 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-stone-200 bg-stone-100 transition-colors active:bg-stone-200"
+                className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] transition-colors active:bg-[hsl(var(--surface-field))]"
               >
-                <ChevronLeft className="h-5 w-5 text-stone-600" />
+                <ChevronLeft className="h-5 w-5 text-foreground" />
               </button>
             ) : (
               <div className="h-[38px] w-[38px]" />
@@ -175,11 +175,11 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
             <StepIndicator steps={6} current={step} barClassName="w-7" className="flex-1 justify-center" />
             <div className="h-[38px] w-[38px]" />
           </div>
-          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.07em] text-stone-400">
+          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
             Шаг {step} из 6
           </p>
-          <h2 className="text-[20px] font-extrabold tracking-tight text-stone-900">{meta.title}</h2>
-          <p className="text-[13px] text-stone-400">{meta.subtitle}</p>
+          <h2 className="text-[20px] font-extrabold tracking-tight text-foreground">{meta.title}</h2>
+          <p className="text-[13px] text-muted-foreground">{meta.subtitle}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-4">
@@ -238,7 +238,10 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-stone-100 px-5 py-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)' }}>
+        <div
+          className="shrink-0 border-t border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] px-5 py-3"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)' }}
+        >
           <Button
             onClick={isLastStep ? handleSave : () => setStep((s) => s + 1)}
             disabled={patchMutation.isPending}

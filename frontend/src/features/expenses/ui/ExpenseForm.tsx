@@ -1,7 +1,16 @@
 import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { CATEGORY_META } from '@/entities/expense';
 import { CURRENCIES } from '@/shared/config';
-import { Button, Drawer, DrawerContent, DrawerTitle, Label } from '@/shared/ui';
+import {
+  AdaptiveSheet,
+  Button,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/ui';
 import { Car, Coffee, Home, Loader2, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
 import { useExpenseForm } from '../model/useExpenseForm';
 
@@ -54,11 +63,11 @@ const CATEGORY_COLORS: Record<
     ring: 'border-emerald-300/60',
   },
   other: {
-    bg: 'bg-stone-100 dark:bg-stone-800',
-    icon: 'text-stone-400',
-    selectedBg: 'bg-stone-200 dark:bg-stone-700',
-    selectedIcon: 'text-stone-600',
-    ring: 'border-stone-300',
+    bg: 'bg-slate-100 dark:bg-[hsl(var(--surface-muted))]',
+    icon: 'text-slate-400 dark:text-slate-500',
+    selectedBg: 'bg-slate-200 dark:bg-slate-700/50',
+    selectedIcon: 'text-slate-600 dark:text-slate-300',
+    ring: 'border-slate-300 dark:border-slate-500/60',
   },
 };
 
@@ -72,7 +81,7 @@ const CATEGORIES: ExpenseCategory[] = [
 ];
 
 const inputBase =
-  'h-[52px] w-full rounded-[14px] border border-stone-200 bg-stone-100 px-3.5 text-[15px] font-semibold text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400 focus:border-primary focus:border-[1.5px] dark:border-stone-700 dark:bg-stone-800 dark:text-white dark:placeholder:text-stone-500';
+  'h-[52px] w-full rounded-[14px] app-field px-3.5 text-[15px] font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground focus:border-primary focus:border-[1.5px]';
 
 const labelClass =
   'mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500';
@@ -113,22 +122,48 @@ export const ExpenseForm = ({
     onDeleteRequest?.();
   };
 
+  const footer = isEdit && onDeleteRequest ? (
+    <div className="flex gap-2.5">
+      <Button
+        variant="destructive"
+        onClick={handleDelete}
+        disabled={form.isLoading}
+        className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(239,68,68,0.28)]"
+      >
+        Удалить
+      </Button>
+      <Button
+        onClick={handleSubmit}
+        disabled={form.isLoading}
+        className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
+      >
+        {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Сохранить
+      </Button>
+    </div>
+  ) : (
+    <Button
+      onClick={handleSubmit}
+      disabled={form.isLoading}
+      className="h-[52px] w-full rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
+    >
+      {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      Добавить расход
+    </Button>
+  );
+
   return (
-    <Drawer
+    <AdaptiveSheet
       open={open}
       onOpenChange={(newOpen) => {
         if (!newOpen) form.reset();
         onOpenChange(newOpen);
       }}
+      title={isEdit ? 'Редактировать расход' : 'Добавить расход'}
+      description="Категория, сумма, дата и описание расхода"
+      bodyClassName="pb-6"
+      footer={footer}
     >
-      <DrawerContent className="max-h-[92dvh] overflow-y-auto bg-white px-5 pb-10 dark:bg-stone-950">
-        {/* Header */}
-        <div className="mb-5 flex items-center justify-between">
-          <DrawerTitle className="text-[20px] font-extrabold text-stone-900 dark:text-white">
-            {isEdit ? 'Редактировать расход' : 'Добавить расход'}
-          </DrawerTitle>
-        </div>
-
         <div className="flex flex-col gap-4">
           {/* Category */}
           <div>
@@ -144,10 +179,10 @@ export const ExpenseForm = ({
                     key={cat}
                     type="button"
                     onClick={() => form.setCategory(cat)}
-                    className={`flex min-h-[62px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${
+                    className={`flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${
                       isSelected
                         ? `${colors.ring} ${colors.selectedBg}`
-                        : 'border-stone-100 bg-stone-50 dark:border-stone-800 dark:bg-stone-800/50'
+                        : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'
                     }`}
                   >
                     <div
@@ -159,7 +194,7 @@ export const ExpenseForm = ({
                       />
                     </div>
                     <span
-                      className={`text-[11px] font-semibold ${isSelected ? 'text-stone-900 dark:text-white' : 'text-stone-500 dark:text-stone-400'}`}
+                      className={`text-[11px] font-semibold ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}
                     >
                       {meta.label}
                     </span>
@@ -181,17 +216,18 @@ export const ExpenseForm = ({
                 onChange={(e) => form.setAmount(e.target.value)}
                 className={`${inputBase} flex-1`}
               />
-              <select
-                value={form.currency}
-                onChange={(e) => form.setCurrency(e.target.value)}
-                className="h-[52px] rounded-[14px] border border-stone-200 bg-stone-100 px-3 text-[14px] font-semibold text-stone-700 outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-800 dark:text-white"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.value}
-                  </option>
-                ))}
-              </select>
+              <Select value={form.currency} onValueChange={form.setCurrency}>
+                <SelectTrigger className="h-[52px] w-[84px] shrink-0 rounded-[14px] app-field text-[14px] font-bold text-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {form.errors.amount && (
               <p className="mt-1 text-[12px] text-red-500">{form.errors.amount}</p>
@@ -221,37 +257,7 @@ export const ExpenseForm = ({
             />
           </div>
 
-          {isEdit && onDeleteRequest ? (
-            <div className="flex gap-2.5">
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={form.isLoading}
-                className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(239,68,68,0.28)]"
-              >
-                Удалить
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={form.isLoading}
-                className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
-              >
-                {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Сохранить
-              </Button>
-            </div>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={form.isLoading}
-              className="h-[52px] w-full rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
-            >
-              {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Добавить расход
-            </Button>
-          )}
         </div>
-      </DrawerContent>
-    </Drawer>
+    </AdaptiveSheet>
   );
 };

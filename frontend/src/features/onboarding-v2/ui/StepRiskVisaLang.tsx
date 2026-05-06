@@ -1,5 +1,5 @@
 import { cn } from '@/shared/lib/utils';
-import { FieldLabel, PillChip, Slider } from '@/shared/ui';
+import { FieldLabel, Slider } from '@/shared/ui';
 
 import { LANGUAGE_OPTIONS, RISK_TOLERANCE_LABELS, VISA_OPTIONS } from '@/shared/config';
 import type { LanguageOption, VisaTolerance } from '../model/types';
@@ -37,9 +37,9 @@ export const StepRiskVisaLang = ({
     <div className="flex flex-col gap-6">
       <div>
         <FieldLabel>Уровень приключений</FieldLabel>
-        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-stone-100 bg-stone-50 px-4 py-3">
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
           <span className="text-[28px] leading-none transition-all duration-200">{RISK_ICONS[risk]}</span>
-          <p className="text-[15px] font-semibold text-stone-900">{RISK_TOLERANCE_LABELS[risk]}</p>
+          <p className="text-[15px] font-semibold text-foreground">{RISK_TOLERANCE_LABELS[risk]}</p>
         </div>
         <div className="px-1">
           <Slider
@@ -52,8 +52,8 @@ export const StepRiskVisaLang = ({
           />
         </div>
         <div className="mt-2 flex justify-between px-1">
-          <span className="text-[11px] text-stone-400">Безопасно</span>
-          <span className="text-[11px] text-stone-400">Экзотика</span>
+          <span className="text-[11px] text-muted-foreground">Безопасно</span>
+          <span className="text-[11px] text-muted-foreground">Экзотика</span>
         </div>
       </div>
 
@@ -68,32 +68,32 @@ export const StepRiskVisaLang = ({
               className={cn(
                 'flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98]',
                 visaTolerance === opt.id
-                  ? 'border-blue-200 bg-blue-50 shadow-[0_2px_8px_rgba(37,99,235,0.1)]'
-                  : 'border-stone-200 bg-stone-50',
+                  ? 'border-primary/35 bg-primary/10 shadow-[0_2px_8px_rgba(37,99,235,0.1)]'
+                  : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]',
               )}
             >
               <div>
                 <p
                   className={cn(
                     'text-[14px] font-semibold',
-                    visaTolerance === opt.id ? 'text-blue-900' : 'text-stone-800',
+                    visaTolerance === opt.id ? 'text-primary' : 'text-foreground',
                   )}
                 >
                   {opt.label}
                 </p>
-                <p className="text-[12px] text-stone-400">{opt.description}</p>
+                <p className="text-[12px] text-muted-foreground">{opt.description}</p>
               </div>
               <div
                 className={cn(
                   'ml-3 h-5 w-5 shrink-0 rounded-full border-2 transition-colors',
                   visaTolerance === opt.id
                     ? 'border-blue-600 bg-blue-600'
-                    : 'border-stone-300 bg-white',
+                    : 'border-stone-300 bg-[hsl(var(--surface))]',
                 )}
               >
                 {visaTolerance === opt.id && (
                   <div className="flex h-full items-center justify-center">
-                    <div className="h-2 w-2 rounded-full bg-white" />
+                    <div className="h-2 w-2 rounded-full bg-[hsl(var(--surface))]" />
                   </div>
                 )}
               </div>
@@ -104,15 +104,21 @@ export const StepRiskVisaLang = ({
 
       <div>
         <FieldLabel>Комфортные языки</FieldLabel>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {LANGUAGE_OPTIONS.map((opt) => (
-            <PillChip
+            <button
               key={opt.id}
-              selected={selectedLanguage === opt.id}
+              type="button"
               onClick={() => onLanguageChange([opt.id])}
+              className={cn(
+                'flex h-10 min-w-0 items-center justify-center rounded-[12px] px-2 text-center text-[clamp(11px,3.1vw,13px)] font-semibold leading-none transition-all active:scale-95',
+                selectedLanguage === opt.id
+                  ? 'bg-primary text-white'
+                  : 'border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-foreground',
+              )}
             >
               {opt.label}
-            </PillChip>
+            </button>
           ))}
         </div>
       </div>
