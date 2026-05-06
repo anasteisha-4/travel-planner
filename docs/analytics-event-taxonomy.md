@@ -63,13 +63,14 @@ or does not continue from a recommendation to a trip.
 
 | Event | Source screen | Required context | Optional context | Entity |
 | --- | --- | --- | --- | --- |
-| `trip_created` | trip form save | `destination`, `currency`, `people_count` | `destination_id`, `budget`, `departure_city` | `trip:{trip_id}` |
-| `trip_created_from_recommendation` | recommendation-to-trip save | `trip_id`, `recommendation_id`, `destination` | `model_version`, `destination_id`, `currency`, `people_count`, `budget` | `trip:{trip_id}` |
+| `trip_created` | trip form save | `destination`, `currency`, `people_count`, `source` | `destination_id`, `budget`, `departure_city`, `recommendation_id`, `model_version` | `trip:{trip_id}` |
 | `trip_opened` | trip detail | `trip_id`, `destination`, `status`, `currency`, `has_budget` | `destination_id` | `trip:{trip_id}` |
 | `trip_status_changed` | trip detail status action | `trip_id`, `status` | `destination_id` | `trip:{trip_id}` |
 
-Learning use: trip creation is the strongest pre-trip conversion label. Status
-changes separate planned, active, completed, and cancelled trips.
+Learning use: trip creation is the strongest pre-trip conversion label. `source`
+separates manual creation from recommendation-driven creation without splitting
+the event name. Status changes separate planned, active, completed, and cancelled
+trips.
 
 ## Itinerary, Expenses, And Feedback
 
@@ -109,7 +110,6 @@ Minimum path from recommendation to trip:
 1. `recommendation_impression` with `recommendation_id`, `destination_id`, `rank`.
 2. `recommendation_clicked` or `destination_detail_opened` for the same destination.
 3. `validation_viewed` and/or `budget_prediction_viewed`.
-4. `trip_created_from_recommendation` with `recommendation_id` and `trip_id`.
+4. `trip_created` with `source=recommendation`, `recommendation_id`, and `trip_id`.
 5. `trip_opened`, `itinerary_generated`, `expense_added`, and
    `post_trip_feedback_submitted` for downstream engagement and quality.
-

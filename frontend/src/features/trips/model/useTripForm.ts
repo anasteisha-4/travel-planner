@@ -60,10 +60,17 @@ export type TripFormSnapshot = {
   departure_lng: number | null;
 };
 
+export type TripCreateAnalyticsContext = {
+  source?: 'manual' | 'recommendation' | 'profile' | string;
+  recommendation_id?: string | null;
+  model_version?: string | null;
+};
+
 export const useTripForm = (
   existingTrip?: Trip,
   initialValues?: TripFormInitialValues,
-  onSnapshotChange?: (snapshot: TripFormSnapshot) => void
+  onSnapshotChange?: (snapshot: TripFormSnapshot) => void,
+  analyticsContext?: TripCreateAnalyticsContext
 ) => {
   const queryClient = useQueryClient();
   const [destination, setDestination] = useState(
@@ -261,6 +268,9 @@ export const useTripForm = (
           people_count: data.people_count,
           budget: data.budget,
           departure_city: data.departure_city,
+          source: analyticsContext?.source ?? 'manual',
+          recommendation_id: analyticsContext?.recommendation_id ?? null,
+          model_version: analyticsContext?.model_version ?? null,
         },
         'trip',
         trip.id

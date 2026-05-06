@@ -10,7 +10,6 @@ type EventType =
   | 'budget_prediction_changed'
   | 'validation_viewed'
   | 'trip_created'
-  | 'trip_created_from_recommendation'
   | 'trip_opened'
   | 'trip_status_changed'
   | 'itinerary_generated'

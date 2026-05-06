@@ -21,7 +21,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Loader2, MapPin, Minus, Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
-import { type TripFormInitialValues, type TripFormSnapshot, useTripForm } from '../model/useTripForm';
+import { type TripCreateAnalyticsContext, type TripFormInitialValues, type TripFormSnapshot, useTripForm } from '../model/useTripForm';
 
 type DestinationSearchInputProps = {
   label: string;
@@ -146,6 +146,7 @@ export const TripForm = ({
   asSheet,
   onSnapshotChange,
   validationSlot,
+  analyticsContext,
 }: {
   existingTrip?: Trip;
   initialValues?: TripFormInitialValues;
@@ -154,6 +155,7 @@ export const TripForm = ({
   asSheet?: boolean;
   onSnapshotChange?: (snapshot: TripFormSnapshot) => void;
   validationSlot?: ReactNode;
+  analyticsContext?: TripCreateAnalyticsContext;
 }) => {
   const {
     destination,
@@ -183,7 +185,7 @@ export const TripForm = ({
     todayStr,
     handleCreate,
     handleUpdate,
-  } = useTripForm(existingTrip, initialValues, onSnapshotChange);
+  } = useTripForm(existingTrip, initialValues, onSnapshotChange, analyticsContext);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
 

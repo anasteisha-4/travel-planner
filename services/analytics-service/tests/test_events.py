@@ -38,7 +38,7 @@ def test_ingest_batch_events(client: TestClient, db: Session):
         "recommendation_clicked",
         "destination_detail_opened",
         "budget_prediction_viewed",
-        "trip_created_from_recommendation",
+        "trip_created",
     ]
     events = [
         {"session_id": session_id, "event_type": event_types[i], "entity_type": "destination", "entity_id": str(i)}

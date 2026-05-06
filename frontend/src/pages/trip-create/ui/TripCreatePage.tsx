@@ -218,24 +218,6 @@ export const TripCreatePage = () => {
   }, [budgetPrediction, destinationId, previewStartDate, searchParams]);
 
   const handleSuccess = (trip: Trip) => {
-    const recommendationId = searchParams.get('recommendation_id');
-    if (recommendationId) {
-      sendEvent(
-        'trip_created_from_recommendation',
-        {
-          trip_id: trip.id,
-          recommendation_id: recommendationId,
-          model_version: searchParams.get('model_version') || null,
-          destination_id: trip.destination_id,
-          destination: trip.destination,
-          currency: trip.currency,
-          people_count: trip.people_count,
-          budget: trip.budget,
-        },
-        'trip',
-        trip.id
-      );
-    }
     navigate(`/trips/${trip.id}`, { replace: true });
   };
 
@@ -329,6 +311,11 @@ export const TripCreatePage = () => {
             initialValues={initialValues}
             onSuccess={handleSuccess}
             onSnapshotChange={handleFormSnapshotChange}
+            analyticsContext={{
+              source: searchParams.get('recommendation_id') ? 'recommendation' : 'manual',
+              recommendation_id: searchParams.get('recommendation_id') || null,
+              model_version: searchParams.get('model_version') || null,
+            }}
             validationSlot={
               <DestinationValidationCompact
                 destinationId={destinationId}
