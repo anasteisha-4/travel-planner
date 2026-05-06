@@ -4,7 +4,7 @@ Assembles a denormalized 40-dimension feature vector per destination from all
 ML tables in the data-service schema. Used both for content scoring (serving)
 and LightGBM training (offline).
 
-Feature dimensions (39 total):
+Feature dimensions (48 total):
   Activities (10): beach, culture, active, nature, food, shopping, nightlife,
                    family, romance, business
   Safety (1):      safety_score
@@ -15,6 +15,7 @@ Feature dimensions (39 total):
   Attributes (4):  is_coastal, has_ski, has_thermal, has_mountains
   Popularity (2):  crowd_index_avg, log_avg_pageviews
   Infrastructure (2): infrastructure_score, has_metro
+  POI structure (9): total/category counts, diversity, compactness, quality
 """
 
 import logging
@@ -44,6 +45,18 @@ ACTIVITY_TYPES = [
 
 SCRIPT_DIFFICULTY_MAP = {"easy": 0.0, "medium": 0.5, "hard": 1.0}
 
+POI_STRUCTURAL_FEATURES = [
+    "poi_total_count",
+    "poi_category_diversity",
+    "poi_top_category_share",
+    "poi_food_count",
+    "poi_culture_count",
+    "poi_nature_count",
+    "poi_transport_count",
+    "route_compactness_score",
+    "avg_poi_rating_or_popularity",
+]
+
 
 def build_destination_feature_matrix(db: Session) -> pd.DataFrame:
     """Build full destination × feature matrix from DB. Returns DataFrame."""
@@ -63,6 +76,7 @@ def build_destination_feature_matrix(db: Session) -> pd.DataFrame:
     attributes = _load_attributes(db, dest_ids)
     language = _load_language(db, dest_ids)
     infrastructure = _load_infrastructure(db, dest_ids)
+    poi_structural = _load_poi_structural(db, dest_ids)
 
     rows = []
     for d in dests:
@@ -79,6 +93,7 @@ def build_destination_feature_matrix(db: Session) -> pd.DataFrame:
             attributes=attributes.get(did, {}),
             language=language.get(did, {}),
             infrastructure=infrastructure.get(did, {}),
+            poi_structural=poi_structural.get(did, {}),
         )
         rows.append(row)
 
@@ -115,6 +130,7 @@ def get_feature_columns() -> list[str]:
         "infrastructure_score",
         "has_metro",
     ]
+    cols += POI_STRUCTURAL_FEATURES
     return cols
 
 
@@ -130,6 +146,7 @@ def _build_row(
     attributes: dict,
     language: dict,
     infrastructure: dict,
+    poi_structural: dict,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "destination_id": str(dest["id"]),
@@ -179,6 +196,10 @@ def _build_row(
     row["has_metro"] = 1.0 if infrastructure.get("has_metro") else 0.0
 
     row["visa_score_ru"] = visa_ru
+
+    for col in POI_STRUCTURAL_FEATURES:
+        default = 0.0 if col != "route_compactness_score" else 0.5
+        row[col] = float(poi_structural.get(col, default))
 
     return row
 
@@ -355,6 +376,94 @@ def _load_infrastructure(db: Session, ids: list) -> dict:
         }
         for r in rows
     }
+
+
+def _load_poi_structural(db: Session, ids: list) -> dict:
+    """Load POI-derived structural destination features.
+
+    The features are aggregate-only, so the query stays bounded even for the
+    2.1M-row POI table. Test DBs that do not create the data-service POI table
+    receive neutral defaults through the caller.
+    """
+    if not db.execute(text("SELECT to_regclass('poi')")).scalar():
+        return {}
+
+    rows = db.execute(
+        text(
+            """
+            WITH base AS (
+                SELECT
+                    destination_id,
+                    lower(category) AS category,
+                    lat,
+                    lng,
+                    COALESCE(rating, popularity_score) AS quality
+                FROM poi
+                WHERE destination_id = ANY(:ids)
+            ),
+            category_counts AS (
+                SELECT destination_id, category, COUNT(*) AS cnt
+                FROM base
+                GROUP BY destination_id, category
+            ),
+            top_category AS (
+                SELECT destination_id, MAX(cnt) AS top_cnt
+                FROM category_counts
+                GROUP BY destination_id
+            ),
+            stats AS (
+                SELECT
+                    destination_id,
+                    COUNT(*) AS total_count,
+                    COUNT(DISTINCT category) AS category_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%food%', '%restaurant%', '%cafe%', '%bar%']) THEN 1 ELSE 0 END) AS food_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%culture%', '%museum%', '%art%', '%historic%', '%heritage%']) THEN 1 ELSE 0 END) AS culture_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%nature%', '%park%', '%beach%', '%mountain%', '%viewpoint%']) THEN 1 ELSE 0 END) AS nature_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%transport%', '%airport%', '%station%', '%metro%', '%bus%']) THEN 1 ELSE 0 END) AS transport_count,
+                    AVG(quality) AS avg_quality,
+                    STDDEV_POP(lat) AS std_lat,
+                    STDDEV_POP(lng) AS std_lng
+                FROM base
+                GROUP BY destination_id
+            )
+            SELECT
+                stats.destination_id,
+                stats.total_count,
+                stats.category_count,
+                top_category.top_cnt,
+                stats.food_count,
+                stats.culture_count,
+                stats.nature_count,
+                stats.transport_count,
+                stats.avg_quality,
+                stats.std_lat,
+                stats.std_lng
+            FROM stats
+            JOIN top_category ON top_category.destination_id = stats.destination_id
+            """
+        ),
+        {"ids": ids},
+    )
+
+    result = {}
+    for r in rows:
+        total = int(r.total_count or 0)
+        std_lat = float(r.std_lat or 0.0)
+        std_lng = float(r.std_lng or 0.0)
+        spread_km = math.sqrt((std_lat * 111.0) ** 2 + (std_lng * 111.0) ** 2)
+        compactness = 1.0 / (1.0 + spread_km / 25.0)
+        result[r.destination_id] = {
+            "poi_total_count": float(total),
+            "poi_category_diversity": min(1.0, float(r.category_count or 0) / 10.0),
+            "poi_top_category_share": float(r.top_cnt or 0) / total if total else 0.0,
+            "poi_food_count": float(r.food_count or 0),
+            "poi_culture_count": float(r.culture_count or 0),
+            "poi_nature_count": float(r.nature_count or 0),
+            "poi_transport_count": float(r.transport_count or 0),
+            "route_compactness_score": round(float(compactness), 4),
+            "avg_poi_rating_or_popularity": float(r.avg_quality or 0.0),
+        }
+    return result
 
 
 def save_feature_snapshot(

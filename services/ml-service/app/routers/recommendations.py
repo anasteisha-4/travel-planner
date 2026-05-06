@@ -13,7 +13,7 @@ from app.services.content_scorer import BaseScorer, ContentScorer
 from app.services.data_loader import get_all_destinations, get_destination_features
 from app.services.experiment import get_variant
 from app.services.profile_client import _get_profile_sync
-from app.services.ranker_scorer import LTRScorer, get_active_scorer
+from app.services.ranker_scorer import LTRScorer, get_active_scorer, get_scorer_by_version
 
 router = APIRouter()
 
@@ -41,6 +41,10 @@ def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -
     """
     if request.model_version == "content-v1":
         return _content_scorer, "content-v1"
+    if request.model_version:
+        scorer = get_scorer_by_version(db, request.model_version)
+        if scorer is not None:
+            return scorer, scorer.version
 
     if request.model_version is None:
         try:
@@ -51,7 +55,7 @@ def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -
             pass
 
     scorer = get_active_scorer(db)
-    version = "ltr-v1" if isinstance(scorer, LTRScorer) else "content-v1"
+    version = scorer.version if isinstance(scorer, LTRScorer) else "content-v1"
     return scorer, version
 
 
@@ -130,7 +134,13 @@ def _log_recommendation(
         scorer_weights = (
             CONTENT_SCORER_WEIGHTS
             if model_version == "content-v1"
-            else {"model_type": "lambdarank", "objective": "lambdarank", "metric": "ndcg"}
+            else {
+                "model_type": "lambdarank",
+                "objective": "lambdarank",
+                "metric": "ndcg",
+                "candidate_generator": "content-scorer",
+                "candidate_top_n": 200,
+            }
         )
         log = RecommendationLog(
             id=recommendation_id,

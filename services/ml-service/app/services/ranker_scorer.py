@@ -359,10 +359,19 @@ def _build_dest_vec(dest_features: dict[str, Any], feature_cols: list[str]) -> n
 class LTRScorer:
     """LightGBM LambdaRank scorer. Loaded lazily from DB blob on first use."""
 
-    def __init__(self, model_id: str, blob: bytes | None = None, model_path: str | None = None) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        version: str,
+        blob: bytes | None = None,
+        model_path: str | None = None,
+        candidate_top_n: int = 200,
+    ) -> None:
         self._model_id = model_id
+        self.version = version
         self._blob = blob
         self._model_path = model_path
+        self._candidate_top_n = candidate_top_n
         self._artifact: dict | None = None
         self._loaded = False
 
@@ -410,11 +419,17 @@ class LTRScorer:
         exclude_ids: set[uuid.UUID] = set(filters.get("exclude_destination_ids", []))
         region_filter: str | None = filters.get("region")
 
+        content_ranked = _content_scorer.score(user_profile, destinations, dest_features, travel_month, filters)
+        content_by_id = {item.destination_id: item for item in content_ranked}
+        candidate_ids = {item.destination_id for item in content_ranked[: self._candidate_top_n]}
+
         candidates: list[tuple[dict, dict[str, Any], float]] = []
         X_rows: list[np.ndarray] = []
 
         for dest in destinations:
             dest_id = uuid.UUID(str(dest["id"]))
+            if dest_id not in candidate_ids:
+                continue
             if dest_id in exclude_ids:
                 continue
             if region_filter and dest.get("region") != region_filter:
@@ -440,16 +455,6 @@ class LTRScorer:
         # Per-batch min-max caused the top result to always show 100% regardless of quality.
         scores_norm = 1.0 / (1.0 + np.exp(-raw_scores.astype(np.float64)))
 
-        # Pre-compute content breakdowns for all candidates (used as explanation layer).
-        # LTR determines ranking order; content breakdown provides human-readable explanation.
-        # This mirrors production systems (YouTube, TikTok) that rank with one model and
-        # explain with another.
-        content_results: dict[uuid.UUID, ScoredDestination] = {}
-        dest_subset = [d for d, _, _ in candidates]
-        feat_subset = {uuid.UUID(str(d["id"])): f for d, f, _ in candidates}
-        for cr in _content_scorer.score(user_profile, dest_subset, feat_subset, travel_month, filters):
-            content_results[cr.destination_id] = cr
-
         results: list[ScoredDestination] = []
         for i, (dest, f, visa_score) in enumerate(candidates):
             dest_id = uuid.UUID(str(dest["id"]))
@@ -459,11 +464,12 @@ class LTRScorer:
             avg_daily = f.get("avg_daily_cost_usd")
 
             # Merge: content breakdown (9 factors) + LTR raw scores for auditability
-            content_bd = content_results[dest_id].score_breakdown if dest_id in content_results else {}
+            content_bd = content_by_id[dest_id].score_breakdown if dest_id in content_by_id else {}
             breakdown = {
                 **content_bd,
                 "ltr_score_raw": round(float(raw_scores[i]), 4),
                 "ltr_score": round(score, 4),
+                "candidate_ranker": 1.0,
             }
             tags = _explanation_tags(breakdown, f, visa_score, safety)
 
@@ -486,11 +492,33 @@ class LTRScorer:
         return results
 
 
+def get_scorer_by_version(db: Session, version: str) -> LTRScorer | None:
+    row = db.execute(
+        text(
+            "SELECT id, version, model_path, model_blob "
+            "FROM model_registry "
+            "WHERE model_type = 'lambdarank' AND version = :version "
+            "ORDER BY is_active DESC, trained_at DESC LIMIT 1"
+        ),
+        {"version": version},
+    ).fetchone()
+
+    if not row:
+        return None
+
+    return LTRScorer(
+        model_id=str(row.id),
+        version=str(row.version),
+        blob=bytes(row.model_blob) if row.model_blob else None,
+        model_path=row.model_path,
+    )
+
+
 def get_active_scorer(db: Session) -> LTRScorer | ContentScorer:
     """Return active LTRScorer if trained model exists in registry, else ContentScorer."""
     row = db.execute(
         text(
-            "SELECT id, model_path, model_blob "
+            "SELECT id, version, model_path, model_blob "
             "FROM model_registry "
             "WHERE model_type = 'lambdarank' AND is_active = true "
             "ORDER BY trained_at DESC LIMIT 1"
@@ -500,6 +528,7 @@ def get_active_scorer(db: Session) -> LTRScorer | ContentScorer:
     if row:
         return LTRScorer(
             model_id=str(row.id),
+            version=str(row.version),
             blob=bytes(row.model_blob) if row.model_blob else None,
             model_path=row.model_path,
         )

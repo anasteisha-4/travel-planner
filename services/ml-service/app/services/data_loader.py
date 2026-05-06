@@ -1,3 +1,4 @@
+import math
 import uuid
 
 from psycopg2.extras import register_uuid
@@ -115,6 +116,7 @@ def get_destination_features(
         ),
         {"ids": id_param},
     )
+    poi_rows = _load_poi_structural_rows(db, id_param)
 
     features: dict[uuid.UUID, dict] = {d: {} for d in dest_ids}
 
@@ -213,4 +215,89 @@ def get_destination_features(
             internet_norm = min(1.0, float(internet) / 200.0) if internet is not None else 0.5
             features[k]["infrastructure_score"] = round((hc_norm + internet_norm) / 2, 4)
 
+    for row in poi_rows:
+        k = _key(row.destination_id)
+        if k not in features:
+            continue
+        total = int(row.total_count or 0)
+        std_lat = float(row.std_lat or 0.0)
+        std_lng = float(row.std_lng or 0.0)
+        spread_km = math.sqrt((std_lat * 111.0) ** 2 + (std_lng * 111.0) ** 2)
+        compactness = 1.0 / (1.0 + spread_km / 25.0)
+        features[k].update(
+            {
+                "poi_total_count": float(total),
+                "poi_category_diversity": min(1.0, float(row.category_count or 0) / 10.0),
+                "poi_top_category_share": float(row.top_cnt or 0) / total if total else 0.0,
+                "poi_food_count": float(row.food_count or 0),
+                "poi_culture_count": float(row.culture_count or 0),
+                "poi_nature_count": float(row.nature_count or 0),
+                "poi_transport_count": float(row.transport_count or 0),
+                "route_compactness_score": round(float(compactness), 4),
+                "avg_poi_rating_or_popularity": float(row.avg_quality or 0.0),
+            }
+        )
+
     return features
+
+
+def _load_poi_structural_rows(db: Session, ids: list[uuid.UUID]):
+    if not db.execute(text("SELECT to_regclass('poi')")).scalar():
+        return []
+
+    return db.execute(
+        text(
+            """
+            WITH base AS (
+                SELECT
+                    destination_id,
+                    lower(category) AS category,
+                    lat,
+                    lng,
+                    COALESCE(rating, popularity_score) AS quality
+                FROM poi
+                WHERE destination_id = ANY(:ids)
+            ),
+            category_counts AS (
+                SELECT destination_id, category, COUNT(*) AS cnt
+                FROM base
+                GROUP BY destination_id, category
+            ),
+            top_category AS (
+                SELECT destination_id, MAX(cnt) AS top_cnt
+                FROM category_counts
+                GROUP BY destination_id
+            ),
+            stats AS (
+                SELECT
+                    destination_id,
+                    COUNT(*) AS total_count,
+                    COUNT(DISTINCT category) AS category_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%food%', '%restaurant%', '%cafe%', '%bar%']) THEN 1 ELSE 0 END) AS food_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%culture%', '%museum%', '%art%', '%historic%', '%heritage%']) THEN 1 ELSE 0 END) AS culture_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%nature%', '%park%', '%beach%', '%mountain%', '%viewpoint%']) THEN 1 ELSE 0 END) AS nature_count,
+                    SUM(CASE WHEN category LIKE ANY(ARRAY['%transport%', '%airport%', '%station%', '%metro%', '%bus%']) THEN 1 ELSE 0 END) AS transport_count,
+                    AVG(quality) AS avg_quality,
+                    STDDEV_POP(lat) AS std_lat,
+                    STDDEV_POP(lng) AS std_lng
+                FROM base
+                GROUP BY destination_id
+            )
+            SELECT
+                stats.destination_id,
+                stats.total_count,
+                stats.category_count,
+                top_category.top_cnt,
+                stats.food_count,
+                stats.culture_count,
+                stats.nature_count,
+                stats.transport_count,
+                stats.avg_quality,
+                stats.std_lat,
+                stats.std_lng
+            FROM stats
+            JOIN top_category ON top_category.destination_id = stats.destination_id
+            """
+        ),
+        {"ids": ids},
+    ).fetchall()

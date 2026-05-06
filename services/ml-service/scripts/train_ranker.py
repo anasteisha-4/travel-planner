@@ -7,7 +7,7 @@ Usage (inside Docker):
     python scripts/train_ranker.py [--holdout 0.2] [--ndcg-cutoff 10]
 
 Pipeline:
-  1. Build 39-dim destination feature matrix from DB
+  1. Build destination feature matrix from DB, including POI structural features
   2. Load ltr_training_pairs (query_id, destination_id, relevance_label 0..3)
   3. Build (user-hint × dest) feature vectors per pair
   4. Train LightGBM lambdarank grouped by query_id
@@ -22,6 +22,7 @@ import math
 import os
 import sys
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,7 @@ LGBM_PARAMS = {
 
 N_ROUNDS = 500
 EARLY_STOPPING = 40
+DEFAULT_MODEL_VERSION = "hybrid-ranker-v2"
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +394,167 @@ def load_pairs(db: Session, dest_df: pd.DataFrame, feature_cols: list[str]) -> l
     return records
 
 
+def _table_exists(db: Session, table_name: str) -> bool:
+    return bool(db.execute(text("SELECT to_regclass(:table_name)"), {"table_name": table_name}).scalar())
+
+
+def _normalise_destination_id(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    try:
+        return str(uuid.UUID(str(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _profile_from_user_features(row: Any) -> dict:
+    clicked = [_normalise_destination_id(x) for x in (row.clicked_destination_ids or [])]
+    viewed = [_normalise_destination_id(x) for x in (row.viewed_destination_ids or [])]
+    visited = [_normalise_destination_id(x) for x in (row.visited_destination_ids or [])]
+    liked_ids = [x for x in [*clicked, *visited] if x]
+    viewed_ids = [x for x in viewed if x]
+
+    return {
+        "budget_tier": "mid",
+        "budget_min_usd": row.budget_min_usd,
+        "budget_max_usd": row.budget_max_usd,
+        "typical_duration_days": row.preferred_duration_days or 10,
+        "origin_lat": row.origin_lat,
+        "origin_lng": row.origin_lng,
+        "vacation_preferences_ranked": [],
+        "climate_preferences": ["any"],
+        "language_comfort": ["any"],
+        "risk_tolerance": 3,
+        "visa_tolerance": "any_visa",
+        "crowd_preference": 3,
+        "liked_destination_ids": liked_ids[:50],
+        "viewed_destination_ids": viewed_ids[:100],
+    }
+
+
+def load_behavioral_pairs(
+    db: Session,
+    dest_df: pd.DataFrame,
+    feature_cols: list[str],
+    min_impressions: int,
+    min_positive: int,
+) -> tuple[list[dict], dict]:
+    """Build optional LambdaRank pairs from analytics events.
+
+    Query groups come from recommendation_logs. Labels are implicit feedback:
+    impression/no action=0, recommendation click/detail open=2, trip created=3.
+    The records are used only after volume thresholds are met.
+    """
+    status = {
+        "enabled": False,
+        "reason": None,
+        "impressions": 0,
+        "positive_events": 0,
+        "pairs": 0,
+        "queries": 0,
+    }
+    if not _table_exists(db, "user_events") or not _table_exists(db, "user_features"):
+        status["reason"] = "analytics_tables_missing"
+        return [], status
+
+    event_rows = db.execute(
+        text(
+            """
+            SELECT user_id, event_type, entity_id, context
+            FROM user_events
+            WHERE user_id IS NOT NULL
+              AND event_type IN (
+                'recommendation_clicked',
+                'destination_detail_opened',
+                'trip_created',
+                'post_trip_feedback_submitted',
+                'post_trip_feedback_updated'
+              )
+            """
+        )
+    ).fetchall()
+
+    labels_by_user_dest: dict[tuple[str, str], int] = {}
+    for row in event_rows:
+        context = row.context or {}
+        dest_id = _normalise_destination_id(row.entity_id) or _normalise_destination_id(context.get("destination_id"))
+        if not dest_id:
+            continue
+        label = (
+            3 if row.event_type in {"trip_created", "post_trip_feedback_submitted", "post_trip_feedback_updated"} else 2
+        )
+        key = (str(row.user_id), dest_id)
+        labels_by_user_dest[key] = max(labels_by_user_dest.get(key, 0), label)
+
+    status["positive_events"] = len(labels_by_user_dest)
+
+    logs = db.execute(
+        text(
+            """
+            SELECT id, user_id, request, results
+            FROM recommendation_logs
+            WHERE results IS NOT NULL
+            ORDER BY created_at
+            """
+        )
+    ).fetchall()
+
+    status["impressions"] = sum(len(row.results or []) for row in logs)
+    if status["impressions"] < min_impressions or status["positive_events"] < min_positive:
+        status["reason"] = "insufficient_behavioral_data"
+        return [], status
+
+    feature_rows = db.execute(
+        text(
+            """
+            SELECT user_id, budget_min_usd, budget_max_usd, preferred_duration_days,
+                   origin_lat, origin_lng, viewed_destination_ids, clicked_destination_ids,
+                   visited_destination_ids
+            FROM user_features
+            """
+        )
+    ).fetchall()
+    profiles = {str(r.user_id): _profile_from_user_features(r) for r in feature_rows}
+
+    dest_idx: dict[str, int] = {str(row["destination_id"]): int(i) for i, row in dest_df.iterrows()}  # type: ignore[arg-type]
+    records: list[dict] = []
+    query_count = 0
+    for log in logs:
+        profile = profiles.get(str(log.user_id))
+        if not profile:
+            continue
+        request = log.request or {}
+        travel_month = int(request.get("travel_month") or 7)
+        group_records = []
+        for rank, item in enumerate(log.results or [], start=1):
+            dest_id = _normalise_destination_id(item.get("destination_id"))
+            if not dest_id or dest_id not in dest_idx:
+                continue
+            dest_row = dest_df.iloc[dest_idx[dest_id]]
+            label = labels_by_user_dest.get((str(log.user_id), dest_id), 0)
+            group_records.append(
+                {
+                    "query_id": f"behavioral:{log.id}",
+                    "label": label,
+                    "content_score": float(item.get("score") or max(0.0, 1.0 - rank / 100.0)),
+                    "features": _build_pair_features(profile, dest_row, feature_cols, travel_month),
+                }
+            )
+        if len(group_records) >= 2 and any(r["label"] > 0 for r in group_records):
+            records.extend(group_records)
+            query_count += 1
+
+    status.update(
+        {
+            "enabled": bool(records),
+            "reason": None if records else "no_positive_recommendation_groups",
+            "pairs": len(records),
+            "queries": query_count,
+        }
+    )
+    return records, status
+
+
 # ---------------------------------------------------------------------------
 # Train / eval helpers
 # ---------------------------------------------------------------------------
@@ -470,17 +633,32 @@ def ndcg_at_k(records: list[dict], scores: np.ndarray, k: int) -> float:
 # ---------------------------------------------------------------------------
 
 
-def register_model(db: Session, model_path: str, metrics: dict, artifact_blob: bytes) -> str:
+def _load_baseline_metrics(db: Session) -> dict | None:
+    row = db.execute(
+        text(
+            "SELECT version, metrics "
+            "FROM model_registry "
+            "WHERE name = 'ranker' AND version = 'ltr-v1' "
+            "ORDER BY trained_at DESC LIMIT 1"
+        )
+    ).fetchone()
+    if not row:
+        return None
+    return {"version": str(row.version), "metrics": row.metrics or {}}
+
+
+def register_model(db: Session, model_path: str, metrics: dict, artifact_blob: bytes, model_version: str) -> str:
     db.execute(text("UPDATE model_registry SET is_active = false WHERE model_type = 'lambdarank'"))
     model_id = str(uuid.uuid4())
     db.execute(
         text(
             "INSERT INTO model_registry "
             "(id, name, version, model_type, is_active, metrics, model_path, model_blob, trained_at) "
-            "VALUES (:id, 'ranker', 'ltr-v1', 'lambdarank', true, cast(:metrics as jsonb), :path, :blob, :now)"
+            "VALUES (:id, 'ranker', :version, 'lambdarank', true, cast(:metrics as jsonb), :path, :blob, :now)"
         ),
         {
             "id": model_id,
+            "version": model_version,
             "metrics": json.dumps(metrics),
             "path": model_path,
             "blob": artifact_blob,
@@ -496,7 +674,13 @@ def register_model(db: Session, model_path: str, metrics: dict, artifact_blob: b
 # ---------------------------------------------------------------------------
 
 
-def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
+def main(
+    holdout: float = 0.20,
+    ndcg_cutoff: int = 10,
+    model_version: str = DEFAULT_MODEL_VERSION,
+    behavioral_min_impressions: int = 1000,
+    behavioral_min_positive: int = 100,
+) -> None:
     db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/travel_planner")
     engine = create_engine(db_url)
     SessionLocal = sessionmaker(bind=engine)
@@ -508,20 +692,36 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
             logger.error("ltr_training_pairs is empty — run generate_ltr_pairs.py first")
             sys.exit(1)
         logger.info("ltr_training_pairs: %d rows", count)
+        baseline = _load_baseline_metrics(db)
 
         logger.info("=== Phase 1: Destination feature matrix ===")
         dest_df = build_destination_feature_matrix(db)
         feature_cols = get_feature_columns()
         logger.info("Destinations: %d × %d features", len(dest_df), len(feature_cols))
 
-        snap_id = save_feature_snapshot(db, feature_version=2, rows_count=len(dest_df), purpose="training")
+        snap_id = save_feature_snapshot(db, feature_version=3, rows_count=len(dest_df), purpose="training")
         logger.info("Feature snapshot: %s", snap_id)
 
         logger.info("=== Phase 2: Load and featurise pairs ===")
         records = load_pairs(db, dest_df, feature_cols)
+        behavioral_records, behavioral_status = load_behavioral_pairs(
+            db,
+            dest_df,
+            feature_cols,
+            min_impressions=behavioral_min_impressions,
+            min_positive=behavioral_min_positive,
+        )
+        if behavioral_records:
+            records.extend(behavioral_records)
+            logger.info(
+                "Behavioral LTR augmentation enabled: %d pairs / %d queries",
+                behavioral_status["pairs"],
+                behavioral_status["queries"],
+            )
+        else:
+            logger.info("Behavioral LTR augmentation skipped: %s", behavioral_status["reason"])
 
         n_feat = records[0]["features"].shape[0]
-        from collections import Counter
 
         label_dist = Counter(r["label"] for r in records)
         logger.info("Pairs: %d  Features: %d  Labels: %s", len(records), n_feat, dict(sorted(label_dist.items())))
@@ -631,12 +831,26 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
 
         logger.info("=== Phase 6: Save model ===")
         MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
-        model_path = str(MODEL_SAVE_DIR / "ranker_ltr_v1.lgb")
+        safe_version = model_version.replace("/", "_").replace("-", "_")
+        model_path = str(MODEL_SAVE_DIR / f"ranker_{safe_version}.lgb")
         model.save_model(model_path)
 
         metrics = {
             "ndcg_at_5": round(ndcg5, 4),
             "ndcg_at_10": round(ndcg10, 4),
+            "baseline_version": baseline["version"] if baseline else None,
+            "baseline_ndcg_at_5": baseline["metrics"].get("ndcg_at_5") if baseline else None,
+            "baseline_ndcg_at_10": baseline["metrics"].get("ndcg_at_10") if baseline else None,
+            "ndcg_at_5_delta_vs_baseline": (
+                round(ndcg5 - float(baseline["metrics"]["ndcg_at_5"]), 4)
+                if baseline and baseline["metrics"].get("ndcg_at_5") is not None
+                else None
+            ),
+            "ndcg_at_10_delta_vs_baseline": (
+                round(ndcg10 - float(baseline["metrics"]["ndcg_at_10"]), 4)
+                if baseline and baseline["metrics"].get("ndcg_at_10") is not None
+                else None
+            ),
             "n_train_pairs": len(train_recs),
             "n_test_pairs": len(test_recs),
             "n_train_queries": n_train_q,
@@ -644,6 +858,14 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
             "n_features": n_feat,
             "best_iteration": best_iter_manual,
             "n_estimators": int(model.num_trees()),
+            "candidate_generator": "content-scorer",
+            "candidate_top_n": 200,
+            "poi_structural_features": [
+                col
+                for col in feature_cols
+                if col.startswith("poi_") or col in {"route_compactness_score", "avg_poi_rating_or_popularity"}
+            ],
+            "behavioral_feedback": behavioral_status,
         }
 
         # Serialise artifact to bytes for persistent storage in DB (survives container restarts)
@@ -661,9 +883,9 @@ def main(holdout: float = 0.20, ndcg_cutoff: int = 10) -> None:
         artifact_blob = buf.getvalue()
         logger.info("Artifact serialised: %.1f KB", len(artifact_blob) / 1024)
 
-        joblib.dump(artifact, str(MODEL_SAVE_DIR / "ranker_ltr_v1.joblib"))
+        joblib.dump(artifact, str(MODEL_SAVE_DIR / f"ranker_{safe_version}.joblib"))
 
-        model_id = register_model(db, model_path, metrics, artifact_blob)
+        model_id = register_model(db, model_path, metrics, artifact_blob, model_version)
         logger.info("Registered: id=%s", model_id)
 
         logger.info("=== Done: NDCG@5=%.4f  NDCG@10=%.4f  best_iter=%d ===", ndcg5, ndcg10, best_iter_manual)
@@ -673,5 +895,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--holdout", type=float, default=0.20)
     parser.add_argument("--ndcg-cutoff", type=int, default=10)
+    parser.add_argument("--model-version", type=str, default=DEFAULT_MODEL_VERSION)
+    parser.add_argument("--behavioral-min-impressions", type=int, default=1000)
+    parser.add_argument("--behavioral-min-positive", type=int, default=100)
     args = parser.parse_args()
-    main(holdout=args.holdout, ndcg_cutoff=args.ndcg_cutoff)
+    main(
+        holdout=args.holdout,
+        ndcg_cutoff=args.ndcg_cutoff,
+        model_version=args.model_version,
+        behavioral_min_impressions=args.behavioral_min_impressions,
+        behavioral_min_positive=args.behavioral_min_positive,
+    )

@@ -1,9 +1,11 @@
 import uuid
+from typing import get_args
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.user_event import UserEvent
+from app.schemas.events import EventType
 
 
 def test_ingest_empty_batch_rejected(client: TestClient):
@@ -58,15 +60,7 @@ def test_ingest_event_with_context(client: TestClient, db: Session):
 
 
 def test_ingest_all_event_types(client: TestClient, db: Session):
-    valid_types = [
-        "recommendation_shown",
-        "recommendation_clicked",
-        "destination_detail_opened",
-        "budget_predicted",
-        "trip_created",
-        "onboarding_step",
-        "onboarding_completed",
-    ]
+    valid_types = get_args(EventType)
     events = [{"session_id": str(uuid.uuid4()), "event_type": t} for t in valid_types]
     resp = client.post("/api/v1/events", json={"events": events})
     assert resp.status_code == 202
