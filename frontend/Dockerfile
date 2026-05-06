@@ -29,9 +29,11 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy built React files from the build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Replace default Nginx configuration with our custom config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Replace default Nginx configuration with our custom config.
+# Local builds use HTTP-only nginx.conf; production compose selects nginx.prod.conf.
+ARG NGINX_CONF=nginx.conf
+COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 80 443
 
 CMD ["nginx", "-g", "daemon off;"]

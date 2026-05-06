@@ -130,6 +130,9 @@ services:
     depends_on:
       - auth-service
       - trip-service
+      - data-service
+      - ml-service
+      - analytics-service
 
 volumes:
   postgres_data:

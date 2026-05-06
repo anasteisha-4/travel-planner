@@ -115,6 +115,7 @@ services:
         - VITE_YANDEX_MAPS_API_TOKEN
         - VITE_GEOAPIFY_API_KEY
         - VITE_YANDEX_GEOSUGGEST_API_KEY
+        - NGINX_CONF=nginx.prod.conf
     container_name: travel-planner-frontend
     ports:
       - "80:80"
@@ -124,6 +125,9 @@ services:
     depends_on:
       - auth-service
       - trip-service
+      - data-service
+      - ml-service
+      - analytics-service
     restart: unless-stopped
 
 volumes:
