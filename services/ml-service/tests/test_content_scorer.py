@@ -64,6 +64,14 @@ def test_budget_fit_within_range():
     assert score == pytest.approx(1.0)
 
 
+def test_budget_fit_includes_route_cost():
+    # stay cost alone fits: 100 * 10 = 1000, but route fare makes total 2500 > max budget
+    without_route = _budget_fit_score(500, 2000, 0.3, 100.0, 10)
+    with_route = _budget_fit_score(500, 2000, 0.3, 100.0, 10, route_cost_usd=1500)
+    assert without_route == pytest.approx(1.0)
+    assert with_route < without_route
+
+
 def test_budget_fit_too_expensive():
     # daily=500, duration=10 → 5000, budget max=1000
     score = _budget_fit_score(500, 1000, 0.8, 500.0, 10)

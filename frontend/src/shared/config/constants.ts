@@ -11,12 +11,12 @@ export const BUDGET_LIMITS: Record<
   string,
   { min: number; max: number; step: number; format: (v: number) => string }
 > = {
-  RUB: { min: 0, max: 2000000, step: 10000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₽` },
-  USD: { min: 0, max: 24000, step: 100, format: (v) => `$${v}` },
-  EUR: { min: 0, max: 21000, step: 100, format: (v) => `€${v}` },
-  GBP: { min: 0, max: 18000, step: 100, format: (v) => `£${v}` },
-  TRY: { min: 0, max: 800000, step: 5000, format: (v) => `${(v / 1000).toFixed(0)}тыс ₺` },
-  CNY: { min: 0, max: 160000, step: 1000, format: (v) => `¥${v}` },
+  RUB: { min: 0, max: 1000000, step: 10000, format: (v) => (v === 0 ? '0' : `${(v / 1000).toFixed(0)}тыс ₽`) },
+  USD: { min: 0, max: 12000, step: 100, format: (v) => (v === 0 ? '0' : `$${v}`) },
+  EUR: { min: 0, max: 11000, step: 100, format: (v) => (v === 0 ? '0' : `€${v}`) },
+  GBP: { min: 0, max: 9000, step: 100, format: (v) => (v === 0 ? '0' : `£${v}`) },
+  TRY: { min: 0, max: 400000, step: 5000, format: (v) => (v === 0 ? '0' : `${(v / 1000).toFixed(0)}тыс ₺`) },
+  CNY: { min: 0, max: 80000, step: 1000, format: (v) => (v === 0 ? '0' : `¥${v}`) },
 };
 
 import {
@@ -99,4 +99,11 @@ export const DURATION_OPTIONS = [
   { id: 'standard', label: 'Стандартная (10 дней)', days: 10 },
   { id: 'long', label: 'Длинная (3 недели)', days: 21 },
   { id: 'extended', label: 'Долгая (месяц+)', days: 45 },
+] as const;
+
+export const REST_LEVEL_OPTIONS = [
+  { id: 'economy', label: 'Экономно', description: 'Простое жильё и самые выгодные тарифы' },
+  { id: 'standard', label: 'Стандарт', description: 'Обычные отели и средний тариф дороги' },
+  { id: 'comfort', label: 'Комфорт', description: 'Лучше расположение, но без бизнес-класса' },
+  { id: 'luxury', label: 'Люкс', description: 'Премиум-отели и бизнес-класс, если бюджет позволяет' },
 ] as const;

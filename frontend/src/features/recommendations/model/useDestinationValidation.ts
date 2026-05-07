@@ -10,6 +10,7 @@ export const useDestinationValidation = (params: DestinationValidationRequest | 
       params?.citizenship_code ?? null,
       params?.travel_month,
       params?.budget_per_day_usd ?? null,
+      params?.display_currency ?? null,
     ],
     queryFn: () => recommendationsApi.validateDestination(params!),
     enabled: params !== null,

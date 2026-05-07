@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { BUDGET_LIMITS } from '@/shared/config';
 import { expenseApi } from '@/entities/expense';
 import { sendEvent } from '@/shared/api';
+import { invalidateProfileDependentQueries } from '@/shared/lib/profile-dependent-queries';
 import {
   Button,
   Drawer,
@@ -14,7 +15,7 @@ import {
 } from '@/shared/ui';
 import type { UserProfileV2 } from '@/entities/user';
 
-import type { ClimatePref, DurationOption, LanguageOption, LikedDest, VacationPreference, VisaTolerance } from '@/features/onboarding-v2';
+import type { ClimatePref, DurationOption, LanguageOption, LikedDest, RestLevel, VacationPreference, VisaTolerance } from '@/features/onboarding-v2';
 import { StepVacationPrefs, StepBudgetDuration, StepOriginCity, StepLikedDests, StepRiskVisaLang, StepClimateNotes } from '@/features/onboarding-v2';
 import { profileApi } from '@/features/profile';
 
@@ -32,6 +33,7 @@ type EditState = {
   preferredCurrency: string;
   budgetMin: number | null;
   budgetMax: number | null;
+  restLevel: RestLevel | null;
   typicalDuration: DurationOption | null;
   originCityId: number | null;
   originCityName: string;
@@ -51,6 +53,7 @@ const profileToEditState = (p: Partial<UserProfileV2>): EditState => ({
   preferredCurrency: p.preferred_currency ?? 'RUB',
   budgetMin: p.budget_min ?? null,
   budgetMax: p.budget_max ?? null,
+  restLevel: (p.rest_level as RestLevel) ?? null,
   typicalDuration: (p.typical_duration as DurationOption) ?? null,
   originCityId: p.origin_city_id ?? null,
   originCityName: p.origin_city_name ?? '',
@@ -96,7 +99,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
         ...prev,
         preferredCurrency: newCurrency,
         budgetMin: config.min,
-        budgetMax: Math.round(config.max * 0.3),
+        budgetMax: null,
       }));
       return;
     }
@@ -113,10 +116,10 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
       setState((s) => ({
         ...s,
         budgetMin: s.budgetMin !== null ? Math.round(s.budgetMin * rate) : null,
-        budgetMax: s.budgetMax !== null ? Math.min(Math.round(s.budgetMax * rate), config.max) : null,
+        budgetMax: s.budgetMax !== null ? Math.round(s.budgetMax * rate) : null,
       }));
     }).catch(() => {
-      setState((s) => ({ ...s, budgetMin: config.min, budgetMax: Math.round(config.max * 0.3) }));
+      setState((s) => ({ ...s, budgetMin: config.min, budgetMax: null }));
     });
   };
 
@@ -131,6 +134,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
         initial.preferredCurrency !== state.preferredCurrency ? 'preferred_currency' : null,
         initial.budgetMin !== state.budgetMin ? 'budget_min' : null,
         initial.budgetMax !== state.budgetMax ? 'budget_max' : null,
+        initial.restLevel !== state.restLevel ? 'rest_level' : null,
         initial.typicalDuration !== state.typicalDuration ? 'typical_duration' : null,
         initial.originCityName !== state.originCityName ? 'origin_city_name' : null,
         hasArrayChanged(
@@ -158,11 +162,12 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           typical_duration: updated.typical_duration,
         });
       }
-      if (changedFields.some((field) => field === 'budget_min' || field === 'budget_max' || field === 'preferred_currency')) {
+      if (changedFields.some((field) => field === 'budget_min' || field === 'budget_max' || field === 'preferred_currency' || field === 'rest_level')) {
         sendEvent('profile_budget_changed', {
           preferred_currency: updated.preferred_currency,
           has_budget_min: updated.budget_min !== null,
           has_budget_max: updated.budget_max !== null,
+          rest_level: updated.rest_level,
         });
       }
       if (
@@ -185,6 +190,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
         });
       }
       qc.setQueryData(['profile'], updated);
+      if (changedFields.length > 0) invalidateProfileDependentQueries(qc);
       onSaved();
       onOpenChange(false);
     },
@@ -196,6 +202,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
       preferred_currency: state.preferredCurrency,
       budget_min: state.budgetMin,
       budget_max: state.budgetMax,
+      rest_level: state.restLevel ?? undefined,
       typical_duration: state.typicalDuration ?? undefined,
       origin_city_id: state.originCityId ?? undefined,
       origin_city_name: state.originCityName || undefined,
@@ -260,8 +267,10 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
                 currency={state.preferredCurrency}
                 budgetMin={state.budgetMin}
                 budgetMax={state.budgetMax}
+                restLevel={state.restLevel}
                 onCurrencyChange={handleCurrencyChange}
                 onBudgetChange={(min, max) => update({ budgetMin: min, budgetMax: max })}
+                onRestLevelChange={(v) => update({ restLevel: v as RestLevel })}
               />
             )}
             {step === 3 && (

@@ -9,7 +9,7 @@ import {
 } from '@/shared/ui';
 
 import { useOnboardingV2 } from '../model/useOnboardingV2';
-import type { ClimatePref, DurationOption, LanguageOption, VisaTolerance } from '../model/types';
+import type { ClimatePref, DurationOption, LanguageOption, RestLevel, VisaTolerance } from '../model/types';
 import { StepBudgetDuration } from './StepBudgetDuration';
 import { StepClimateNotes } from './StepClimateNotes';
 import { StepLikedDests } from './StepLikedDests';
@@ -38,6 +38,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
     preferredCurrency,
     budgetMin,
     budgetMax,
+    restLevel,
     typicalDuration,
     originCityName,
     likedDests,
@@ -117,8 +118,10 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
               currency={preferredCurrency}
               budgetMin={budgetMin}
               budgetMax={budgetMax}
+              restLevel={restLevel}
               onCurrencyChange={handleCurrencyChange}
               onBudgetChange={(min, max) => update({ budgetMin: min, budgetMax: max })}
+              onRestLevelChange={(v) => update({ restLevel: v as RestLevel })}
             />
           )}
           {currentStep === 3 && (

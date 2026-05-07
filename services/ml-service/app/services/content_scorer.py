@@ -34,6 +34,7 @@ from typing import Any, Protocol, runtime_checkable
 import numpy as np
 
 from app.schemas.recommendation import ScoredDestination
+from app.services.travelpayouts_service import FareEstimate, get_cached_fare_only_usd
 
 
 @runtime_checkable
@@ -52,16 +53,16 @@ ACTIVITY_WEIGHT_BY_RANK = {1: 5, 2: 4, 3: 3, 4: 2, 5: 1}
 
 # Base weights when all signals present (sum = 1.0)
 COMPOSITE_WEIGHTS: dict[str, float] = {
-    "activity_match":        0.22,
+    "activity_match": 0.22,
     "liked_dest_similarity": 0.15,
-    "budget_fit":            0.13,
-    "origin_proximity":      0.10,
-    "season_fit":            0.10,
-    "safety_modulation":     0.08,
-    "language_match":        0.07,
-    "visa_effort":           0.05,
-    "climate_match":         0.05,
-    "crowd_fit":             0.05,
+    "budget_fit": 0.13,
+    "origin_proximity": 0.10,
+    "season_fit": 0.10,
+    "safety_modulation": 0.08,
+    "language_match": 0.07,
+    "visa_effort": 0.05,
+    "climate_match": 0.05,
+    "crowd_fit": 0.05,
 }
 
 # risk_tolerance 1-5 → minimum safety_score required
@@ -95,8 +96,16 @@ CLIMATE_ATTRIBUTE_MAP: dict[str, list[str]] = {
 
 
 ACTIVITY_TYPES = [
-    "beach", "culture", "nature", "adventure", "food",
-    "nightlife", "wellness", "shopping", "family", "urban",
+    "beach",
+    "culture",
+    "nature",
+    "adventure",
+    "food",
+    "nightlife",
+    "wellness",
+    "shopping",
+    "family",
+    "urban",
 ]
 
 
@@ -194,8 +203,9 @@ def _budget_fit_score(
     cost_index: float,
     avg_daily_cost_usd: float | None,
     typical_duration_days: int,
+    route_cost_usd: float | None = None,
 ) -> float:
-    """Band matching: check if avg_daily_cost_usd × duration fits within budget range.
+    """Band matching: check if avg_daily_cost_usd × duration + route fare fits within budget range.
     Falls back to cost_index distance if budget not set.
     """
     if budget_min_usd is None or budget_max_usd is None:
@@ -203,7 +213,7 @@ def _budget_fit_score(
 
     duration_days = typical_duration_days
     daily_cost = avg_daily_cost_usd or (cost_index * 300)
-    trip_cost = daily_cost * duration_days
+    trip_cost = daily_cost * duration_days + (route_cost_usd or 0.0)
 
     budget_mid = (budget_min_usd + budget_max_usd) / 2.0
     budget_range = max(budget_max_usd - budget_min_usd, budget_mid * 0.2)
@@ -213,6 +223,62 @@ def _budget_fit_score(
     overshoot = budget_min_usd - trip_cost if trip_cost < budget_min_usd else trip_cost - budget_max_usd
 
     return max(0.0, 1.0 - overshoot / (budget_range * 2))
+
+
+def _avg_daily_budget_usd(
+    avg_daily_cost_usd: float | None,
+    cost_index: float,
+    duration_days: int,
+    route_cost_usd: float | None = None,
+) -> float:
+    daily_cost = avg_daily_cost_usd or (cost_index * 300)
+    return (daily_cost * duration_days + (route_cost_usd or 0.0)) / max(duration_days, 1)
+
+
+def resolve_accommodation_tier(
+    rest_level: str | None,
+    budget_max_usd: float | None,
+    fallback: str = "mid",
+) -> str:
+    tier_by_rest_level = {
+        "economy": "budget",
+        "standard": "mid",
+        "comfort": "mid",
+        "luxury": "luxury",
+    }
+    tier = tier_by_rest_level.get(rest_level or "", fallback)
+
+    if budget_max_usd is None:
+        return tier
+    if budget_max_usd < 900:
+        return "budget"
+    if budget_max_usd < 3000 and tier == "luxury":
+        return "mid"
+    return tier
+
+
+def _cached_route_fare(
+    user_profile: dict,
+    destination: dict,
+    features: dict[str, Any],
+    travel_month: int,
+    duration_days: int,
+) -> FareEstimate | None:
+    return get_cached_fare_only_usd(
+        origin_city_name=user_profile.get("origin_city_name"),
+        origin_lat=user_profile.get("origin_lat"),
+        origin_lng=user_profile.get("origin_lng"),
+        destination_name=destination.get("name"),
+        destination_lat=destination.get("lat") or features.get("lat"),
+        destination_lng=destination.get("lng") or features.get("lng"),
+        destination_country_code=destination.get("country_code"),
+        travel_month=travel_month,
+        duration_days=duration_days,
+        accommodation_tier=resolve_accommodation_tier(
+            user_profile.get("rest_level"),
+            user_profile.get("budget_max_usd"),
+        ),
+    )
 
 
 def _safety_score(safety: float, risk_tolerance: int | None) -> float:
@@ -321,6 +387,7 @@ def _region_boost(
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     import math
+
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -428,9 +495,7 @@ class ContentScorer:
                 "activities": f.get("activities", {}),
             }
 
-        has_liked_signal = bool(liked_dest_ids) and any(
-            str(lid) in dest_lookup for lid in liked_dest_ids
-        )
+        has_liked_signal = bool(liked_dest_ids) and any(str(lid) in dest_lookup for lid in liked_dest_ids)
 
         results: list[ScoredDestination] = []
 
@@ -456,21 +521,32 @@ class ContentScorer:
             season = f.get("seasonality", {}).get(travel_month, 0.5)
             cost_index = float(f.get("cost_index", 0.5))
             avg_daily_cost_usd = f.get("avg_daily_cost_usd")
+            route_fare = _cached_route_fare(user_profile, dest, f, travel_month, typical_duration_days)
+            route_cost_usd = route_fare.price_usd if route_fare is not None else None
+            avg_daily_budget_usd = _avg_daily_budget_usd(
+                float(avg_daily_cost_usd) if avg_daily_cost_usd else None,
+                cost_index,
+                typical_duration_days,
+                route_cost_usd,
+            )
             crowd_index = f.get("crowd_by_month", {}).get(travel_month, 0.5)
             activities: dict[str, float] = f.get("activities", {})
 
             act_score = _activity_match_score(vacation_prefs, activities)
             budget_score = _budget_fit_score(
-                budget_min_usd, budget_max_usd, cost_index, avg_daily_cost_usd, typical_duration_days
+                budget_min_usd,
+                budget_max_usd,
+                cost_index,
+                avg_daily_cost_usd,
+                typical_duration_days,
+                route_cost_usd,
             )
             safety_sc = _safety_score(safety, risk_tolerance)
             lang_sc = _language_score(f, language_comfort)
             crowd_sc = _crowd_score(crowd_index, crowd_preference)
             climate_sc = _climate_match(f, climate_prefs)
 
-            origin_prox = _origin_proximity_score(
-                origin_lat, origin_lng, dest.get("lat"), dest.get("lng")
-            )
+            origin_prox = _origin_proximity_score(origin_lat, origin_lng, dest.get("lat"), dest.get("lng"))
             liked_sim = _liked_destinations_similarity(
                 liked_dest_ids,
                 dest_id,
@@ -504,24 +580,20 @@ class ContentScorer:
 
             # Dynamic weight normalisation: optional signals get their weight only when present
             factors: dict[str, float | None] = {
-                "activity_match":        act_score,
+                "activity_match": act_score,
                 "liked_dest_similarity": liked_sim if (has_liked_signal and liked_sim is not None) else None,
-                "budget_fit":            budget_score,
-                "origin_proximity":      origin_prox,
-                "season_fit":            float(season),
-                "safety_modulation":     safety_sc,
-                "language_match":        lang_sc,
-                "visa_effort":           visa_score,
-                "climate_match":         climate_sc,
-                "crowd_fit":             crowd_sc,
+                "budget_fit": budget_score,
+                "origin_proximity": origin_prox,
+                "season_fit": float(season),
+                "safety_modulation": safety_sc,
+                "language_match": lang_sc,
+                "visa_effort": visa_score,
+                "climate_match": climate_sc,
+                "crowd_fit": crowd_sc,
             }
 
             total_weight = sum(COMPOSITE_WEIGHTS[k] for k, v in factors.items() if v is not None)
-            composite = sum(
-                COMPOSITE_WEIGHTS[k] * v
-                for k, v in factors.items()
-                if v is not None
-            ) / total_weight
+            composite = sum(COMPOSITE_WEIGHTS[k] * v for k, v in factors.items() if v is not None) / total_weight
 
             composite = max(0.0, min(1.0, composite + lang_penalty + visited_penalty))
 
@@ -537,6 +609,9 @@ class ContentScorer:
                     score_breakdown=breakdown,
                     explanation_tags=tags,
                     avg_daily_cost_usd=float(avg_daily_cost_usd) if avg_daily_cost_usd else None,
+                    avg_daily_budget_usd=round(avg_daily_budget_usd, 2),
+                    route_cost_usd=round(route_cost_usd, 2) if route_cost_usd is not None else None,
+                    route_cost_source=route_fare.source if route_fare is not None else None,
                     season_score=round(float(season), 4),
                     safety_score=round(safety, 4),
                 )

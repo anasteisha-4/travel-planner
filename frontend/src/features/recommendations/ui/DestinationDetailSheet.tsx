@@ -170,6 +170,18 @@ const formatPercent = (value: unknown) =>
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, Math.round(value * 100)));
 
+const formatDailyCost = (amount: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(Math.round(amount));
+  } catch {
+    return `${Math.round(amount).toLocaleString('ru-RU')} ${currency}`;
+  }
+};
+
 const formatVisa = (value: unknown) => {
   if (typeof value !== 'string') return 'нет данных';
   const labels: Record<string, string> = {
@@ -227,17 +239,31 @@ const getTopReasons = (destination: ScoredDestination): RecommendationReason[] =
       value: destination.safety_score,
     });
   }
-  if (typeof destination.avg_daily_cost_usd === 'number') {
+  if (
+    typeof destination.avg_daily_budget === 'number' ||
+    typeof destination.avg_daily_cost === 'number' ||
+    typeof destination.avg_daily_cost_usd === 'number'
+  ) {
+    const dailyCost =
+      destination.avg_daily_budget ?? destination.avg_daily_cost ?? destination.avg_daily_cost_usd;
+    const dailyCostCurrency =
+      destination.avg_daily_budget_currency ?? destination.avg_daily_cost_currency ?? 'USD';
+    const dailyCostUsd = destination.avg_daily_budget_usd ?? destination.avg_daily_cost_usd;
     fallbackReasons.push({
       key: 'fallback:cost',
       label: FALLBACK_REASON_LABELS.avg_daily_cost,
       value:
-        destination.avg_daily_cost_usd < 60
+        dailyCostUsd === undefined || dailyCostUsd === null
+          ? 0.6
+          : dailyCostUsd < 60
           ? 0.85
-          : destination.avg_daily_cost_usd < 140
+          : dailyCostUsd < 140
             ? 0.68
             : 0.52,
-      note: `~$${Math.round(destination.avg_daily_cost_usd)}/день`,
+      note:
+        typeof dailyCost === 'number'
+          ? `${formatDailyCost(dailyCost, dailyCostCurrency)}/день`
+          : undefined,
     });
   }
 
@@ -261,13 +287,11 @@ const getTopReasons = (destination: ScoredDestination): RecommendationReason[] =
 const ValidationBlock = ({
   data,
   destination,
-  budgetPerDayUsd,
   isLoading,
   isError,
 }: {
   data?: DestinationValidationResponse;
   destination: ScoredDestination;
-  budgetPerDayUsd: number | null;
   isLoading: boolean;
   isError: boolean;
 }) => {
@@ -294,6 +318,10 @@ const ValidationBlock = ({
 
   const warningByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
   const languageStatus = statusFromScore(destination.score_breakdown.language_match);
+  const dailyCost =
+    destination.avg_daily_budget ?? destination.avg_daily_cost ?? destination.avg_daily_cost_usd;
+  const dailyCostCurrency =
+    destination.avg_daily_budget_currency ?? destination.avg_daily_cost_currency ?? 'USD';
   const rows = [
     {
       key: 'visa',
@@ -311,7 +339,10 @@ const ValidationBlock = ({
       key: 'budget',
       label: 'Бюджет',
       status: statusFromWarning(warningByType.get('budget')),
-      value: budgetPerDayUsd ? `$${Math.round(budgetPerDayUsd)}/день` : 'нет лимита',
+      value:
+        typeof dailyCost === 'number'
+          ? `${formatDailyCost(dailyCost, dailyCostCurrency)}/день`
+          : 'нет данных',
     },
     {
       key: 'safety',
@@ -392,13 +423,19 @@ export const DestinationDetailSheet = ({
   const trackedBudgetKeys = useRef<Set<string>>(new Set());
   const trackedValidationKeys = useRef<Set<string>>(new Set());
   const profileCached = queryClient.getQueryData<UserProfileV2>(['profile']);
-  const defaultDuration = TYPICAL_DURATION_MAP[profileCached?.typical_duration ?? 'standard'] ?? 7;
+  const defaultDuration =
+    profileCached?.typical_duration_days ??
+    TYPICAL_DURATION_MAP[profileCached?.typical_duration ?? 'standard'] ??
+    7;
   const defaultTier: 'budget' | 'mid' | 'luxury' = (() => {
-    const mid =
-      ((profileCached?.budget_min_usd ?? 0) + (profileCached?.budget_max_usd ?? 2000)) / 2;
-    if (mid < 800) return 'budget';
-    if (mid < 5000) return 'mid';
-    return 'luxury';
+    const budgetMaxUsd = profileCached?.budget_max_usd;
+    if (budgetMaxUsd !== null && budgetMaxUsd !== undefined) {
+      if (budgetMaxUsd < 900) return 'budget';
+      if (budgetMaxUsd < 3000 && profileCached?.rest_level === 'luxury') return 'mid';
+    }
+    if (profileCached?.rest_level === 'economy') return 'budget';
+    if (profileCached?.rest_level === 'luxury') return 'luxury';
+    return 'mid';
   })();
   const tripParams: TripParams = {
     duration_days: defaultDuration,
@@ -415,6 +452,7 @@ export const DestinationDetailSheet = ({
         travel_month: month,
         accommodation_tier: tripParams.accommodation_tier,
         currency,
+        budget_limit_usd: profileCached?.budget_max_usd,
         origin_city_name: profileCached?.origin_city_name,
         origin_lat: profileCached?.origin_lat,
         origin_lng: profileCached?.origin_lng,
@@ -422,7 +460,7 @@ export const DestinationDetailSheet = ({
     : null;
   const { data: budgetPrediction } = useBudgetPrediction(budgetPredictionParams);
   const budgetPerDayUsd = profileCached?.budget_max_usd
-    ? profileCached.budget_max_usd / Math.max(tripParams.duration_days * tripParams.people_count, 1)
+    ? profileCached.budget_max_usd / Math.max(tripParams.duration_days, 1)
     : null;
   const destinationValidationParams = destination
     ? {
@@ -430,6 +468,7 @@ export const DestinationDetailSheet = ({
         citizenship_code: 'RU',
         travel_month: month,
         budget_per_day_usd: budgetPerDayUsd,
+        display_currency: currency,
       }
     : null;
   const {
@@ -595,7 +634,6 @@ export const DestinationDetailSheet = ({
           <ValidationBlock
             data={destinationValidation}
             destination={destination}
-            budgetPerDayUsd={budgetPerDayUsd}
             isLoading={isValidationLoading}
             isError={isValidationError}
           />

@@ -1,9 +1,13 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { useFeedback } from '@/features/feedback';
+import { profileApi } from '@/features/profile';
+import { useBudgetPrediction } from '@/features/recommendations';
 import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
 import { localizeDestinationName } from '@/shared/lib';
 import { Button } from '@/shared/ui';
+import { useQuery } from '@tanstack/react-query';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
+import { useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 
 const formatDateFull = (dateStr: string) => {
@@ -44,6 +48,21 @@ const CURRENCY_LABEL: Record<string, string> = {
   TRY: 'Лира',
 };
 
+const getTravelMonth = (dateStr: string) => {
+  const parsed = new Date(`${dateStr}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed.getMonth() + 1 : new Date().getMonth() + 1;
+};
+
+const getAccommodationTier = (
+  budgetMinUsd?: number | null,
+  budgetMaxUsd?: number | null
+): 'budget' | 'mid' | 'luxury' => {
+  const mid = ((budgetMinUsd ?? 0) + (budgetMaxUsd ?? 2000)) / 2;
+  if (mid < 800) return 'budget';
+  if (mid < 5000) return 'mid';
+  return 'luxury';
+};
+
 export const TripInfoTab = () => {
   const navigate = useNavigate();
   const { trip, isStatusChanging, onStatusChange, onEditOpen, onCancelOpen, onDeleteOpen } =
@@ -66,7 +85,47 @@ export const TripInfoTab = () => {
     projectedFinalSpend,
     remainingDays,
     totalSpent,
+    durationDays,
   } = useTripAnalytics(trip);
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: profileApi.getProfile,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const budgetPredictionParams = useMemo(
+    () =>
+      trip.destination_id
+        ? {
+            destination_id: trip.destination_id,
+            duration_days: durationDays,
+            people_count: trip.people_count,
+            travel_month: getTravelMonth(trip.start_date),
+            accommodation_tier: getAccommodationTier(profile?.budget_min_usd, profile?.budget_max_usd),
+            currency: trip.currency,
+            origin_city_name: profile?.origin_city_name ?? trip.departure_city,
+            origin_lat: profile?.origin_lat,
+            origin_lng: profile?.origin_lng,
+          }
+        : null,
+    [
+      durationDays,
+      profile?.budget_max_usd,
+      profile?.budget_min_usd,
+      profile?.origin_city_name,
+      profile?.origin_lat,
+      profile?.origin_lng,
+      trip.currency,
+      trip.departure_city,
+      trip.destination_id,
+      trip.people_count,
+      trip.start_date,
+    ]
+  );
+  const { data: budgetPrediction } = useBudgetPrediction(budgetPredictionParams);
+  const plannedDailyBudget = budgetPrediction
+    ? budgetPrediction.total_mid / Math.max(budgetPrediction.duration_days, 1)
+    : null;
 
   const handleContinueTrip = async () => {
     await deleteFeedback();
@@ -178,6 +237,8 @@ export const TripInfoTab = () => {
             burnRatePerDay={burnRatePerDay}
             currency={currency}
             elapsedDays={elapsedDays}
+            peopleCount={trip.people_count}
+            plannedDailyBudget={plannedDailyBudget}
             projectedBudgetDiff={projectedBudgetDiff}
             projectedBudgetPct={projectedBudgetPct}
             projectedFinalSpend={projectedFinalSpend}

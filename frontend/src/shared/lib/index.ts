@@ -4,3 +4,4 @@ export * from './geocoder';
 export * from './query-client';
 export * from './localization';
 export * from './useDebouncedValue';
+export * from './budget-slider';

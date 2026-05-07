@@ -178,6 +178,21 @@ def test_validate_budget_tight_warning(client: TestClient):
     assert budget_warns[0]["severity"] == "medium"
 
 
+def test_validate_budget_warning_uses_display_currency(client: TestClient):
+    resp = client.post(
+        "/api/v1/validate",
+        json={**_payload(), "budget_per_day_usd": 50.0, "display_currency": "RUB"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    budget_warn = next(w for w in data["warnings"] if w["type"] == "budget")
+    assert "$" not in budget_warn["message"]
+    assert "RUB/day" in budget_warn["message"]
+    assert data["info"]["avg_daily_cost"] == 9000.0
+    assert data["info"]["budget_per_day"] == 4500.0
+    assert data["info"]["display_currency"] == "RUB"
+
+
 def test_validate_budget_ok_no_warning(client: TestClient):
     resp = client.post("/api/v1/validate", json={**_payload(), "budget_per_day_usd": 200.0})
     assert resp.status_code == 200

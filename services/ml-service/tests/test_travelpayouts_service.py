@@ -1,3 +1,7 @@
+import fnmatch
+import json
+
+from app.services import travelpayouts_service as fares
 from app.services.iata_resolver import resolve_iata
 from app.services.travelpayouts_service import _extract_nearest_places, _extract_prices_for_dates
 
@@ -81,3 +85,62 @@ def test_extract_nearest_places_picks_cheapest():
     assert fare.destination_iata == "HKT"
     assert fare.fare_strategy == "business_comfort"
     assert fare.trip_class == 1
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    def setex(self, key: str, _ttl: int, value: str) -> None:
+        self.store[key] = value
+
+    def scan_iter(self, pattern: str):
+        for key in self.store:
+            if fnmatch.fnmatch(key, pattern):
+                yield key
+
+
+def _fare(price: float = 250.0) -> fares.FareEstimate:
+    return fares.FareEstimate(
+        price_usd=price,
+        source="travelpayouts_prices_for_dates",
+        origin_iata="MOW",
+        destination_iata="IST",
+        fare_strategy="typical_economy",
+        trip_class=0,
+    )
+
+
+def test_route_month_cache_survives_duration_change(monkeypatch):
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(fares, "get_redis", lambda: fake_redis)
+
+    fare = _fare()
+    exact_key = fares._exact_cache_key("MOW", "IST", "2026-06-01", "2026-06-11", 10, "typical_economy", 0)
+    route_key = fares._route_month_cache_key("MOW", "IST", "2026-06-01", "typical_economy", 0)
+    fares._cache_set_many([exact_key, route_key], fare)
+
+    cached = fares._cache_get_fare("MOW", "IST", "2026-06-01", "2026-06-22", 21, "typical_economy", 0)
+
+    assert cached == fare
+
+
+def test_nearest_duration_cache_fallback_for_old_exact_keys(monkeypatch):
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(fares, "get_redis", lambda: fake_redis)
+
+    closer = _fare(300.0)
+    farther = _fare(500.0)
+    fake_redis.store[fares._exact_cache_key("MOW", "IST", "2026-06-01", "2026-06-11", 10, "typical_economy", 0)] = (
+        json.dumps(farther.__dict__)
+    )
+    fake_redis.store[fares._exact_cache_key("MOW", "IST", "2026-06-01", "2026-06-15", 14, "typical_economy", 0)] = (
+        json.dumps(closer.__dict__)
+    )
+
+    cached = fares._cache_get_fare("MOW", "IST", "2026-06-01", "2026-06-17", 16, "typical_economy", 0)
+
+    assert cached == closer

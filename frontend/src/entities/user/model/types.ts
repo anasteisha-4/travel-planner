@@ -9,6 +9,7 @@ export type VisaTolerance = 'visa_free_only' | 'evisa_ok' | 'any_visa';
 export type ClimatePref = 'tropical_warm' | 'mediterranean' | 'continental_mild' | 'cold_snow' | 'dry_desert' | 'any';
 export type DurationOption = 'weekend' | 'short' | 'standard' | 'long' | 'extended';
 export type LanguageOption = 'ru' | 'en' | 'any';
+export type RestLevel = 'economy' | 'standard' | 'comfort' | 'luxury';
 
 export type UserProfileV2 = {
   id: string;
@@ -19,6 +20,7 @@ export type UserProfileV2 = {
   budget_max: number | null;
   budget_min_usd: number | null;
   budget_max_usd: number | null;
+  rest_level: RestLevel | null;
   typical_duration: DurationOption | null;
   typical_duration_days: number | null;
   origin_city_id: number | null;
@@ -43,7 +45,7 @@ export type UserProfileV2 = {
 export type OnboardingStepData = Partial<
   Pick<UserProfileV2,
     | 'vacation_preferences_ranked' | 'preferred_currency' | 'budget_min' | 'budget_max'
-    | 'typical_duration' | 'origin_city_id' | 'origin_city_name' | 'origin_lat' | 'origin_lng'
+    | 'rest_level' | 'typical_duration' | 'origin_city_id' | 'origin_city_name' | 'origin_lat' | 'origin_lng'
     | 'liked_destination_ids' | 'liked_destination_names' | 'risk_tolerance' | 'visa_tolerance' | 'language_comfort'
     | 'crowd_preference' | 'climate_preferences' | 'free_text_notes'
   >

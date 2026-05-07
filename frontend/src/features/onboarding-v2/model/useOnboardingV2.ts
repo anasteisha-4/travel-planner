@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { BUDGET_LIMITS } from '@/shared/config';
 import { expenseApi } from '@/entities/expense';
 import { sendEvent } from '@/shared/api';
+import { invalidateProfileDependentQueries } from '@/shared/lib/profile-dependent-queries';
 
 import { onboardingV2Api } from '../api/onboarding-v2.api';
 import type {
@@ -11,6 +12,7 @@ import type {
   DurationOption,
   LanguageOption,
   OnboardingStepData,
+  RestLevel,
   UserProfileV2,
   VacationPreference,
   VisaTolerance,
@@ -25,6 +27,7 @@ type OnboardingState = {
   preferredCurrency: string;
   budgetMin: number | null;
   budgetMax: number | null;
+  restLevel: RestLevel | null;
   typicalDuration: DurationOption | null;
   originCityId: number | null;
   originCityName: string;
@@ -45,6 +48,7 @@ const DEFAULT_STATE: OnboardingState = {
   preferredCurrency: 'RUB',
   budgetMin: null,
   budgetMax: null,
+  restLevel: null,
   typicalDuration: null,
   originCityId: null,
   originCityName: '',
@@ -65,6 +69,7 @@ const profileToState = (profile: UserProfileV2): OnboardingState => ({
   preferredCurrency: profile.preferred_currency ?? 'RUB',
   budgetMin: profile.budget_min ?? null,
   budgetMax: profile.budget_max ?? null,
+  restLevel: (profile.rest_level as RestLevel) ?? null,
   typicalDuration: (profile.typical_duration as DurationOption) ?? null,
   originCityId: profile.origin_city_id ?? null,
   originCityName: profile.origin_city_name ?? '',
@@ -92,6 +97,7 @@ const stateToStepPayload = (step: number, state: OnboardingState): OnboardingSte
         preferred_currency: state.preferredCurrency,
         budget_min: state.budgetMin,
         budget_max: state.budgetMax,
+        rest_level: state.restLevel ?? undefined,
         typical_duration: state.typicalDuration ?? undefined,
       };
     case 3:
@@ -144,6 +150,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
       onboardingV2Api.saveOnboardingStep(step, data),
     onSuccess: (updated) => {
       qc.setQueryData(['profile'], updated);
+      invalidateProfileDependentQueries(qc);
     },
   });
 
@@ -151,6 +158,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
     mutationFn: onboardingV2Api.completeOnboarding,
     onSuccess: (updated) => {
       qc.setQueryData(['profile'], updated);
+      invalidateProfileDependentQueries(qc);
       onComplete();
     },
   });
@@ -172,7 +180,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
         ...prev,
         preferredCurrency: newCurrency,
         budgetMin: config.min,
-        budgetMax: Math.round(config.max * 0.3),
+        budgetMax: null,
       }));
       return;
     }
@@ -189,10 +197,10 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
       setState((s) => ({
         ...s,
         budgetMin: s.budgetMin !== null ? Math.round(s.budgetMin * rate) : null,
-        budgetMax: s.budgetMax !== null ? Math.min(Math.round(s.budgetMax * rate), config.max) : null,
+        budgetMax: s.budgetMax !== null ? Math.round(s.budgetMax * rate) : null,
       }));
     }).catch(() => {
-      setState((s) => ({ ...s, budgetMin: config.min, budgetMax: Math.round(config.max * 0.3) }));
+      setState((s) => ({ ...s, budgetMin: config.min, budgetMax: null }));
     });
   };
 
@@ -233,6 +241,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
     preferredCurrency: state.preferredCurrency,
     budgetMin: state.budgetMin,
     budgetMax: state.budgetMax,
+    restLevel: state.restLevel,
     typicalDuration: state.typicalDuration,
     originCityId: state.originCityId,
     originCityName: state.originCityName,

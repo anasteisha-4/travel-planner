@@ -2,7 +2,7 @@ import type { Trip, TripCreate, TripUpdate } from '@/entities/trip';
 import { tripApi, TripCreateSchema } from '@/entities/trip';
 import type { DestinationSearchResult } from '@/entities/destination';
 import { expenseApi } from '@/entities/expense';
-import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
+import { CURRENCIES } from '@/shared/config';
 import { sendEvent } from '@/shared/api';
 import { localizeDestinationName } from '@/shared/lib';
 import { useToast } from '@/shared/ui';
@@ -84,7 +84,7 @@ export const useTripForm = (
   const [startDate, setStartDate] = useState(existingTrip?.start_date ?? initialValues?.start_date ?? '');
   const [endDate, setEndDate] = useState(existingTrip?.end_date ?? initialValues?.end_date ?? '');
   const [currency, setCurrency] = useState(existingTrip?.currency ?? initialValues?.currency ?? 'RUB');
-  const [budget, setBudget] = useState<number>(existingTrip?.budget ?? initialValues?.budget ?? 0);
+  const [budget, setBudget] = useState<number>(existingTrip?.budget ?? initialValues?.budget ?? -1);
   const [departureCity, setDepartureCity] = useState(
     existingTrip?.departure_city ?? initialValues?.departure_city ?? ''
   );
@@ -185,8 +185,7 @@ export const useTripForm = (
         });
         const rate = rates.rates[newCurrency];
         if (rate) {
-          const maxForCurrency = BUDGET_LIMITS[newCurrency]?.max ?? BUDGET_LIMITS['USD'].max;
-          setBudget(Math.min(Math.round(budget * rate), maxForCurrency));
+          setBudget(Math.round(budget * rate));
         }
       } catch {
         // keep original budget on error

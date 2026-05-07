@@ -60,9 +60,11 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
     if raw_profile_row is None:
         profile: dict = {
             "onboarding_completed": False,
+            "preferred_currency": "RUB",
             "vacation_preferences_ranked": [],
             "budget_min_usd": None,
             "budget_max_usd": None,
+            "rest_level": None,
             "typical_duration_days": 10,
             "typical_duration": None,
             "risk_tolerance": None,
@@ -84,9 +86,11 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             typical_duration_days = int(float(typical_duration_days))
         profile = {
             "onboarding_completed": bool(m.get("onboarding_completed", False)),
+            "preferred_currency": m.get("preferred_currency") or "RUB",
             "vacation_preferences_ranked": m.get("vacation_preferences_ranked") or [],
             "budget_min_usd": float(m["budget_min_usd"]) if m.get("budget_min_usd") else None,
             "budget_max_usd": float(m["budget_max_usd"]) if m.get("budget_max_usd") else None,
+            "rest_level": m.get("rest_level"),
             "typical_duration_days": typical_duration_days,
             "typical_duration": m.get("typical_duration"),
             "risk_tolerance": m.get("risk_tolerance"),

@@ -24,6 +24,13 @@ class ScoredDestination(BaseModel):
     score_breakdown: dict[str, float]
     explanation_tags: list[str]
     avg_daily_cost_usd: float | None
+    avg_daily_cost: float | None = None
+    avg_daily_cost_currency: str = "USD"
+    avg_daily_budget_usd: float | None = None
+    avg_daily_budget: float | None = None
+    avg_daily_budget_currency: str = "USD"
+    route_cost_usd: float | None = None
+    route_cost_source: str | None = None
     season_score: float | None
     safety_score: float | None
 

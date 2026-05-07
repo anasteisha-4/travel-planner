@@ -14,6 +14,7 @@ const checkHasProfile = (data: Partial<UserProfileV2>) =>
   (data.vacation_preferences_ranked ?? []).some((id) => KNOWN_VACATION_PREFS.has(id)) ||
   (data.budget_min !== null && data.budget_min !== undefined) ||
   (data.budget_max !== null && data.budget_max !== undefined) ||
+  !!data.rest_level ||
   !!data.typical_duration ||
   !!data.origin_city_name ||
   !!data.risk_tolerance ||

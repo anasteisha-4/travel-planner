@@ -60,7 +60,17 @@ BUDGET_TIER_RANGES = {
 }
 
 
-def _infer_budget_tier(budget_min_usd: float | None, budget_max_usd: float | None) -> str:
+def _infer_budget_tier(
+    budget_min_usd: float | None,
+    budget_max_usd: float | None,
+    rest_level: str | None = None,
+) -> str:
+    if rest_level == "economy":
+        return "budget"
+    if rest_level in {"standard", "comfort"}:
+        return "mid"
+    if rest_level == "luxury" and (budget_max_usd is None or budget_max_usd >= 3000):
+        return "luxury"
     if budget_min_usd is None or budget_max_usd is None:
         return "mid"
     mid = (budget_min_usd + budget_max_usd) / 2.0
@@ -147,6 +157,7 @@ def _build_user_vec(
     budget_tier = _infer_budget_tier(
         profile.get("budget_min_usd"),
         profile.get("budget_max_usd"),
+        profile.get("rest_level"),
     )
     b_low, b_high = BUDGET_TIER_RANGES.get(budget_tier, (0.25, 0.60))
     budget_min_norm = float(profile.get("budget_min_usd") or 800) / 20000.0
@@ -462,9 +473,10 @@ class LTRScorer:
             safety = float(f.get("safety_score", 0.5))
             season = float(f.get("seasonality", {}).get(travel_month, 0.5))
             avg_daily = f.get("avg_daily_cost_usd")
+            content_result = content_by_id.get(dest_id)
 
             # Merge: content breakdown (9 factors) + LTR raw scores for auditability
-            content_bd = content_by_id[dest_id].score_breakdown if dest_id in content_by_id else {}
+            content_bd = content_result.score_breakdown if content_result is not None else {}
             breakdown = {
                 **content_bd,
                 "ltr_score_raw": round(float(raw_scores[i]), 4),
@@ -483,6 +495,11 @@ class LTRScorer:
                     score_breakdown=breakdown,
                     explanation_tags=tags,
                     avg_daily_cost_usd=float(avg_daily) if avg_daily else None,
+                    avg_daily_budget_usd=content_result.avg_daily_budget_usd
+                    if content_result is not None
+                    else (float(avg_daily) if avg_daily else None),
+                    route_cost_usd=content_result.route_cost_usd if content_result is not None else None,
+                    route_cost_source=content_result.route_cost_source if content_result is not None else None,
                     season_score=round(season, 4),
                     safety_score=round(safety, 4),
                 )

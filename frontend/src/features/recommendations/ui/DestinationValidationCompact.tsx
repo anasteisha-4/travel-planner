@@ -8,6 +8,7 @@ type Props = {
   destinationId: string | null;
   travelMonth: number;
   budgetPerDayUsd?: number | null;
+  budgetUnlimited?: boolean;
   className?: string;
 };
 
@@ -55,6 +56,7 @@ export const DestinationValidationCompact = ({
   destinationId,
   travelMonth,
   budgetPerDayUsd,
+  budgetUnlimited = false,
   className = '',
 }: Props) => {
   const trackedKeys = useRef<Set<string>>(new Set());
@@ -71,7 +73,7 @@ export const DestinationValidationCompact = ({
 
   useEffect(() => {
     if (!destinationId || !data) return;
-    const key = `${destinationId}:${travelMonth}:${budgetPerDayUsd ?? 'none'}`;
+    const key = `${destinationId}:${travelMonth}:${budgetUnlimited ? 'unlimited' : budgetPerDayUsd ?? 'none'}`;
     if (trackedKeys.current.has(key)) return;
     trackedKeys.current.add(key);
     sendEvent(
@@ -80,6 +82,7 @@ export const DestinationValidationCompact = ({
         destination_id: destinationId,
         travel_month: travelMonth,
         budget_per_day_usd: budgetPerDayUsd ?? null,
+        budget_unlimited: budgetUnlimited,
         warnings_count: data.warnings.length,
         warning_types: data.warnings.map((warning) => warning.type),
         source: 'trip_form',
@@ -87,7 +90,7 @@ export const DestinationValidationCompact = ({
       'destination',
       destinationId
     );
-  }, [budgetPerDayUsd, data, destinationId, travelMonth]);
+  }, [budgetPerDayUsd, budgetUnlimited, data, destinationId, travelMonth]);
 
   if (!destinationId) {
     return (
@@ -122,7 +125,7 @@ export const DestinationValidationCompact = ({
   }
 
   const warningsByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
-  const missingBudget = budgetPerDayUsd === null || budgetPerDayUsd === undefined;
+  const missingBudget = !budgetUnlimited && (budgetPerDayUsd === null || budgetPerDayUsd === undefined);
   const overallStatus = missingBudget && data.warnings.length === 0 ? 'caution' : getOverallStatus(data.warnings);
   const overallMeta = STATUS_META[overallStatus];
   const OverallIcon = overallMeta.icon;
@@ -150,9 +153,12 @@ export const DestinationValidationCompact = ({
             ? 'caution'
             : statusFromWarning(warningsByType.get(factor.key));
           const meta = STATUS_META[status];
-          const title = factor.key === 'budget' && missingBudget
-            ? 'Бюджет не проверен: нужен лимит поездки'
-            : warningsByType.get(factor.key)?.message ?? meta.label;
+          const title =
+            factor.key === 'budget' && budgetUnlimited
+              ? 'Бюджет без лимита'
+              : factor.key === 'budget' && missingBudget
+                ? 'Бюджет не проверен: нужен лимит поездки'
+                : warningsByType.get(factor.key)?.message ?? meta.label;
           return (
             <div
               key={factor.key}

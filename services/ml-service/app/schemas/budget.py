@@ -11,6 +11,7 @@ class BudgetPredictRequest(BaseModel):
     travel_month: int = Field(..., ge=1, le=12)
     accommodation_tier: str = "mid"
     currency: str = "USD"
+    budget_limit_usd: float | None = Field(default=None, ge=0)
     origin_city_name: str | None = None
     origin_lat: float | None = Field(default=None, ge=-90, le=90)
     origin_lng: float | None = Field(default=None, ge=-180, le=180)

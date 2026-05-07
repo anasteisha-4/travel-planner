@@ -10,6 +10,7 @@ from app.lib.russian_names import translate_destination_name
 from app.models.recommendation_log import RecommendationLog
 from app.schemas.recommendation import RecommendRequest, RecommendResponse
 from app.services.content_scorer import BaseScorer, ContentScorer
+from app.services.currency import convert_usd, normalize_currency
 from app.services.data_loader import get_all_destinations, get_destination_features
 from app.services.experiment import get_variant
 from app.services.profile_client import _get_profile_sync
@@ -68,6 +69,7 @@ def get_recommendations(
     t_start = time.monotonic()
 
     profile = _get_profile_sync(db, user_id)
+    display_currency = normalize_currency(profile.get("preferred_currency"))
 
     destinations = get_all_destinations(db)
     dest_ids = [uuid.UUID(str(d["id"])) for d in destinations]
@@ -97,6 +99,10 @@ def get_recommendations(
                 "name_original": item.name_original or item.name,
                 "name_ru": item.name_ru or translate_destination_name(item.name),
                 "display_name": item.display_name or item.name_ru or translate_destination_name(item.name),
+                "avg_daily_cost": convert_usd(item.avg_daily_cost_usd, display_currency),
+                "avg_daily_cost_currency": display_currency,
+                "avg_daily_budget": convert_usd(item.avg_daily_budget_usd or item.avg_daily_cost_usd, display_currency),
+                "avg_daily_budget_currency": display_currency,
             }
         )
         for item in top_results

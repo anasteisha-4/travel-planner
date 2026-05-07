@@ -163,6 +163,18 @@ const getMatchTone = (score: number) => {
   return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300';
 };
 
+const formatDailyCost = (amount: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(Math.round(amount));
+  } catch {
+    return `${Math.round(amount).toLocaleString('ru-RU')} ${currency}`;
+  }
+};
+
 type RecommendationCardProps = {
   destination: ScoredDestination;
   onClick?: () => void;
@@ -178,6 +190,10 @@ export const RecommendationCard = ({
   const season = getSeasonMeta(destination.season_score ?? 0);
   const topTags = destination.explanation_tags.slice(0, 3);
   const score = Math.round(destination.score * 100);
+  const dailyCost =
+    destination.avg_daily_budget ?? destination.avg_daily_cost ?? destination.avg_daily_cost_usd;
+  const dailyCostCurrency =
+    destination.avg_daily_budget_currency ?? destination.avg_daily_cost_currency ?? 'USD';
 
   return (
     <button
@@ -223,9 +239,9 @@ export const RecommendationCard = ({
           <span className={cn('h-2 w-2 shrink-0 rounded-full', season.dot)} />
           <span className={cn('text-[12px] font-bold', season.className)}>{season.label}</span>
         </div>
-        {destination.avg_daily_cost_usd !== null && (
+        {typeof dailyCost === 'number' && (
           <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
-            ~${Math.round(destination.avg_daily_cost_usd)}/день · USD
+            {formatDailyCost(dailyCost, dailyCostCurrency)}/день
           </span>
         )}
       </div>

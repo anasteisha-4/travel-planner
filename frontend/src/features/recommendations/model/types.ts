@@ -28,6 +28,13 @@ export type ScoredDestination = {
   score_breakdown: ScoreBreakdown;
   explanation_tags: string[];
   avg_daily_cost_usd: number | null;
+  avg_daily_cost?: number | null;
+  avg_daily_cost_currency?: string;
+  avg_daily_budget_usd?: number | null;
+  avg_daily_budget?: number | null;
+  avg_daily_budget_currency?: string;
+  route_cost_usd?: number | null;
+  route_cost_source?: string | null;
   season_score: number | null;
   safety_score: number | null;
 };
@@ -53,6 +60,7 @@ export type BudgetPredictRequest = {
   travel_month: number;
   accommodation_tier?: 'hostel' | 'budget' | 'mid' | 'luxury';
   currency?: string;
+  budget_limit_usd?: number | null;
   origin_city_name?: string | null;
   origin_lat?: number | null;
   origin_lng?: number | null;
@@ -105,6 +113,7 @@ export type DestinationValidationRequest = {
   citizenship_code?: string;
   travel_month: number;
   budget_per_day_usd?: number | null;
+  display_currency?: string | null;
 };
 
 export type DestinationValidationResponse = {

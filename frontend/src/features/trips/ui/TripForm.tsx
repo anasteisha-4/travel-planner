@@ -1,7 +1,13 @@
 import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
 import type { Trip } from '@/entities/trip';
 import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
-import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
+import {
+  budgetAmountToSliderValue,
+  budgetSliderValueToAmount,
+  localizeDestinationName,
+  UNLIMITED_BUDGET_SLIDER_VALUE,
+  useDebouncedValue,
+} from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
 import {
   AppInput,
@@ -188,6 +194,9 @@ export const TripForm = ({
   } = useTripForm(existingTrip, initialValues, onSnapshotChange, analyticsContext);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
+  const budgetSliderValue = budget >= 0
+    ? budgetAmountToSliderValue(budget, budgetConfig)
+    : UNLIMITED_BUDGET_SLIDER_VALUE;
 
   const handleSubmit = async () => {
     const trip = existingTrip ? await handleUpdate(existingTrip.id) : await handleCreate();
@@ -293,7 +302,7 @@ export const TripForm = ({
           <FieldLabel className="mb-0">Бюджет</FieldLabel>
           <span className="flex items-center gap-1.5 text-[15px] font-bold text-stone-900 dark:text-white">
             {isConverting && <Loader2 className="h-3.5 w-3.5 animate-spin text-stone-400" />}
-            {budget > 0 ? `${budget.toLocaleString('ru-RU')} ${currencySymbol}` : 'Без лимита'}
+            {budget >= 0 ? `${budget.toLocaleString('ru-RU')} ${currencySymbol}` : 'Без лимита'}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -311,13 +320,20 @@ export const TripForm = ({
           </Select>
           <div className="flex-1">
             <Slider
-              value={[budget]}
-              min={budgetConfig.min}
-              max={budgetConfig.max}
-              step={budgetConfig.step}
-              onValueChange={([val]) => setBudget(val)}
+              value={[budgetSliderValue]}
+              min={0}
+              max={UNLIMITED_BUDGET_SLIDER_VALUE}
+              step={1}
+              onValueChange={([val]) => {
+                const nextBudget = budgetSliderValueToAmount(val, budgetConfig);
+                setBudget(nextBudget ?? -1);
+              }}
               disabled={isConverting}
             />
+            <div className="mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+              <span>0</span>
+              <span>Без лимита</span>
+            </div>
           </div>
         </div>
       </div>

@@ -74,6 +74,113 @@ def _cache_set(cache_key: str, fare: FareEstimate) -> None:
         return
 
 
+def _cache_set_many(cache_keys: list[str], fare: FareEstimate) -> None:
+    for cache_key in cache_keys:
+        _cache_set(cache_key, fare)
+
+
+def _exact_cache_key(
+    origin_iata: str,
+    destination_hint: str,
+    depart_at: str,
+    return_at: str,
+    duration_days: int,
+    fare_strategy: str,
+    trip_class: int,
+) -> str:
+    return (
+        "travelpayouts:fare:v1:"
+        f"{origin_iata}:{destination_hint}:{depart_at[:7]}:{return_at[:7]}:{duration_days}:usd:{fare_strategy}:{trip_class}"
+    )
+
+
+def _route_month_cache_key(
+    origin_iata: str,
+    destination_hint: str,
+    depart_at: str,
+    fare_strategy: str,
+    trip_class: int,
+) -> str:
+    return (
+        "travelpayouts:fare:route-month:v1:"
+        f"{origin_iata}:{destination_hint}:{depart_at[:7]}:usd:{fare_strategy}:{trip_class}"
+    )
+
+
+def _cache_get_nearest_duration(
+    origin_iata: str,
+    destination_hint: str,
+    depart_at: str,
+    duration_days: int,
+    fare_strategy: str,
+    trip_class: int,
+) -> FareEstimate | None:
+    pattern = (
+        f"travelpayouts:fare:v1:{origin_iata}:{destination_hint}:{depart_at[:7]}:*:*:usd:{fare_strategy}:{trip_class}"
+    )
+    try:
+        keys = list(get_redis().scan_iter(pattern))
+    except redis.RedisError:
+        return None
+
+    best: tuple[int, FareEstimate] | None = None
+    for key in keys:
+        key_text = key.decode() if isinstance(key, bytes) else str(key)
+        parts = key_text.split(":")
+        if len(parts) < 11:
+            continue
+        try:
+            cached_duration = int(parts[-4])
+        except ValueError:
+            continue
+        fare = _cache_get(key_text)
+        if fare is None:
+            continue
+        distance = abs(cached_duration - duration_days)
+        if best is None or distance < best[0]:
+            best = (distance, fare)
+    return best[1] if best is not None else None
+
+
+def _cache_get_fare(
+    origin_iata: str,
+    destination_hint: str,
+    depart_at: str,
+    return_at: str,
+    duration_days: int,
+    fare_strategy: str,
+    trip_class: int,
+) -> FareEstimate | None:
+    exact = _cache_get(
+        _exact_cache_key(
+            origin_iata,
+            destination_hint,
+            depart_at,
+            return_at,
+            duration_days,
+            fare_strategy,
+            trip_class,
+        )
+    )
+    if exact is not None:
+        return exact
+
+    route_month = _cache_get(
+        _route_month_cache_key(origin_iata, destination_hint, depart_at, fare_strategy, trip_class)
+    )
+    if route_month is not None:
+        return route_month
+
+    return _cache_get_nearest_duration(
+        origin_iata,
+        destination_hint,
+        depart_at,
+        duration_days,
+        fare_strategy,
+        trip_class,
+    )
+
+
 def _rate_limit_allows(method_key: str, limit_per_minute: int) -> bool:
     try:
         r = get_redis()
@@ -184,11 +291,31 @@ def get_cached_fare_usd(
         return None
 
     depart_at, return_at = _date_window(travel_month, duration_days)
-    cache_key = (
-        "travelpayouts:fare:v1:"
-        f"{origin_iata}:{destination_hint}:{depart_at[:7]}:{return_at[:7]}:{duration_days}:usd:{fare_strategy}:{trip_class}"
+    cache_key = _exact_cache_key(
+        origin_iata,
+        destination_hint,
+        depart_at,
+        return_at,
+        duration_days,
+        fare_strategy,
+        trip_class,
     )
-    cached = _cache_get(cache_key)
+    route_month_cache_key = _route_month_cache_key(
+        origin_iata,
+        destination_hint,
+        depart_at,
+        fare_strategy,
+        trip_class,
+    )
+    cached = _cache_get_fare(
+        origin_iata,
+        destination_hint,
+        depart_at,
+        return_at,
+        duration_days,
+        fare_strategy,
+        trip_class,
+    )
     if cached:
         return cached
 
@@ -268,5 +395,46 @@ def get_cached_fare_usd(
     if fare is None:
         return None
 
-    _cache_set(cache_key, fare)
+    _cache_set_many([cache_key, route_month_cache_key], fare)
     return fare
+
+
+def get_cached_fare_only_usd(
+    *,
+    origin_city_name: str | None,
+    origin_lat: float | None = None,
+    origin_lng: float | None = None,
+    destination_name: str | None,
+    destination_lat: float | None = None,
+    destination_lng: float | None = None,
+    destination_country_code: str | None,
+    travel_month: int,
+    duration_days: int,
+    accommodation_tier: str,
+) -> FareEstimate | None:
+    """Return cached fare evidence without making external Travelpayouts requests."""
+    fare_strategy, trip_class = _fare_strategy(accommodation_tier)
+    origin_iata = resolve_iata(origin_city_name, lat=origin_lat, lng=origin_lng)
+    if not origin_iata:
+        return None
+
+    destination_iata = resolve_iata(
+        destination_name,
+        lat=destination_lat,
+        lng=destination_lng,
+        country_code=destination_country_code,
+    )
+    destination_hint = destination_iata or (destination_country_code or "").upper()
+    if len(destination_hint) not in (2, 3):
+        return None
+
+    depart_at, return_at = _date_window(travel_month, duration_days)
+    return _cache_get_fare(
+        origin_iata,
+        destination_hint,
+        depart_at,
+        return_at,
+        duration_days,
+        fare_strategy,
+        trip_class,
+    )

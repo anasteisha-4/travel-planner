@@ -8,6 +8,7 @@ import {
   DURATION_OPTIONS,
   LANGUAGE_OPTIONS,
   RISK_TOLERANCE_LABELS,
+  REST_LEVEL_OPTIONS,
   TRAVEL_TYPES,
   TRIP_DURATIONS,
   VISA_OPTIONS,
@@ -33,6 +34,20 @@ const SectionTitle = ({ children }: { children: React.ReactNode }) => (
 
 const Divider = () => <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />;
 
+const formatBudgetRange = (
+  min: number | null | undefined,
+  max: number | null | undefined,
+  format: (value: number) => string
+) => {
+  const hasMin = min !== null && min !== undefined && min > 0;
+  const hasMax = max !== null && max !== undefined;
+
+  if (hasMin && hasMax) return `${format(min)} — ${format(max)}`;
+  if (hasMin) return `от ${format(min)}`;
+  if (hasMax) return `до ${format(max)}`;
+  return 'Без лимита';
+};
+
 export const PreferencesView = ({ preferences }: { preferences: Partial<UserProfileV2> }) => {
   const vacationPrefs = (preferences.vacation_preferences_ranked ?? []).filter(
     (id) => !!TRAVEL_TYPES.find((t) => t.id === id)
@@ -42,17 +57,17 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
   const likedNames = preferences.liked_destination_names ?? [];
   const likedIds = preferences.liked_destination_ids ?? [];
   const hasBudget =
-    preferences.budget_min !== null &&
-    preferences.budget_max !== null &&
-    preferences.budget_min !== undefined &&
-    preferences.budget_max !== undefined;
+    (preferences.budget_min !== null && preferences.budget_min !== undefined) ||
+    (preferences.budget_max !== null && preferences.budget_max !== undefined);
   const currency = preferences.preferred_currency ?? 'RUB';
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS.RUB;
+  const restLevel = REST_LEVEL_OPTIONS.find((option) => option.id === preferences.rest_level);
 
   const hasAnything =
     vacationPrefs.length > 0 ||
     climatePrefs.length > 0 ||
     hasBudget ||
+    restLevel ||
     preferences.typical_duration ||
     preferences.origin_city_name ||
     preferences.risk_tolerance ||
@@ -93,10 +108,10 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
       )}
 
       {vacationPrefs.length > 0 &&
-        (hasBudget || preferences.typical_duration || preferences.origin_city_name) && <Divider />}
+        (hasBudget || restLevel || preferences.typical_duration || preferences.origin_city_name) && <Divider />}
 
       {/* Бюджет и поездки */}
-      {(hasBudget || preferences.typical_duration || preferences.origin_city_name) && (
+      {(hasBudget || restLevel || preferences.typical_duration || preferences.origin_city_name) && (
         <div className="flex flex-col gap-0">
           {preferences.origin_city_name && (
             <div className="flex items-center justify-between py-2">
@@ -108,7 +123,7 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               </span>
             </div>
           )}
-          {preferences.origin_city_name && (hasBudget || preferences.typical_duration) && (
+          {preferences.origin_city_name && (hasBudget || restLevel || preferences.typical_duration) && (
             <div className="h-px bg-[hsl(var(--surface-field))]" />
           )}
 
@@ -119,13 +134,22 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               </span>
               <div className="text-right">
                 <span className="text-[14px] font-bold text-foreground">
-                  {budgetConfig.format(preferences.budget_min!)} —{' '}
-                  {budgetConfig.format(preferences.budget_max!)}
+                  {formatBudgetRange(preferences.budget_min, preferences.budget_max, budgetConfig.format)}
                 </span>
               </div>
             </div>
           )}
-          {hasBudget && preferences.typical_duration && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+          {hasBudget && (restLevel || preferences.typical_duration) && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+
+          {restLevel && (
+            <div className="flex items-center justify-between py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                🧳 Уровень отдыха
+              </span>
+              <span className="text-[14px] font-semibold text-foreground">{restLevel.label}</span>
+            </div>
+          )}
+          {restLevel && preferences.typical_duration && <div className="h-px bg-[hsl(var(--surface-field))]" />}
 
           {preferences.typical_duration && (
             <div className="flex items-center justify-between py-2">

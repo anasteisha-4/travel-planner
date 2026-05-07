@@ -10,26 +10,13 @@ from app.exceptions import AppException
 from app.schemas.budget import BudgetAssumptions, BudgetPredictRequest, BudgetPredictResponse
 from app.services.budget_formula import estimate_travel_cost, haversine
 from app.services.budget_scorer import get_budget_scorer
+from app.services.content_scorer import resolve_accommodation_tier
+from app.services.currency import SUPPORTED_CURRENCY_RATES
 from app.services.data_loader import get_destination_features
 from app.services.profile_client import _get_profile_sync
 from app.services.travelpayouts_service import get_cached_fare_usd
 
 router = APIRouter()
-
-CURRENCY_RATES: dict[str, float] = {
-    "USD": 1.0,
-    "EUR": 0.93,
-    "RUB": 90.0,
-    "GBP": 0.79,
-    "AED": 3.67,
-    "TRY": 32.0,
-    "THB": 36.0,
-    "CNY": 7.2,
-    "JPY": 150.0,
-    "KZT": 450.0,
-    "GEL": 2.65,
-    "AMD": 395.0,
-}
 
 ACCOMMODATION_DAILY_FRACTION = {"hostel": 0.18, "budget": 0.35, "mid": 0.65, "luxury": 1.60}
 MEALS_DAILY_FRACTION = {"hostel": 0.25, "budget": 0.30, "mid": 0.38, "luxury": 0.55}
@@ -128,6 +115,22 @@ def _formula_breakdown(
     }
 
 
+def _resolve_requested_tier(request: BudgetPredictRequest, profile: dict) -> str:
+    budget_caps = [
+        _as_float(request.budget_limit_usd),
+        _as_float(profile.get("budget_max_usd")),
+    ]
+    budget_cap = min((value for value in budget_caps if value is not None), default=None)
+    requested_tier = request.accommodation_tier if request.accommodation_tier in ACCOMMODATION_DAILY_FRACTION else "mid"
+    profile_tier = resolve_accommodation_tier(profile.get("rest_level"), budget_cap)
+
+    if profile.get("rest_level") is not None:
+        return profile_tier
+    if requested_tier == "luxury":
+        return profile_tier
+    return requested_tier
+
+
 @router.post("/budget/predict", response_model=BudgetPredictResponse)
 def predict_budget(
     request: BudgetPredictRequest,
@@ -151,6 +154,7 @@ def predict_budget(
 
     profile = _get_profile_sync(db, user_id)
     origin_lat, origin_lng, origin_city_name, origin_source = _resolve_origin(request, profile)
+    accommodation_tier = _resolve_requested_tier(request, profile)
     travel_distance_km = (
         round(haversine(origin_lat, origin_lng, dest_lat, dest_lng), 1)
         if origin_lat is not None and origin_lng is not None
@@ -165,7 +169,7 @@ def predict_budget(
             duration_days=request.duration_days,
             people_count=request.people_count,
             travel_month=request.travel_month,
-            accommodation_tier=request.accommodation_tier,
+            accommodation_tier=accommodation_tier,
             origin_lat=origin_lat,
             origin_lng=origin_lng,
         )
@@ -177,7 +181,7 @@ def predict_budget(
             request.duration_days,
             request.people_count,
             request.travel_month,
-            request.accommodation_tier,
+            accommodation_tier,
             origin_lat,
             origin_lng,
             dest_lat,
@@ -196,14 +200,14 @@ def predict_budget(
         }
 
     currency = request.currency.upper()
-    fx = CURRENCY_RATES.get(currency, 1.0)
+    fx = SUPPORTED_CURRENCY_RATES.get(currency, 1.0)
 
     breakdown_usd = _formula_breakdown(
         costs,
         request.duration_days,
         request.people_count,
         request.travel_month,
-        request.accommodation_tier,
+        accommodation_tier,
         origin_lat,
         origin_lng,
         dest_lat,
@@ -220,7 +224,7 @@ def predict_budget(
         destination_country_code=dest_info.get("country_code"),
         travel_month=request.travel_month,
         duration_days=request.duration_days,
-        accommodation_tier=request.accommodation_tier,
+        accommodation_tier=accommodation_tier,
     )
     travel_cost_source = "distance_fallback" if fallback_travel_usd > 0 else "none"
     origin_iata = None
@@ -254,7 +258,7 @@ def predict_budget(
         assumptions=BudgetAssumptions(
             duration_days=request.duration_days,
             people_count=request.people_count,
-            accommodation_tier=request.accommodation_tier,
+            accommodation_tier=accommodation_tier,
             travel_month=request.travel_month,
             currency=currency,
             origin_city_name=origin_city_name,

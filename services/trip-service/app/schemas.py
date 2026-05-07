@@ -171,6 +171,7 @@ class UserProfileCreate(BaseModel):
     preferred_currency: str = "RUB"
     budget_min: Decimal | None = None
     budget_max: Decimal | None = None
+    rest_level: str | None = None
     typical_duration: str | None = None
     origin_city_id: int | None = None
     origin_city_name: str | None = None
@@ -203,11 +204,19 @@ class UserProfileCreate(BaseModel):
             raise ValueError("vacation_preferences_ranked can have at most 5 items")
         return v
 
+    @field_validator("rest_level")
+    @classmethod
+    def valid_rest_level(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"economy", "standard", "comfort", "luxury"}:
+            raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
+        return v
+
 
 class UserProfileUpdate(BaseModel):
     preferred_currency: str | None = None
     budget_min: Decimal | None = None
     budget_max: Decimal | None = None
+    rest_level: str | None = None
     typical_duration: str | None = None
     origin_city_id: int | None = None
     origin_city_name: str | None = None
@@ -223,6 +232,13 @@ class UserProfileUpdate(BaseModel):
     climate_preferences: list[str] | None = None
     free_text_notes: str | None = None
 
+    @field_validator("rest_level")
+    @classmethod
+    def valid_rest_level(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"economy", "standard", "comfort", "luxury"}:
+            raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
+        return v
+
 
 class UserProfileResponse(BaseModel):
     id: UUID
@@ -232,6 +248,7 @@ class UserProfileResponse(BaseModel):
     budget_max: Decimal | None
     budget_min_usd: Decimal | None
     budget_max_usd: Decimal | None
+    rest_level: str | None
     typical_duration: str | None
     typical_duration_days: int | None
     origin_city_id: int | None
@@ -261,6 +278,7 @@ class OnboardingStepPayload(BaseModel):
     preferred_currency: str | None = None
     budget_min: Decimal | None = None
     budget_max: Decimal | None = None
+    rest_level: str | None = None
     typical_duration: str | None = None
     origin_city_id: int | None = None
     origin_city_name: str | None = None
@@ -275,3 +293,10 @@ class OnboardingStepPayload(BaseModel):
     crowd_preference: int | None = None
     climate_preferences: list[str] | None = None
     free_text_notes: str | None = None
+
+    @field_validator("rest_level")
+    @classmethod
+    def valid_rest_level(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"economy", "standard", "comfort", "luxury"}:
+            raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
+        return v

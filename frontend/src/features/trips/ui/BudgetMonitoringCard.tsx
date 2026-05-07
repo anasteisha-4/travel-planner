@@ -7,6 +7,8 @@ type BudgetMonitoringCardProps = {
   burnRatePerDay: number;
   currency: string;
   elapsedDays: number;
+  peopleCount: number;
+  plannedDailyBudget: number | null;
   projectedBudgetDiff: number | null;
   projectedBudgetPct: number | null;
   projectedFinalSpend: number;
@@ -63,6 +65,8 @@ export const BudgetMonitoringCard = ({
   burnRatePerDay,
   currency,
   elapsedDays,
+  peopleCount,
+  plannedDailyBudget,
   projectedBudgetDiff,
   projectedBudgetPct,
   projectedFinalSpend,
@@ -191,6 +195,20 @@ export const BudgetMonitoringCard = ({
           </p>
         </div>
       </div>
+
+      {plannedDailyBudget !== null && (
+        <div className="mt-3 rounded-2xl bg-[hsl(var(--surface-muted))] px-3 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            План направления
+          </p>
+          <p className="mt-1 text-[15px] font-extrabold leading-snug text-stone-900 dark:text-white">
+            {fmt(plannedDailyBudget)} {currency}/день
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-stone-500 dark:text-stone-400">
+            Для {peopleCount} чел.; отель считается по комнатам, не линейно по людям
+          </p>
+        </div>
+      )}
     </div>
   );
 };

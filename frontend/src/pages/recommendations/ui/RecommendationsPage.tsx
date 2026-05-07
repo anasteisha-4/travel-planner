@@ -38,7 +38,7 @@ export const RecommendationsPage = () => {
   const [selected, setSelected] = useState<ScoredDestination | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const { data, isLoading, isError, refetch } = useRecommendations({ month, region });
+  const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
   useQuery({
     queryKey: ['profile'],
     queryFn: profileApi.getProfile,
@@ -144,7 +144,7 @@ export const RecommendationsPage = () => {
       </AppPageHeader>
 
       <PageContent className="pt-4">
-        {isLoading ? (
+        {isLoading || isFetching ? (
           <div className="flex flex-col gap-3">
             {[0, 1, 2, 3].map((i) => (
               <SkeletonCard key={i} />

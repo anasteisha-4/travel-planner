@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user_id
+from app.services.currency import convert_usd, normalize_currency
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ class ValidateTripRequest(BaseModel):
     citizenship_code: str = "RU"
     travel_month: int = Field(..., ge=1, le=12)
     budget_per_day_usd: float | None = None
+    display_currency: str | None = None
 
 
 class ValidationWarning(BaseModel):
@@ -134,6 +136,7 @@ def validate_trip(
 
     # --- Budget check (optional) ---
     if request.budget_per_day_usd is not None:
+        display_currency = normalize_currency(request.display_currency)
         costs_row = db.execute(
             text("SELECT avg_daily_cost_usd FROM destination_costs WHERE destination_id = :did"),
             {"did": dest_id},
@@ -141,17 +144,28 @@ def validate_trip(
 
         if costs_row and costs_row.avg_daily_cost_usd:
             avg_daily = float(costs_row.avg_daily_cost_usd)
+            avg_daily_display = convert_usd(avg_daily, display_currency)
+            budget_per_day_display = convert_usd(request.budget_per_day_usd, display_currency)
             info["avg_daily_cost_usd"] = avg_daily
+            info["avg_daily_cost"] = avg_daily_display
+            info["budget_per_day"] = budget_per_day_display
+            info["display_currency"] = display_currency
             if request.budget_per_day_usd < avg_daily * 0.7:
+                avg_text = (
+                    f"{avg_daily_display:.0f} {display_currency}/day"
+                    if avg_daily_display is not None
+                    else f"${avg_daily:.0f}/day"
+                )
+                budget_text = (
+                    f"{budget_per_day_display:.0f} {display_currency}/day"
+                    if budget_per_day_display is not None
+                    else f"${request.budget_per_day_usd:.0f}/day"
+                )
                 warnings.append(
                     ValidationWarning(
                         type="budget",
                         severity="medium",
-                        message=(
-                            f"Budget may be tight: avg daily cost is "
-                            f"${avg_daily:.0f}/day, your budget is "
-                            f"${request.budget_per_day_usd:.0f}/day."
-                        ),
+                        message=(f"Budget may be tight: avg daily cost is {avg_text}, your budget is {budget_text}."),
                     )
                 )
 

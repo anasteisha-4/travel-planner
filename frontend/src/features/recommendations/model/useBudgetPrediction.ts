@@ -12,6 +12,7 @@ export const useBudgetPrediction = (params: BudgetPredictRequest | null) => {
       params?.travel_month,
       params?.accommodation_tier ?? null,
       params?.currency ?? null,
+      params?.budget_limit_usd ?? null,
       params?.origin_city_name ?? null,
       params?.origin_lat ?? null,
       params?.origin_lng ?? null,

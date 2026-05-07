@@ -50,6 +50,31 @@ def _get_or_create_profile(db: Session, user_id: UUID) -> models.UserProfile:
     return profile
 
 
+async def _sync_budget_usd(profile: models.UserProfile) -> None:
+    if profile.budget_min is None and profile.budget_max is None:
+        profile.budget_min_usd = None
+        profile.budget_max_usd = None
+        return
+
+    currency = (profile.preferred_currency or "USD").upper()
+    if currency == "USD":
+        profile.budget_min_usd = profile.budget_min
+        profile.budget_max_usd = profile.budget_max
+        return
+
+    rates = await get_exchange_rates("USD")
+    if not rates:
+        return
+    if profile.budget_min is not None:
+        profile.budget_min_usd = convert_amount(profile.budget_min, currency, "USD", rates)
+    else:
+        profile.budget_min_usd = None
+    if profile.budget_max is not None:
+        profile.budget_max_usd = convert_amount(profile.budget_max, currency, "USD", rates)
+    else:
+        profile.budget_max_usd = None
+
+
 @router.get("/", response_model=schemas.UserProfileResponse)
 def get_profile(
     user_id: UUID = Depends(get_current_user_id),
@@ -59,7 +84,7 @@ def get_profile(
 
 
 @router.put("/", response_model=schemas.UserProfileResponse)
-def update_profile(
+async def update_profile(
     data: schemas.UserProfileCreate,
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -67,13 +92,14 @@ def update_profile(
     profile = _get_or_create_profile(db, user_id)
     for field, value in data.model_dump(exclude_unset=False).items():
         setattr(profile, field, value)
+    await _sync_budget_usd(profile)
     db.commit()
     db.refresh(profile)
     return profile
 
 
 @router.patch("/", response_model=schemas.UserProfileResponse)
-def patch_profile(
+async def patch_profile(
     data: schemas.UserProfileUpdate,
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -81,6 +107,8 @@ def patch_profile(
     profile = _get_or_create_profile(db, user_id)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
+    if {"budget_min", "budget_max", "preferred_currency"} & data.model_fields_set:
+        await _sync_budget_usd(profile)
     db.commit()
     db.refresh(profile)
     return profile
@@ -113,20 +141,7 @@ async def complete_onboarding(
     if profile.typical_duration and profile.typical_duration in DURATION_DAYS_MAP:
         profile.typical_duration_days = DURATION_DAYS_MAP[profile.typical_duration]
 
-    if profile.budget_min is not None or profile.budget_max is not None:
-        currency = (profile.preferred_currency or "USD").upper()
-        if currency != "USD":
-            rates = await get_exchange_rates("USD")
-            if rates:
-                if profile.budget_min is not None:
-                    converted = convert_amount(profile.budget_min, currency, "USD", rates)
-                    profile.budget_min_usd = converted
-                if profile.budget_max is not None:
-                    converted = convert_amount(profile.budget_max, currency, "USD", rates)
-                    profile.budget_max_usd = converted
-        else:
-            profile.budget_min_usd = profile.budget_min
-            profile.budget_max_usd = profile.budget_max
+    await _sync_budget_usd(profile)
 
     profile.onboarding_completed = True
     profile.onboarding_completed_at = datetime.now(UTC)

@@ -49,13 +49,14 @@ export const TripDetailPage = () => {
   const [editSnapshot, setEditSnapshot] = useState<TripFormSnapshot | null>(null);
   const debouncedEditSnapshot = useDebouncedValue(editSnapshot, 450);
 
-  const validationBudget = debouncedEditSnapshot?.budget ?? trip?.budget ?? 0;
+  const validationBudget = debouncedEditSnapshot?.budget ?? trip?.budget ?? -1;
   const validationCurrency = debouncedEditSnapshot?.currency ?? trip?.currency ?? 'RUB';
   const validationPeopleCount = debouncedEditSnapshot?.people_count ?? trip?.people_count ?? 1;
   const validationStartDate = debouncedEditSnapshot?.start_date ?? trip?.start_date;
   const validationEndDate = debouncedEditSnapshot?.end_date ?? trip?.end_date;
   const validationDurationDays = getDurationDays(validationStartDate, validationEndDate);
   const validationDestinationId = debouncedEditSnapshot?.destination_id ?? trip?.destination_id ?? null;
+  const isValidationBudgetUnlimited = validationBudget < 0;
   const needsUsdRate = !!trip && validationBudget > 0 && validationCurrency !== 'USD';
   const { data: validationRates } = useQuery({
     queryKey: ['exchange-rates', validationCurrency],
@@ -64,13 +65,15 @@ export const TripDetailPage = () => {
     staleTime: 60 * 60 * 1000,
     retry: 1,
   });
-  const validationBudgetUsd = validationBudget > 0
-    ? validationCurrency === 'USD'
+  const validationBudgetUsd = isValidationBudgetUnlimited
+    ? null
+    : validationCurrency === 'USD'
       ? validationBudget
-      : validationRates?.rates.USD
-        ? validationBudget * validationRates.rates.USD
-        : null
-    : null;
+      : validationBudget === 0
+        ? 0
+        : validationRates?.rates.USD
+          ? validationBudget * validationRates.rates.USD
+          : null;
   const validationBudgetPerDayUsd = validationBudgetUsd !== null
     ? validationBudgetUsd / Math.max(validationDurationDays * validationPeopleCount, 1)
     : null;
@@ -192,6 +195,7 @@ export const TripDetailPage = () => {
             destinationId={validationDestinationId}
             travelMonth={getTravelMonth(validationStartDate)}
             budgetPerDayUsd={validationBudgetPerDayUsd}
+            budgetUnlimited={isValidationBudgetUnlimited}
           />
         }
       />

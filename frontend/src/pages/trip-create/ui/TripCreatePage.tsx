@@ -32,9 +32,26 @@ const getTravelMonth = (startDate?: string) => {
   return Number.isFinite(parsed.getTime()) ? parsed.getMonth() + 1 : new Date().getMonth() + 1;
 };
 
-const getAccommodationTier = (value: string | null): 'budget' | 'mid' | 'luxury' => {
-  if (value === 'budget' || value === 'luxury') return value;
-  return 'mid';
+const getAccommodationTier = (
+  value: string | null,
+  restLevel?: string | null,
+  budgetLimitUsd?: number | null
+): 'budget' | 'mid' | 'luxury' => {
+  const requested = value === 'budget' || value === 'luxury' ? value : 'mid';
+  const profileTier =
+    restLevel === 'economy'
+      ? 'budget'
+      : restLevel === 'luxury'
+        ? 'luxury'
+        : 'mid';
+
+  if (budgetLimitUsd !== null && budgetLimitUsd !== undefined) {
+    if (budgetLimitUsd < 900) return 'budget';
+    if (budgetLimitUsd < 3000 && (requested === 'luxury' || profileTier === 'luxury')) return 'mid';
+  }
+  if (restLevel) return profileTier;
+  if (!restLevel && requested === 'luxury') return 'mid';
+  return requested;
 };
 
 const normalizeCity = (value?: string | null) => value?.trim().toLowerCase() ?? '';
@@ -65,11 +82,9 @@ export const TripCreatePage = () => {
   const [searchParams] = useSearchParams();
   const trackedBudgetKeys = useRef<Set<string>>(new Set());
 
-  const hasRecommendationPrefill = searchParams.has('destination');
   const { data: profile, isLoading: isProfileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: profileApi.getProfile,
-    enabled: hasRecommendationPrefill,
     retry: 1,
   });
 
@@ -110,8 +125,7 @@ export const TripCreatePage = () => {
   const budgetDurationDays = getDurationDays(previewStartDate, previewEndDate) ?? profile?.typical_duration_days ?? 7;
   const budgetPeopleCount = debouncedFormSnapshot?.people_count ?? initialValues.people_count ?? 1;
   const budgetCurrency = debouncedFormSnapshot?.currency ?? initialValues.currency ?? profile?.preferred_currency ?? 'RUB';
-  const budgetValue = debouncedFormSnapshot?.budget ?? initialValues.budget ?? 0;
-  const budgetAccommodationTier = getAccommodationTier(searchParams.get('accommodation_tier'));
+  const budgetValue = debouncedFormSnapshot?.budget ?? initialValues.budget ?? -1;
   const needsUsdRate = budgetValue > 0 && budgetCurrency !== 'USD';
   const { data: validationRates } = useQuery({
     queryKey: ['exchange-rates', budgetCurrency],
@@ -120,13 +134,21 @@ export const TripCreatePage = () => {
     staleTime: 60 * 60 * 1000,
     retry: 1,
   });
-  const validationBudgetUsd = budgetValue > 0
-    ? budgetCurrency === 'USD'
+  const isBudgetUnlimited = budgetValue < 0;
+  const validationBudgetUsd = isBudgetUnlimited
+    ? null
+    : budgetCurrency === 'USD'
       ? budgetValue
-      : validationRates?.rates.USD
-        ? budgetValue * validationRates.rates.USD
-        : null
-    : null;
+      : budgetValue === 0
+        ? 0
+        : validationRates?.rates.USD
+          ? budgetValue * validationRates.rates.USD
+          : null;
+  const budgetAccommodationTier = getAccommodationTier(
+    searchParams.get('accommodation_tier'),
+    profile?.rest_level,
+    validationBudgetUsd
+  );
   const validationBudgetPerDayUsd = validationBudgetUsd !== null
     ? validationBudgetUsd / Math.max(budgetDurationDays * budgetPeopleCount, 1)
     : null;
@@ -139,6 +161,7 @@ export const TripCreatePage = () => {
           travel_month: getTravelMonth(previewStartDate),
           accommodation_tier: budgetAccommodationTier,
           currency: budgetCurrency,
+          budget_limit_usd: validationBudgetUsd,
           origin_city_name: previewDepartureCity,
           origin_lat: selectedOriginLat ?? (isProfileOrigin ? profile?.origin_lat : null),
           origin_lng: selectedOriginLng ?? (isProfileOrigin ? profile?.origin_lng : null),
@@ -321,6 +344,7 @@ export const TripCreatePage = () => {
                 destinationId={destinationId}
                 travelMonth={getTravelMonth(previewStartDate)}
                 budgetPerDayUsd={validationBudgetPerDayUsd}
+                budgetUnlimited={isBudgetUnlimited}
               />
             }
           />

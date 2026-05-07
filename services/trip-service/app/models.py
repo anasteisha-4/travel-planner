@@ -75,6 +75,7 @@ class UserProfile(BaseModel):
     budget_max: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     budget_min_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     budget_max_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    rest_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     typical_duration: Mapped[str | None] = mapped_column(String(20), nullable=True)
     typical_duration_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     origin_city_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
