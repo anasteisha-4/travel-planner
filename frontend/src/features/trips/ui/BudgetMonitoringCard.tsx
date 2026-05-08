@@ -1,5 +1,20 @@
-import type { BudgetMonitoringStatus } from '../model/useTripAnalytics';
 import { AlertTriangle, CheckCircle2, Gauge, TrendingUp, WalletCards } from 'lucide-react';
+import type { BudgetMonitoringStatus } from '../model/useTripAnalytics';
+
+type BudgetMonitorCardData = {
+  risk_status: string;
+  budget_usage_projected_pct: number | null;
+  projected_final_mid: number;
+  budget_gap_mid: number | null;
+  current_spent: number;
+  remaining_mid: number;
+  locked_fixed_costs: number;
+  used_ml_model: boolean;
+  category_contributions: Array<{
+    category: string;
+    remaining_mid: number;
+  }>;
+};
 
 type BudgetMonitoringCardProps = {
   budget: number | null;
@@ -7,6 +22,7 @@ type BudgetMonitoringCardProps = {
   burnRatePerDay: number;
   currency: string;
   elapsedDays: number;
+  monitor?: BudgetMonitorCardData;
   peopleCount: number;
   plannedDailyBudget: number | null;
   projectedBudgetDiff: number | null;
@@ -65,7 +81,7 @@ export const BudgetMonitoringCard = ({
   burnRatePerDay,
   currency,
   elapsedDays,
-  peopleCount,
+  monitor,
   plannedDailyBudget,
   projectedBudgetDiff,
   projectedBudgetPct,
@@ -73,7 +89,13 @@ export const BudgetMonitoringCard = ({
   remainingDays,
   totalSpent,
 }: BudgetMonitoringCardProps) => {
-  if (budget === null || budget <= 0 || budgetMonitoringStatus === null || projectedBudgetPct === null) {
+  if (
+    !monitor &&
+    (budget === null ||
+      budget <= 0 ||
+      budgetMonitoringStatus === null ||
+      projectedBudgetPct === null)
+  ) {
     return (
       <div className="trip-info-card">
         <div className="flex items-start gap-3">
@@ -96,17 +118,29 @@ export const BudgetMonitoringCard = ({
     );
   }
 
-  const meta = STATUS_META[budgetMonitoringStatus];
+  const monitorStatus =
+    monitor?.risk_status === 'under_budget' ||
+    monitor?.risk_status === 'on_track' ||
+    monitor?.risk_status === 'risk' ||
+    monitor?.risk_status === 'over_budget'
+      ? monitor.risk_status
+      : budgetMonitoringStatus;
+  const statusForMeta = monitorStatus ?? 'under_budget';
+  const meta = STATUS_META[statusForMeta];
   const Icon = meta.icon;
-  const progressPct = Math.min(Math.max(projectedBudgetPct, 0), 1);
-  const remainingProjected = projectedBudgetDiff ?? 0;
+  const isForecastOnly = monitor?.risk_status === 'forecast_only';
+  const effectiveProjectedPct = monitor?.budget_usage_projected_pct ?? projectedBudgetPct;
+  const effectiveProjectedFinal = monitor?.projected_final_mid ?? projectedFinalSpend;
+  const effectiveBudgetGap = monitor?.budget_gap_mid ?? projectedBudgetDiff;
+  const effectiveSpent = monitor?.current_spent ?? totalSpent;
+  const progressPct = Math.min(Math.max(effectiveProjectedPct ?? 0, 0), 1);
 
   return (
     <div
       className={`trip-info-card ${
-        budgetMonitoringStatus === 'risk'
+        statusForMeta === 'risk'
           ? 'border-orange-200 dark:border-orange-900/50'
-          : budgetMonitoringStatus === 'over_budget'
+          : statusForMeta === 'over_budget'
             ? 'border-red-200 dark:border-red-900/50'
             : ''
       }`}
@@ -117,12 +151,14 @@ export const BudgetMonitoringCard = ({
             Контроль бюджета
           </p>
           <p className="mt-1 text-[13px] font-medium text-stone-500 dark:text-stone-400">
-            {meta.description}
+            {isForecastOnly ? 'Прогноз без лимита поездки' : meta.description}
           </p>
         </div>
-        <span className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold ${meta.tone}`}>
+        <span
+          className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold ${meta.tone}`}
+        >
           <Icon className="h-3.5 w-3.5" />
-          {meta.badge}
+          {isForecastOnly ? 'Прогноз' : meta.badge}
         </span>
       </div>
 
@@ -132,7 +168,7 @@ export const BudgetMonitoringCard = ({
             Потрачено
           </p>
           <p className="mt-1 text-[22px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
-            {fmt(totalSpent)}
+            {fmt(effectiveSpent)}
           </p>
           <p className="mt-1 text-[12px] font-semibold text-stone-400 dark:text-stone-500">
             {currency}
@@ -143,7 +179,7 @@ export const BudgetMonitoringCard = ({
             Прогноз
           </p>
           <p className="mt-1 text-[22px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
-            {fmt(projectedFinalSpend)}
+            {fmt(effectiveProjectedFinal)}
           </p>
           <p className="mt-1 text-[12px] font-semibold text-stone-400 dark:text-stone-500">
             {currency}
@@ -154,17 +190,20 @@ export const BudgetMonitoringCard = ({
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between text-[12px] font-semibold">
           <span className="text-stone-500 dark:text-stone-400">
-            {Math.round(projectedBudgetPct * 100)}% от бюджета
+            {effectiveProjectedPct != null ? `${Math.round(effectiveProjectedPct * 100)}% от бюджета` : 'Лимит не задан'}
           </span>
-          <span
-            className={
-              remainingProjected >= 0
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-600 dark:text-red-400'
-            }
-          >
-            {remainingProjected >= 0 ? 'Запас' : 'Перерасход'} {fmt(Math.abs(remainingProjected))} {currency}
-          </span>
+          {effectiveBudgetGap != null && (
+            <span
+              className={
+                effectiveBudgetGap >= 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-red-600 dark:text-red-400'
+              }
+            >
+              {effectiveBudgetGap >= 0 ? 'Запас' : 'Перерасход'} {fmt(Math.abs(effectiveBudgetGap))}{' '}
+              {currency}
+            </span>
+          )}
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
           <div
@@ -205,8 +244,42 @@ export const BudgetMonitoringCard = ({
             {fmt(plannedDailyBudget)} {currency}/день
           </p>
           <p className="mt-1 text-[12px] leading-snug text-stone-500 dark:text-stone-400">
-            Для {peopleCount} чел.; отель считается по комнатам, не линейно по людям
+            Отель считается по комнатам, не линейно по людям
           </p>
+        </div>
+      )}
+
+      {monitor && (
+        <div className="mt-3 rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                ML-прогноз
+              </p>
+              <p className="mt-1 text-[14px] font-bold text-stone-900 dark:text-white">
+                Осталось {fmt(monitor.remaining_mid)} {currency}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full border border-[hsl(var(--surface-border))] px-2.5 py-1 text-[10px] font-bold text-stone-500 dark:text-stone-300">
+              {monitor.used_ml_model ? 'модель' : 'fallback'}
+            </span>
+          </div>
+          <p className="mt-2 text-[12px] leading-snug text-stone-500 dark:text-stone-400">
+            Уже оплачено разово: {fmt(monitor.locked_fixed_costs)} {currency}. Прогноз не повторяет
+            эти расходы и отдельно оценивает ежедневные траты.
+          </p>
+          <div className="mt-3 flex flex-col gap-1.5">
+            {monitor.category_contributions.slice(0, 3).map((item) => (
+              <div key={item.category} className="flex items-center justify-between gap-2 text-[12px]">
+                <span className="font-semibold text-stone-500 dark:text-stone-400">
+                  {item.category}
+                </span>
+                <span className="font-bold text-stone-800 dark:text-stone-200">
+                  +{fmt(item.remaining_mid)} {currency}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

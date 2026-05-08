@@ -7,12 +7,20 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.exceptions import AppException
-from app.schemas.budget import BudgetAssumptions, BudgetPredictRequest, BudgetPredictResponse
+from app.schemas.budget import (
+    BudgetAssumptions,
+    BudgetMonitorCategoryContribution,
+    BudgetMonitorRequest,
+    BudgetMonitorResponse,
+    BudgetPredictRequest,
+    BudgetPredictResponse,
+)
 from app.services.budget_formula import estimate_travel_cost, haversine
 from app.services.budget_scorer import get_budget_scorer
 from app.services.content_scorer import resolve_accommodation_tier
-from app.services.currency import SUPPORTED_CURRENCY_RATES
+from app.services.currency import SUPPORTED_CURRENCY_RATES, normalize_currency
 from app.services.data_loader import get_destination_features
+from app.services.in_trip_budget_scorer import compute_baseline, convert_from_usd, get_in_trip_budget_scorer
 from app.services.profile_client import _get_profile_sync
 from app.services.travelpayouts_service import get_cached_fare_usd
 
@@ -199,7 +207,7 @@ def predict_budget(
             "travel_to_destination": round(travel_cost, 2),
         }
 
-    currency = request.currency.upper()
+    currency = normalize_currency(request.currency)
     fx = SUPPORTED_CURRENCY_RATES.get(currency, 1.0)
 
     breakdown_usd = _formula_breakdown(
@@ -275,4 +283,81 @@ def predict_budget(
             flight_fare_expires_at=fare_expires_at,
         ),
         model_version=str(result["model_version"]),
+    )
+
+
+def _monitor_status(projected_mid: float, budget_limit: float | None) -> str:
+    if budget_limit is None or budget_limit <= 0:
+        return "forecast_only"
+    ratio = projected_mid / budget_limit
+    if ratio > 1.0:
+        return "over_budget"
+    if ratio > 0.92:
+        return "risk"
+    if ratio >= 0.78:
+        return "on_track"
+    return "under_budget"
+
+
+@router.post("/budget/monitor", response_model=BudgetMonitorResponse)
+def monitor_budget(
+    request: BudgetMonitorRequest,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> BudgetMonitorResponse:
+    baseline = compute_baseline(request)
+    scorer = get_in_trip_budget_scorer(db)
+    ml_prediction = scorer.predict(baseline) if scorer else None
+    used_ml = ml_prediction is not None
+    remaining_min, remaining_mid, remaining_max = (
+        ml_prediction
+        if ml_prediction is not None
+        else (baseline.remaining_min_usd, baseline.remaining_mid_usd, baseline.remaining_max_usd)
+    )
+    currency = normalize_currency(request.currency)
+    current_spent = baseline.current_spent_usd
+    projected_min = current_spent + remaining_min
+    projected_mid = current_spent + remaining_mid
+    projected_max = current_spent + remaining_max
+    budget_limit_usd = (
+        request.trip_budget / SUPPORTED_CURRENCY_RATES.get(currency, 1.0) if request.trip_budget else None
+    )
+    risk_status = _monitor_status(projected_mid, budget_limit_usd)
+
+    category_contributions = [
+        BudgetMonitorCategoryContribution(
+            category=category,
+            spent=convert_from_usd(baseline.category_spent_usd.get(category, 0.0), currency),
+            remaining_mid=convert_from_usd(amount, currency),
+            kind=baseline.category_kind.get(category, "estimated_remaining"),
+        )
+        for category, amount in sorted(baseline.category_remaining_usd.items(), key=lambda item: item[1], reverse=True)
+        if amount > 0 or baseline.category_spent_usd.get(category, 0.0) > 0
+    ]
+
+    return BudgetMonitorResponse(
+        currency=currency,
+        current_spent=convert_from_usd(current_spent, currency),
+        locked_fixed_costs=convert_from_usd(baseline.locked_fixed_usd, currency),
+        recurring_spent=convert_from_usd(baseline.recurring_spent_usd, currency),
+        optional_activity_spent=convert_from_usd(baseline.optional_activity_spent_usd, currency),
+        remaining_min=convert_from_usd(remaining_min, currency),
+        remaining_mid=convert_from_usd(remaining_mid, currency),
+        remaining_max=convert_from_usd(remaining_max, currency),
+        projected_final_min=convert_from_usd(projected_min, currency),
+        projected_final_mid=convert_from_usd(projected_mid, currency),
+        projected_final_max=convert_from_usd(projected_max, currency),
+        budget_limit=request.trip_budget,
+        budget_gap_mid=round(request.trip_budget - convert_from_usd(projected_mid, currency), 2)
+        if request.trip_budget
+        else None,
+        budget_usage_projected_pct=round(projected_mid / budget_limit_usd, 4)
+        if budget_limit_usd and budget_limit_usd > 0
+        else None,
+        risk_status=risk_status,
+        category_contributions=category_contributions,
+        assumptions={**baseline.assumptions, "model_available": scorer is not None, "used_ml_model": used_ml},
+        model_version="in-trip-budget-v1" if used_ml else "in-trip-formula-v1",
+        baseline_version="in-trip-formula-v1",
+        used_ml_model=used_ml,
     )

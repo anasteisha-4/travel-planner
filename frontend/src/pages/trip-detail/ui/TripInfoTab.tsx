@@ -1,7 +1,7 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { useFeedback } from '@/features/feedback';
 import { profileApi } from '@/features/profile';
-import { useBudgetPrediction } from '@/features/recommendations';
+import { useBudgetMonitor, useBudgetPrediction } from '@/features/recommendations';
 import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
 import { localizeDestinationName } from '@/shared/lib';
 import { Button } from '@/shared/ui';
@@ -86,6 +86,7 @@ export const TripInfoTab = () => {
     remainingDays,
     totalSpent,
     durationDays,
+    expenses,
   } = useTripAnalytics(trip);
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -126,6 +127,51 @@ export const TripInfoTab = () => {
   const plannedDailyBudget = budgetPrediction
     ? budgetPrediction.total_mid / Math.max(budgetPrediction.duration_days, 1)
     : null;
+  const todayParam = new Date().toISOString().slice(0, 10);
+  const budgetMonitorParams = useMemo(
+    () => ({
+      trip_id: trip.id,
+      destination_id: trip.destination_id,
+      start_date: trip.start_date,
+      end_date: trip.end_date,
+      as_of_date: todayParam,
+      people_count: trip.people_count,
+      currency: trip.currency,
+      trip_budget: trip.budget,
+      accommodation_tier: budgetPredictionParams?.accommodation_tier ?? 'mid',
+      expenses: expenses.map((expense) => ({
+        amount: Number(expense.amount),
+        currency: expense.currency,
+        category: expense.category,
+        expense_date: expense.expense_date,
+        description: expense.description,
+      })),
+      pre_trip_prediction: budgetPrediction
+        ? {
+            total_min: budgetPrediction.total_min,
+            total_mid: budgetPrediction.total_mid,
+            total_max: budgetPrediction.total_max,
+            breakdown: budgetPrediction.breakdown,
+            model_version: budgetPrediction.model_version,
+          }
+        : null,
+      itinerary_summary: null,
+    }),
+    [
+      budgetPrediction,
+      budgetPredictionParams?.accommodation_tier,
+      expenses,
+      todayParam,
+      trip.budget,
+      trip.currency,
+      trip.destination_id,
+      trip.end_date,
+      trip.id,
+      trip.people_count,
+      trip.start_date,
+    ]
+  );
+  const { data: budgetMonitor } = useBudgetMonitor(budgetMonitorParams);
 
   const handleContinueTrip = async () => {
     await deleteFeedback();
@@ -239,6 +285,7 @@ export const TripInfoTab = () => {
             elapsedDays={elapsedDays}
             peopleCount={trip.people_count}
             plannedDailyBudget={plannedDailyBudget}
+            monitor={budgetMonitor}
             projectedBudgetDiff={projectedBudgetDiff}
             projectedBudgetPct={projectedBudgetPct}
             projectedFinalSpend={projectedFinalSpend}

@@ -196,6 +196,20 @@ jobs:
               echo ">>> No budget retrain needed."
             fi
 
+            # --- In-trip budget model retrain ---
+            # Trigger: model training script or inference scorer changed.
+            # The model is trained from synthetic checkpoint rows derived from trip_budget_actuals.
+            if [ "$BUDGET_CHANGED" = "1" ] || \
+               changed '^services/ml-service/scripts/train_in_trip_budget_model\.py|^services/ml-service/app/services/in_trip_budget_scorer\.py'; then
+              echo ">>> In-trip budget model code changed — retraining..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/train_in_trip_budget_model.py
+              echo ">>> In-trip budget retrain done."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d ml-service
+            else
+              echo ">>> No in-trip budget retrain needed."
+            fi
+
             # --- Ranker (LTR) retrain ---
             # Trigger: anything that affects training pairs or model training:
             #   - generate_ltr_pairs.py   — pair generation logic, label computation

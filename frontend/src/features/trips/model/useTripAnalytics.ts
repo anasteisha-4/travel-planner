@@ -1,4 +1,4 @@
-import type { ConvertedExpenseSummary } from '@/entities/expense';
+import type { ConvertedExpenseSummary, Expense } from '@/entities/expense';
 import type { PlaceVisit } from '@/entities/place';
 import type { Trip } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
@@ -20,6 +20,11 @@ export const useTripAnalytics = (trip: Trip) => {
   const summaryQuery = useQuery<ConvertedExpenseSummary>({
     queryKey: ['expenses-summary', trip.id, trip.currency],
     queryFn: () => expenseApi.getConvertedSummary(trip.id, trip.currency),
+  });
+
+  const expensesQuery = useQuery<Expense[]>({
+    queryKey: ['expenses', trip.id],
+    queryFn: () => expenseApi.getExpenses(trip.id),
   });
 
   const placesQuery = useQuery<PlaceVisit[]>({
@@ -96,7 +101,7 @@ export const useTripAnalytics = (trip: Trip) => {
   );
 
   return {
-    loading: summaryQuery.isLoading || placesQuery.isLoading,
+    loading: summaryQuery.isLoading || placesQuery.isLoading || expensesQuery.isLoading,
     totalSpent,
     avgPerDay,
     burnRatePerDay,
@@ -115,6 +120,7 @@ export const useTripAnalytics = (trip: Trip) => {
     budgetTier,
     isOverBudget,
     categoryBreakdown,
+    expenses: expensesQuery.data ?? [],
     hasConversionErrors: summaryQuery.data?.has_conversion_errors ?? false,
   };
 };
