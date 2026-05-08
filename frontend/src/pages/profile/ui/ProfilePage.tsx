@@ -13,9 +13,210 @@ import {
 } from '@/shared/ui';
 import { ProfileEditWizard } from '@/widgets/profile-edit-wizard';
 import { sendEvent } from '@/shared/api';
-import { ClipboardList, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+const SkeletonLine = ({ className }: { className: string }) => (
+  <div className={`animate-pulse rounded-full bg-[hsl(var(--surface-muted))] ${className}`} />
+);
+
+const ProfilePageSkeleton = () => (
+  <PageLayout>
+    <AppPageHeader pb="pb-3">
+      <div className="flex items-center justify-between">
+        <SkeletonLine className="h-8 w-28" />
+        <div className="flex h-10 items-center gap-2 rounded-2xl px-3 text-red-500/40">
+          <SkeletonLine className="h-5 w-5 bg-red-500/15" />
+          <SkeletonLine className="h-5 w-16 bg-red-500/15" />
+        </div>
+      </div>
+    </AppPageHeader>
+
+    <PageContent>
+      <div className="flex flex-col gap-6">
+        <div>
+          <SkeletonLine className="mb-2 h-3 w-20" />
+          <div className="trip-info-card flex flex-col gap-0">
+            <div className="flex items-center justify-between gap-4 py-1">
+              <SkeletonLine className="h-3 w-14" />
+              <SkeletonLine className="h-5 w-16 bg-primary/20" />
+            </div>
+            <div className="my-3 h-px bg-[hsl(var(--surface-border))]" />
+            <div className="flex items-center justify-between gap-4 py-1">
+              <SkeletonLine className="h-3 w-12" />
+              <SkeletonLine className="h-5 w-36 max-w-[54%]" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <SkeletonLine className="h-3 w-32" />
+            <div className="flex h-[30px] items-center gap-1.5 rounded-xl bg-[hsl(var(--surface-muted))] px-3">
+              <SkeletonLine className="h-3.5 w-3.5 bg-[hsl(var(--surface-field))]" />
+              <SkeletonLine className="h-4 w-16 bg-[hsl(var(--surface-field))]" />
+            </div>
+          </div>
+          <div className="trip-info-card flex flex-col gap-0 pb-1">
+            <div className="pb-1">
+              <SkeletonLine className="mb-3 h-3 w-24" />
+              <div className="flex flex-wrap gap-1.5">
+                {[0, 1, 2].map((item) => (
+                  <div
+                    key={item}
+                    className={`flex h-9 items-center gap-2 rounded-xl border border-[hsl(var(--surface-border))] bg-primary/5 px-3 ${
+                      item === 0 ? 'w-32' : 'w-28'
+                    }`}
+                  >
+                    <SkeletonLine className="h-5 w-5 shrink-0 bg-primary/20" />
+                    <SkeletonLine className="h-4 flex-1 bg-primary/20" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+            <div className="flex flex-col gap-0">
+              {[
+                { labelClassName: 'w-24', valueClassName: 'w-20' },
+                { labelClassName: 'w-24', valueClassName: 'w-32' },
+                { labelClassName: 'w-36', valueClassName: 'w-16' },
+                { labelClassName: 'w-32', valueClassName: 'w-36' },
+              ].map((item, index, items) => (
+                <div key={index}>
+                  <div className="flex items-center justify-between py-2">
+                    <SkeletonLine className={`h-3 ${item.labelClassName}`} />
+                    <SkeletonLine className={`h-5 ${item.valueClassName}`} />
+                  </div>
+                  {index < items.length - 1 && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+            <SkeletonLine className="mb-3 h-3 w-32" />
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {[0, 1, 2].map((item) => (
+                <div
+                  key={item}
+                  className="flex h-8 items-center gap-2 rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3"
+                >
+                  <SkeletonLine className="h-4 w-4 bg-[hsl(var(--surface-field))]" />
+                  <SkeletonLine className="h-4 w-16 bg-[hsl(var(--surface-field))]" />
+                </div>
+              ))}
+            </div>
+
+            <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+            <SkeletonLine className="mb-3 h-3 w-40" />
+            <div className="flex flex-col gap-2">
+              {['w-28', 'w-14', 'w-16'].map((labelClassName) => (
+                <div
+                  key={labelClassName}
+                  className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5"
+                >
+                  <SkeletonLine className={`h-4 ${labelClassName} bg-[hsl(var(--surface-field))]`} />
+                  <SkeletonLine className="h-5 w-28 bg-[hsl(var(--surface-field))]" />
+                </div>
+              ))}
+            </div>
+
+            <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+            <SkeletonLine className="mb-3 h-3 w-24" />
+            <SkeletonLine className="h-9 w-36 rounded-xl" />
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="flex w-full items-center gap-3 rounded-2xl border border-red-500/10 bg-red-500/5 px-4 py-3.5">
+            <SkeletonLine className="h-9 w-9 shrink-0 rounded-xl bg-red-500/10" />
+            <SkeletonLine className="h-5 w-36 bg-red-500/10" />
+          </div>
+        </div>
+      </div>
+    </PageContent>
+  </PageLayout>
+);
+
+const ProfilePreferencesSkeleton = () => (
+  <div className="trip-info-card flex flex-col gap-0 pb-1">
+    <div className="pb-1">
+      <SkeletonLine className="mb-3 h-3 w-24" />
+      <div className="flex flex-wrap gap-1.5">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className={`flex h-9 items-center gap-2 rounded-xl border border-[hsl(var(--surface-border))] bg-primary/5 px-3 ${
+              item === 0 ? 'w-32' : 'w-28'
+            }`}
+          >
+            <SkeletonLine className="h-5 w-5 shrink-0 bg-primary/20" />
+            <SkeletonLine className="h-4 flex-1 bg-primary/20" />
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+    <div className="flex flex-col gap-0">
+      {[
+        { labelClassName: 'w-24', valueClassName: 'w-20' },
+        { labelClassName: 'w-24', valueClassName: 'w-32' },
+        { labelClassName: 'w-36', valueClassName: 'w-16' },
+        { labelClassName: 'w-32', valueClassName: 'w-36' },
+      ].map((item, index, items) => (
+        <div key={index}>
+          <div className="flex items-center justify-between py-2">
+            <SkeletonLine className={`h-3 ${item.labelClassName}`} />
+            <SkeletonLine className={`h-5 ${item.valueClassName}`} />
+          </div>
+          {index < items.length - 1 && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+        </div>
+      ))}
+    </div>
+
+    <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+    <SkeletonLine className="mb-3 h-3 w-32" />
+    <div className="mb-3 flex flex-wrap gap-1.5">
+      {[0, 1, 2].map((item) => (
+        <div
+          key={item}
+          className="flex h-8 items-center gap-2 rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3"
+        >
+          <SkeletonLine className="h-4 w-4 bg-[hsl(var(--surface-field))]" />
+          <SkeletonLine className="h-4 w-16 bg-[hsl(var(--surface-field))]" />
+        </div>
+      ))}
+    </div>
+
+    <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+    <SkeletonLine className="mb-3 h-3 w-40" />
+    <div className="flex flex-col gap-2">
+      {['w-28', 'w-14', 'w-16'].map((labelClassName) => (
+        <div
+          key={labelClassName}
+          className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5"
+        >
+          <SkeletonLine className={`h-4 ${labelClassName} bg-[hsl(var(--surface-field))]`} />
+          <SkeletonLine className="h-5 w-28 bg-[hsl(var(--surface-field))]" />
+        </div>
+      ))}
+    </div>
+
+    <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />
+
+    <SkeletonLine className="mb-3 h-3 w-24" />
+    <SkeletonLine className="h-9 w-36 rounded-xl" />
+  </div>
+);
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
@@ -61,18 +262,7 @@ export const ProfilePage = () => {
   const handleSaved = () => setIsEditing(false);
 
   if (loading) {
-    return (
-      <PageLayout>
-        <AppPageHeader pb="pb-3">
-          <div className="h-7 w-24 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-        </AppPageHeader>
-        <PageContent pb="pb-0" className="pt-2">
-          <div className="trip-info-card animate-pulse">
-            <div className="h-4 w-full rounded bg-[hsl(var(--surface-muted))]" />
-          </div>
-        </PageContent>
-      </PageLayout>
-    );
+    return <ProfilePageSkeleton />;
   }
 
   if (!authProfile) return null;
@@ -131,9 +321,7 @@ export const ProfilePage = () => {
             </SectionLabel>
 
             {isFetching ? (
-              <div className="trip-info-card flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
+              <ProfilePreferencesSkeleton />
             ) : hasPreferences && profile ? (
               <PreferencesView preferences={profile} />
             ) : (

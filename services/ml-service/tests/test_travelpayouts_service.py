@@ -12,6 +12,15 @@ def test_resolve_iata_supports_demo_origins():
     assert resolve_iata("Ереван") == "EVN"
 
 
+def test_resolve_iata_prefers_local_overrides(monkeypatch):
+    def fail_data_service(*_args, **_kwargs):
+        raise AssertionError("data-service should not be called for local overrides")
+
+    monkeypatch.setattr("app.services.iata_resolver._resolve_iata_from_data_service", fail_data_service)
+
+    assert resolve_iata("Moscow") == "MOW"
+
+
 def test_resolve_iata_supports_demo_destinations():
     assert resolve_iata("Istanbul") == "IST"
     assert resolve_iata("Бангкок") == "BKK"

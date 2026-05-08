@@ -18,6 +18,10 @@ class ValidateTripRequest(BaseModel):
     travel_month: int = Field(..., ge=1, le=12)
     budget_per_day_usd: float | None = None
     display_currency: str | None = None
+    duration_days: int | None = Field(default=None, ge=1, le=365)
+    risk_tolerance: int | None = Field(default=None, ge=1, le=5)
+    language_code: str | None = None
+    preferred_language: str | None = None
 
 
 class ValidationWarning(BaseModel):
@@ -30,6 +34,28 @@ class ValidateTripResponse(BaseModel):
     destination_id: uuid.UUID
     warnings: list[ValidationWarning]
     info: dict
+
+
+def _language_column(language: str | None) -> tuple[str, str] | None:
+    if not language:
+        return None
+    normalized = language.strip().lower()
+    if normalized in {"ru", "rus", "russian", "русский"}:
+        return "russian_speaking_score", "Russian"
+    if normalized in {"en", "eng", "english", "английский"}:
+        return "english_speaking_score", "English"
+    return None
+
+
+def _safety_severity(safety_score: float, risk_tolerance: int | None) -> str | None:
+    tolerance = risk_tolerance or 3
+    high_threshold = 0.45 if tolerance <= 2 else 0.30 if tolerance == 3 else 0.20
+    medium_threshold = 0.62 if tolerance <= 2 else 0.45 if tolerance == 3 else 0.35
+    if safety_score < high_threshold:
+        return "high"
+    if safety_score < medium_threshold:
+        return "medium"
+    return None
 
 
 @router.post("/validate", response_model=ValidateTripResponse)
@@ -56,6 +82,17 @@ def validate_trip(
         info["visa_score"] = float(visa_row.visa_score)
         if visa_row.max_stay_days:
             info["max_stay_days"] = int(visa_row.max_stay_days)
+            if request.duration_days is not None and request.duration_days > int(visa_row.max_stay_days):
+                warnings.append(
+                    ValidationWarning(
+                        type="visa",
+                        severity="high",
+                        message=(
+                            f"Trip is longer than allowed stay: {request.duration_days} days "
+                            f"vs {int(visa_row.max_stay_days)} days."
+                        ),
+                    )
+                )
         if float(visa_row.visa_score) < 0.6:
             severity = "high" if float(visa_row.visa_score) == 0.0 else "medium"
             warnings.append(
@@ -124,15 +161,46 @@ def validate_trip(
     ).fetchone()
 
     if safety_row:
-        info["safety_score"] = float(safety_row.safety_score)
-        if float(safety_row.safety_score) < 0.3:
+        safety_score = float(safety_row.safety_score)
+        safety_severity = _safety_severity(safety_score, request.risk_tolerance)
+        info["safety_score"] = safety_score
+        if request.risk_tolerance is not None:
+            info["risk_tolerance"] = request.risk_tolerance
+        if safety_severity:
             warnings.append(
                 ValidationWarning(
                     type="safety",
-                    severity="high",
-                    message="Elevated safety risk. Check travel advisories before booking.",
+                    severity=safety_severity,
+                    message=("Elevated safety risk for your risk tolerance. Check travel advisories before booking."),
                 )
             )
+
+    # --- Language comfort check (optional) ---
+    language = request.preferred_language or request.language_code
+    language_lookup = _language_column(language)
+    if language_lookup is not None:
+        column, label = language_lookup
+        language_row = db.execute(
+            text(
+                f"SELECT {column} AS comfort_score, script_difficulty "
+                "FROM destination_language_accessibility WHERE destination_id = :did"
+            ),
+            {"did": dest_id},
+        ).fetchone()
+        if language_row:
+            comfort_score = float(language_row.comfort_score or 0.0)
+            info["language_code"] = language
+            info["language_comfort_score"] = comfort_score
+            if language_row.script_difficulty is not None:
+                info["script_difficulty"] = float(language_row.script_difficulty)
+            if comfort_score < 0.35:
+                warnings.append(
+                    ValidationWarning(
+                        type="language",
+                        severity="low",
+                        message=f"{label} language comfort may be limited for this destination.",
+                    )
+                )
 
     # --- Budget check (optional) ---
     if request.budget_per_day_usd is not None:

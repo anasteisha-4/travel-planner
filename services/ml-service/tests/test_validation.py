@@ -200,6 +200,56 @@ def test_validate_budget_ok_no_warning(client: TestClient):
     assert budget_warns == []
 
 
+def test_validate_duration_longer_than_allowed_stay_is_high_visa_warning(client: TestClient):
+    resp = client.post("/api/v1/validate", json={**_payload(), "duration_days": 120})
+    assert resp.status_code == 200
+    visa_warns = [w for w in resp.json()["warnings"] if w["type"] == "visa"]
+    assert len(visa_warns) == 1
+    assert visa_warns[0]["severity"] == "high"
+    assert "120 days" in visa_warns[0]["message"]
+    assert resp.json()["info"]["max_stay_days"] == 90
+
+
+def test_validate_safety_uses_user_risk_tolerance(client: TestClient, db: Session):
+    db.execute(
+        text("UPDATE destination_safety SET safety_score = 0.4 WHERE destination_id = :did"),
+        {"did": str(DEST_ID)},
+    )
+    db.commit()
+
+    cautious = client.post("/api/v1/validate", json={**_payload(), "risk_tolerance": 1})
+    adventurous = client.post("/api/v1/validate", json={**_payload(), "risk_tolerance": 5})
+
+    assert cautious.status_code == 200
+    assert adventurous.status_code == 200
+    cautious_safety = [w for w in cautious.json()["warnings"] if w["type"] == "safety"]
+    adventurous_safety = [w for w in adventurous.json()["warnings"] if w["type"] == "safety"]
+    assert cautious_safety[0]["severity"] == "high"
+    assert adventurous_safety == []
+    assert cautious.json()["info"]["risk_tolerance"] == 1
+
+
+def test_validate_language_comfort_optional_warning(client: TestClient, db: Session):
+    db.execute(
+        text(
+            "INSERT INTO destination_language_accessibility "
+            "(destination_id, russian_speaking_score, english_speaking_score, script_difficulty) "
+            "VALUES (:did, 0.2, 0.8, 0.7) ON CONFLICT (destination_id) DO UPDATE SET "
+            "russian_speaking_score = 0.2, english_speaking_score = 0.8, script_difficulty = 0.7"
+        ),
+        {"did": str(DEST_ID)},
+    )
+    db.commit()
+
+    resp = client.post("/api/v1/validate", json={**_payload(), "preferred_language": "ru"})
+
+    assert resp.status_code == 200
+    language_warns = [w for w in resp.json()["warnings"] if w["type"] == "language"]
+    assert len(language_warns) == 1
+    assert language_warns[0]["severity"] == "low"
+    assert resp.json()["info"]["language_comfort_score"] == 0.2
+
+
 def test_validate_returns_destination_id(client: TestClient):
     resp = client.post("/api/v1/validate", json=_payload())
     assert resp.json()["destination_id"] == str(DEST_ID)

@@ -115,6 +115,7 @@ type DestinationDetailSheetProps = {
   recommendationId?: string;
   modelVersion?: string;
   open: boolean;
+  isLoading?: boolean;
   onClose: () => void;
 };
 
@@ -318,10 +319,20 @@ const ValidationBlock = ({
 
   const warningByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
   const languageStatus = statusFromScore(destination.score_breakdown.language_match);
+  const validationDailyCost =
+    typeof data.info.avg_daily_cost === 'number' ? data.info.avg_daily_cost : undefined;
+  const validationCurrency =
+    typeof data.info.display_currency === 'string' ? data.info.display_currency : undefined;
   const dailyCost =
-    destination.avg_daily_budget ?? destination.avg_daily_cost ?? destination.avg_daily_cost_usd;
+    validationDailyCost ??
+    destination.avg_daily_budget ??
+    destination.avg_daily_cost ??
+    destination.avg_daily_cost_usd;
   const dailyCostCurrency =
-    destination.avg_daily_budget_currency ?? destination.avg_daily_cost_currency ?? 'USD';
+    validationCurrency ??
+    destination.avg_daily_budget_currency ??
+    destination.avg_daily_cost_currency ??
+    'USD';
   const rows = [
     {
       key: 'visa',
@@ -410,12 +421,57 @@ const ValidationBlock = ({
   );
 };
 
+const DestinationDetailSkeleton = () => (
+  <div className="flex flex-col gap-4">
+    <section className="flex items-start gap-4">
+      <div className="h-16 w-16 shrink-0 animate-pulse rounded-3xl bg-[hsl(var(--surface-muted))]" />
+      <div className="min-w-0 flex-1 pt-1">
+        <div className="mb-2 h-7 w-44 animate-pulse rounded-xl bg-[hsl(var(--surface-muted))]" />
+        <div className="h-4 w-28 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+      </div>
+      <div className="h-14 w-14 shrink-0 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+    </section>
+
+    <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
+      <div className="mb-4 h-3 w-28 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+      <div className="flex flex-col gap-3">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="flex items-center gap-3">
+            <div className="h-4 w-24 shrink-0 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+            <div className="h-2 flex-1 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
+            <div className="h-4 w-12 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section className="overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))]">
+      <div className="flex items-center justify-between gap-3 border-b border-[hsl(var(--surface-border))] px-4 py-3.5">
+        <div className="h-3 w-36 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+        <div className="h-7 w-24 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
+      </div>
+      <div className="divide-y divide-[hsl(var(--surface-border))] px-4">
+        {[0, 1, 2, 3, 4].map((item) => (
+          <div key={item} className="flex items-center justify-between gap-3 py-3">
+            <div>
+              <div className="mb-2 h-3 w-14 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+              <div className="h-4 w-24 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+            </div>
+            <div className="h-8 w-24 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
+);
+
 export const DestinationDetailSheet = ({
   destination,
   month,
   recommendationId,
   modelVersion,
   open,
+  isLoading = false,
   onClose,
 }: DestinationDetailSheetProps) => {
   const navigate = useNavigate();
@@ -469,6 +525,9 @@ export const DestinationDetailSheet = ({
         travel_month: month,
         budget_per_day_usd: budgetPerDayUsd,
         display_currency: currency,
+        duration_days: tripParams.duration_days,
+        risk_tolerance: profileCached?.risk_tolerance,
+        preferred_language: profileCached?.language_comfort?.find((language) => language !== 'any') ?? null,
       }
     : null;
   const {
@@ -530,13 +589,17 @@ export const DestinationDetailSheet = ({
     recommendationId,
   ]);
 
-  if (!destination) return null;
+  if (!destination && !isLoading) return null;
 
-  const flag = COUNTRY_FLAGS[destination.country_code] ?? '🌍';
-  const matchPct = Math.round(destination.score * 100);
-  const topReasons = getTopReasons(destination);
+  const title = destination
+    ? destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name)
+    : 'Направление';
+  const flag = destination ? COUNTRY_FLAGS[destination.country_code] ?? '🌍' : '🌍';
+  const matchPct = destination ? Math.round(destination.score * 100) : 0;
+  const topReasons = destination ? getTopReasons(destination) : [];
 
   const handleCreateTrip = () => {
+    if (!destination) return;
     const dates = getSuggestedTripDates(month, tripParams.duration_days);
     const params = new URLSearchParams({
       destination:
@@ -564,15 +627,14 @@ export const DestinationDetailSheet = ({
     <AdaptiveSheet
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && onClose()}
-      title={
-        destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name)
-      }
+      title={title}
       description="Совпадение с предпочтениями и проверка направления"
       showHeader={false}
       bodyClassName="px-5 pb-5"
       footer={
         <Button
           className="h-[52px] w-full rounded-2xl text-[15px] font-extrabold"
+          disabled={isLoading || !destination}
           onClick={handleCreateTrip}
         >
           <Plane className="h-4 w-4" />
@@ -580,7 +642,10 @@ export const DestinationDetailSheet = ({
         </Button>
       }
     >
-      <div className="flex flex-col gap-4">
+      {isLoading ? (
+        <DestinationDetailSkeleton />
+      ) : destination ? (
+        <div className="flex flex-col gap-4">
         <section className="flex items-start gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-[34px]">
             {flag}
@@ -638,7 +703,8 @@ export const DestinationDetailSheet = ({
             isError={isValidationError}
           />
         </section>
-      </div>
+        </div>
+      ) : null}
     </AdaptiveSheet>
   );
 };

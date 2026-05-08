@@ -1,14 +1,19 @@
 import time
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.lib.russian_names import translate_destination_name
 from app.models.recommendation_log import RecommendationLog
-from app.schemas.recommendation import RecommendRequest, RecommendResponse
+from app.schemas.recommendation import (
+    RecommendDestinationRequest,
+    RecommendRequest,
+    RecommendResponse,
+    ScoredDestination,
+)
 from app.services.content_scorer import BaseScorer, ContentScorer
 from app.services.currency import convert_usd, normalize_currency
 from app.services.data_loader import get_all_destinations, get_destination_features
@@ -60,6 +65,21 @@ def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -
     return scorer, version
 
 
+def _with_display_currency(item: ScoredDestination, display_currency: str) -> ScoredDestination:
+    return item.model_copy(
+        update={
+            "name": item.display_name or item.name_ru or translate_destination_name(item.name),
+            "name_original": item.name_original or item.name,
+            "name_ru": item.name_ru or translate_destination_name(item.name),
+            "display_name": item.display_name or item.name_ru or translate_destination_name(item.name),
+            "avg_daily_cost": convert_usd(item.avg_daily_cost_usd, display_currency),
+            "avg_daily_cost_currency": display_currency,
+            "avg_daily_budget": convert_usd(item.avg_daily_budget_usd or item.avg_daily_cost_usd, display_currency),
+            "avg_daily_budget_currency": display_currency,
+        }
+    )
+
+
 @router.post("/recommend", response_model=RecommendResponse)
 def get_recommendations(
     request: RecommendRequest,
@@ -92,21 +112,7 @@ def get_recommendations(
     )
 
     top_results = scored[: request.limit]
-    top_results = [
-        item.model_copy(
-            update={
-                "name": item.display_name or item.name_ru or translate_destination_name(item.name),
-                "name_original": item.name_original or item.name,
-                "name_ru": item.name_ru or translate_destination_name(item.name),
-                "display_name": item.display_name or item.name_ru or translate_destination_name(item.name),
-                "avg_daily_cost": convert_usd(item.avg_daily_cost_usd, display_currency),
-                "avg_daily_cost_currency": display_currency,
-                "avg_daily_budget": convert_usd(item.avg_daily_budget_usd or item.avg_daily_cost_usd, display_currency),
-                "avg_daily_budget_currency": display_currency,
-            }
-        )
-        for item in top_results
-    ]
+    top_results = [_with_display_currency(item, display_currency) for item in top_results]
     latency_ms = int((time.monotonic() - t_start) * 1000)
     recommendation_id = uuid.uuid4()
 
@@ -125,6 +131,64 @@ def get_recommendations(
         model_version=model_version,
         results=top_results,
     )
+
+
+@router.post("/recommend/destination", response_model=ScoredDestination)
+def get_destination_recommendation_score(
+    request: RecommendDestinationRequest,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ScoredDestination:
+    profile = _get_profile_sync(db, user_id)
+    display_currency = normalize_currency(profile.get("preferred_currency"))
+
+    destinations = [
+        destination
+        for destination in get_all_destinations(db)
+        if uuid.UUID(str(destination["id"])) == request.destination_id
+    ]
+    if not destinations:
+        raise HTTPException(status_code=404, detail="Destination not found")
+
+    citizenship = request.citizenship_code.upper()
+    dest_features = get_destination_features(db, [request.destination_id], citizenship_code=citizenship)
+    filters = {
+        "citizenship_code": citizenship,
+        "exclude_destination_ids": [],
+        "region": None,
+    }
+
+    scorer_request = RecommendRequest(
+        travel_month=request.travel_month,
+        limit=1,
+        citizenship_code=citizenship,
+        model_version=request.model_version,
+    )
+    scorer, _model_version = _select_scorer(scorer_request, db, user_id)
+    scored = scorer.score(
+        user_profile=profile,
+        destinations=destinations,
+        dest_features=dest_features,
+        travel_month=request.travel_month,
+        filters=filters,
+    )
+    if not scored:
+        relaxed_profile = {
+            **profile,
+            "visa_tolerance": "any_visa",
+            "risk_tolerance": 5,
+        }
+        scored = _content_scorer.score(
+            user_profile=relaxed_profile,
+            destinations=destinations,
+            dest_features=dest_features,
+            travel_month=request.travel_month,
+            filters=filters,
+        )
+    if not scored:
+        raise HTTPException(status_code=404, detail="Destination score not available")
+
+    return _with_display_currency(scored[0], display_currency)
 
 
 def _log_recommendation(

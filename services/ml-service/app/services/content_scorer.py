@@ -481,6 +481,7 @@ class ContentScorer:
         # already reflects the correct citizenship passed to get_destination_features().
         exclude_ids: set[uuid.UUID] = set(filters.get("exclude_destination_ids", []))
         region_filter: str | None = filters.get("region")
+        include_route_fares = bool(filters.get("include_route_fares", True))
 
         visa_threshold = VISA_FILTER.get(visa_tolerance, 0.0)
 
@@ -521,7 +522,11 @@ class ContentScorer:
             season = f.get("seasonality", {}).get(travel_month, 0.5)
             cost_index = float(f.get("cost_index", 0.5))
             avg_daily_cost_usd = f.get("avg_daily_cost_usd")
-            route_fare = _cached_route_fare(user_profile, dest, f, travel_month, typical_duration_days)
+            route_fare = (
+                _cached_route_fare(user_profile, dest, f, travel_month, typical_duration_days)
+                if include_route_fares
+                else None
+            )
             route_cost_usd = route_fare.price_usd if route_fare is not None else None
             avg_daily_budget_usd = _avg_daily_budget_usd(
                 float(avg_daily_cost_usd) if avg_daily_cost_usd else None,

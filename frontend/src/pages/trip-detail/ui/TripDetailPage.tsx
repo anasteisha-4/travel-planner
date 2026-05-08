@@ -1,6 +1,7 @@
 import type { TripStatus } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
 import { DestinationValidationCompact } from '@/features/recommendations';
+import { profileApi } from '@/features/profile';
 import { CancelTripSheet, DeleteTripSheet, EditTripSheet, useTripDetail, type TripFormSnapshot } from '@/features/trips';
 import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { StatusBadge, TabBar } from '@/shared/ui';
@@ -42,6 +43,11 @@ export const TripDetailPage = () => {
 
   const { trip, loading, handleStatusChange, isStatusChanging, handleDelete, isDeleting, invalidateTrip } =
     useTripDetail(id);
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: profileApi.getProfile,
+    retry: 1,
+  });
 
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
@@ -196,6 +202,9 @@ export const TripDetailPage = () => {
             travelMonth={getTravelMonth(validationStartDate)}
             budgetPerDayUsd={validationBudgetPerDayUsd}
             budgetUnlimited={isValidationBudgetUnlimited}
+            durationDays={validationDurationDays}
+            riskTolerance={profile?.risk_tolerance}
+            preferredLanguage={profile?.language_comfort?.find((language) => language !== 'any') ?? null}
           />
         }
       />

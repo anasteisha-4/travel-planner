@@ -9,6 +9,9 @@ type Props = {
   travelMonth: number;
   budgetPerDayUsd?: number | null;
   budgetUnlimited?: boolean;
+  durationDays?: number | null;
+  riskTolerance?: number | null;
+  preferredLanguage?: string | null;
   className?: string;
 };
 
@@ -57,6 +60,9 @@ export const DestinationValidationCompact = ({
   travelMonth,
   budgetPerDayUsd,
   budgetUnlimited = false,
+  durationDays,
+  riskTolerance,
+  preferredLanguage,
   className = '',
 }: Props) => {
   const trackedKeys = useRef<Set<string>>(new Set());
@@ -67,13 +73,23 @@ export const DestinationValidationCompact = ({
           citizenship_code: 'RU',
           travel_month: travelMonth,
           budget_per_day_usd: budgetPerDayUsd ?? null,
+          duration_days: durationDays ?? null,
+          risk_tolerance: riskTolerance ?? null,
+          preferred_language: preferredLanguage === 'any' ? null : preferredLanguage ?? null,
         }
       : null
   );
 
   useEffect(() => {
     if (!destinationId || !data) return;
-    const key = `${destinationId}:${travelMonth}:${budgetUnlimited ? 'unlimited' : budgetPerDayUsd ?? 'none'}`;
+    const key = [
+      destinationId,
+      travelMonth,
+      budgetUnlimited ? 'unlimited' : budgetPerDayUsd ?? 'none',
+      durationDays ?? 'duration-none',
+      riskTolerance ?? 'risk-none',
+      preferredLanguage ?? 'lang-none',
+    ].join(':');
     if (trackedKeys.current.has(key)) return;
     trackedKeys.current.add(key);
     sendEvent(
@@ -83,6 +99,9 @@ export const DestinationValidationCompact = ({
         travel_month: travelMonth,
         budget_per_day_usd: budgetPerDayUsd ?? null,
         budget_unlimited: budgetUnlimited,
+        duration_days: durationDays ?? null,
+        risk_tolerance: riskTolerance ?? null,
+        preferred_language: preferredLanguage ?? null,
         warnings_count: data.warnings.length,
         warning_types: data.warnings.map((warning) => warning.type),
         source: 'trip_form',
@@ -90,7 +109,16 @@ export const DestinationValidationCompact = ({
       'destination',
       destinationId
     );
-  }, [budgetPerDayUsd, budgetUnlimited, data, destinationId, travelMonth]);
+  }, [
+    budgetPerDayUsd,
+    budgetUnlimited,
+    data,
+    destinationId,
+    durationDays,
+    preferredLanguage,
+    riskTolerance,
+    travelMonth,
+  ]);
 
   if (!destinationId) {
     return (

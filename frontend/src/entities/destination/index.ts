@@ -1,2 +1,2 @@
 export { destinationApi } from './api/destination.api';
-export type { DestinationSearchResult } from './model/types';
+export type { DestinationDetail, DestinationSearchResult } from './model/types';

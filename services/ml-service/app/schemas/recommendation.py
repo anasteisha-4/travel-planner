@@ -12,6 +12,13 @@ class RecommendRequest(BaseModel):
     model_version: str | None = None
 
 
+class RecommendDestinationRequest(BaseModel):
+    destination_id: uuid.UUID
+    travel_month: int = Field(..., ge=1, le=12)
+    citizenship_code: str = "RU"
+    model_version: str | None = None
+
+
 class ScoredDestination(BaseModel):
     destination_id: uuid.UUID
     name: str

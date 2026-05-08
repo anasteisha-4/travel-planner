@@ -1,11 +1,18 @@
 import {
+  DestinationCheckSearch,
   DestinationDetailSheet,
   RecommendationFiltersUI,
   RecommendationList,
+  useDestinationScore,
   useRecommendations,
 } from '@/features/recommendations';
-import type { ScoredDestination } from '@/features/recommendations';
+import {
+  destinationApi,
+  type DestinationDetail,
+  type DestinationSearchResult,
+} from '@/entities/destination';
 import { profileApi } from '@/features/profile';
+import type { ScoredDestination } from '@/features/recommendations';
 import { sendEvent } from '@/shared/api';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -31,19 +38,79 @@ const SkeletonCard = () => (
   </div>
 );
 
+const getCheckedDestination = (
+  searchResult: DestinationSearchResult,
+  detail?: DestinationDetail,
+  scored?: ScoredDestination
+): ScoredDestination => ({
+  ...scored,
+  destination_id: searchResult.id,
+  name: detail?.name ?? scored?.name ?? searchResult.name,
+  name_original: detail?.name_original ?? scored?.name_original ?? searchResult.name_original,
+  name_ru: detail?.name_ru ?? scored?.name_ru ?? searchResult.name_ru,
+  display_name: detail?.display_name ?? scored?.display_name ?? searchResult.display_name,
+  country_code: detail?.country_code ?? scored?.country_code ?? searchResult.country_code,
+  region: detail?.region ?? scored?.region ?? 'Каталог направлений',
+  score: scored?.score ?? 0.5,
+  score_breakdown: scored?.score_breakdown ?? {},
+  explanation_tags: scored?.explanation_tags ?? [],
+  avg_daily_cost_usd: scored?.avg_daily_cost_usd ?? null,
+  avg_daily_cost: scored?.avg_daily_cost,
+  avg_daily_cost_currency: scored?.avg_daily_cost_currency,
+  avg_daily_budget_usd: scored?.avg_daily_budget_usd,
+  avg_daily_budget: scored?.avg_daily_budget,
+  avg_daily_budget_currency: scored?.avg_daily_budget_currency,
+  route_cost_usd: scored?.route_cost_usd,
+  route_cost_source: scored?.route_cost_source,
+  season_score: scored?.season_score ?? null,
+  safety_score: scored?.safety_score ?? detail?.safety_score ?? null,
+});
+
 export const RecommendationsPage = () => {
   const currentMonth = new Date().getMonth() + 1;
   const [month, setMonth] = useState(currentMonth);
   const [region, setRegion] = useState<string | null>(null);
-  const [selected, setSelected] = useState<ScoredDestination | null>(null);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<ScoredDestination | null>(null);
+  const [selectedCheckResult, setSelectedCheckResult] = useState<DestinationSearchResult | null>(null);
+  const [sheetMode, setSheetMode] = useState<'recommendation' | 'check'>('recommendation');
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
+  const { data: checkedDestinationDetail } = useQuery({
+    queryKey: ['destination-detail', selectedCheckResult?.id],
+    queryFn: () => destinationApi.getDestination(selectedCheckResult?.id ?? ''),
+    enabled: !!selectedCheckResult?.id,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+  const selectedRecommendationMatch = selectedCheckResult
+    ? data?.results.find((destination) => destination.destination_id === selectedCheckResult.id)
+    : undefined;
+  const { data: checkedDestinationScore, isLoading: isDestinationScoreLoading } = useDestinationScore(
+    selectedCheckResult
+      ? {
+          destination_id: selectedCheckResult.id,
+          travel_month: month,
+          citizenship_code: 'RU',
+        }
+      : null
+  );
   useQuery({
     queryKey: ['profile'],
     queryFn: profileApi.getProfile,
     retry: 1,
   });
+
+  const checkedDestination = selectedCheckResult
+    ? getCheckedDestination(
+        selectedCheckResult,
+        checkedDestinationDetail,
+        checkedDestinationScore ?? selectedRecommendationMatch
+      )
+    : null;
+  const sheetDestination = sheetMode === 'check' ? checkedDestination : selectedRecommendation;
+  const isSheetLoading =
+    sheetMode === 'check' && !selectedRecommendationMatch && isDestinationScoreLoading;
 
   useEffect(() => {
     if (data?.results && data.results.length > 0) {
@@ -97,7 +164,23 @@ export const RecommendationsPage = () => {
       'destination',
       dest.destination_id
     );
-    setSelected(dest);
+    setSelectedRecommendation(dest);
+    setSheetMode('recommendation');
+    setSheetOpen(true);
+  };
+
+  const handleCheckSelect = (dest: DestinationSearchResult) => {
+    sendEvent(
+      'destination_detail_opened',
+      {
+        destination_id: dest.id,
+        source: 'recommendation_check_search',
+      },
+      'destination',
+      dest.id
+    );
+    setSelectedCheckResult(dest);
+    setSheetMode('check');
     setSheetOpen(true);
   };
 
@@ -133,6 +216,10 @@ export const RecommendationsPage = () => {
           <p className="mt-1 text-[14px] font-semibold text-muted-foreground">
             Подобраны под ваши предпочтения
           </p>
+        </div>
+
+        <div className="mb-3">
+          <DestinationCheckSearch onSelect={handleCheckSelect} />
         </div>
 
         <RecommendationFiltersUI
@@ -180,11 +267,12 @@ export const RecommendationsPage = () => {
       </PageContent>
 
       <DestinationDetailSheet
-        destination={selected}
+        destination={sheetDestination}
         month={month}
-        recommendationId={data?.recommendation_id}
-        modelVersion={data?.model_version}
+        recommendationId={sheetMode === 'recommendation' ? data?.recommendation_id : undefined}
+        modelVersion={sheetMode === 'recommendation' ? data?.model_version : undefined}
         open={sheetOpen}
+        isLoading={isSheetLoading}
         onClose={handleSheetClose}
       />
     </PageLayout>

@@ -128,4 +128,4 @@ def resolve_iata(
     lng: float | None = None,
     country_code: str | None = None,
 ) -> str | None:
-    return _resolve_iata_from_data_service(city_name, lat, lng, country_code) or _override_iata(city_name)
+    return _override_iata(city_name) or _resolve_iata_from_data_service(city_name, lat, lng, country_code)

@@ -53,6 +53,13 @@ export type RecommendRequest = {
   citizenship_code?: string;
 };
 
+export type RecommendDestinationRequest = {
+  destination_id: string;
+  travel_month: number;
+  citizenship_code?: string;
+  model_version?: string | null;
+};
+
 export type BudgetPredictRequest = {
   destination_id: string;
   duration_days: number;
@@ -100,6 +107,76 @@ export type BudgetPredictResponse = {
   model_version: string;
 };
 
+export type BudgetMonitorExpense = {
+  amount: number;
+  currency: string;
+  category: string;
+  expense_date?: string | null;
+  description?: string | null;
+  converted_amount?: number | null;
+};
+
+export type BudgetMonitorItinerarySummary = {
+  generated_days_count: number;
+  remaining_days_count: number;
+  remaining_poi_count: number;
+  remaining_food_poi_count: number;
+  remaining_paid_poi_count: number;
+  remaining_estimated_entrance_fees: number;
+  avg_visit_duration_minutes?: number | null;
+};
+
+export type BudgetMonitorRequest = {
+  trip_id?: string | null;
+  destination_id?: string | null;
+  start_date: string;
+  end_date: string;
+  as_of_date?: string | null;
+  people_count: number;
+  currency: string;
+  trip_budget?: number | null;
+  accommodation_tier?: string;
+  expenses: BudgetMonitorExpense[];
+  pre_trip_prediction?: {
+    total_min?: number | null;
+    total_mid?: number | null;
+    total_max?: number | null;
+    breakdown: Record<string, number>;
+    model_version?: string | null;
+  } | null;
+  itinerary_summary?: BudgetMonitorItinerarySummary | null;
+};
+
+export type BudgetMonitorCategoryContribution = {
+  category: string;
+  spent: number;
+  remaining_mid: number;
+  kind: string;
+};
+
+export type BudgetMonitorResponse = {
+  currency: string;
+  current_spent: number;
+  locked_fixed_costs: number;
+  recurring_spent: number;
+  optional_activity_spent: number;
+  remaining_min: number;
+  remaining_mid: number;
+  remaining_max: number;
+  projected_final_min: number;
+  projected_final_mid: number;
+  projected_final_max: number;
+  budget_limit: number | null;
+  budget_gap_mid: number | null;
+  budget_usage_projected_pct: number | null;
+  risk_status: 'forecast_only' | 'under_budget' | 'on_track' | 'risk' | 'over_budget' | string;
+  category_contributions: BudgetMonitorCategoryContribution[];
+  assumptions: Record<string, unknown>;
+  model_version: string;
+  baseline_version: string;
+  used_ml_model: boolean;
+};
+
 export type DestinationValidationStatus = 'suitable' | 'caution' | 'not_recommended';
 
 export type DestinationValidationWarning = {
@@ -114,6 +191,10 @@ export type DestinationValidationRequest = {
   travel_month: number;
   budget_per_day_usd?: number | null;
   display_currency?: string | null;
+  duration_days?: number | null;
+  risk_tolerance?: number | null;
+  language_code?: string | null;
+  preferred_language?: string | null;
 };
 
 export type DestinationValidationResponse = {

@@ -345,6 +345,9 @@ export const TripCreatePage = () => {
                 travelMonth={getTravelMonth(previewStartDate)}
                 budgetPerDayUsd={validationBudgetPerDayUsd}
                 budgetUnlimited={isBudgetUnlimited}
+                durationDays={budgetDurationDays}
+                riskTolerance={profile?.risk_tolerance}
+                preferredLanguage={profile?.language_comfort?.find((language) => language !== 'any') ?? null}
               />
             }
           />

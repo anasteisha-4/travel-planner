@@ -409,7 +409,7 @@ def generate_pairs(
 
         # Use ContentScorer only to identify top-scoring destinations for positive sampling.
         # Labels are computed INDEPENDENTLY below — ContentScorer scores are NOT used as labels.
-        filters: dict = {"exclude_destination_ids": [], "region": None}
+        filters: dict = {"exclude_destination_ids": [], "region": None, "include_route_fares": False}
         content_ranked = content_scorer.score(
             user_profile=profile,
             destinations=all_destinations,

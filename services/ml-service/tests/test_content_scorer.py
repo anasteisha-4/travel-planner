@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 
+from app.services import content_scorer as scorer_module
 from app.services.content_scorer import (
     ContentScorer,
     _activity_match_score,
@@ -259,6 +260,33 @@ def test_scorer_returns_results():
     assert len(results) == 1
     assert results[0].destination_id == dest_id
     assert 0.0 <= results[0].score <= 1.0
+
+
+def test_scorer_can_skip_route_fare_lookup(monkeypatch):
+    def fail_route_lookup(*_args, **_kwargs):
+        raise AssertionError("route fare lookup should be skipped")
+
+    monkeypatch.setattr(scorer_module, "_cached_route_fare", fail_route_lookup)
+
+    scorer = ContentScorer()
+    dest_id = uuid.uuid4()
+    feat_id, feat = _make_features(dest_id)
+    results = scorer.score(
+        user_profile=_make_profile(),
+        destinations=[_make_dest(dest_id)],
+        dest_features={feat_id: feat},
+        travel_month=7,
+        filters={
+            "citizenship_code": "RU",
+            "exclude_destination_ids": [],
+            "region": None,
+            "include_route_fares": False,
+        },
+    )
+
+    assert len(results) == 1
+    assert results[0].route_cost_usd is None
+    assert results[0].route_cost_source is None
 
 
 def test_scorer_excludes_filtered_dest():

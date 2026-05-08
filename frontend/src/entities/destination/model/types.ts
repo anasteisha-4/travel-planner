@@ -8,3 +8,10 @@ export type DestinationSearchResult = {
   lat: number;
   lng: number;
 };
+
+export type DestinationDetail = DestinationSearchResult & {
+  region: string;
+  avg_daily_cost_usd: number | null;
+  cost_index: number | null;
+  safety_score: number | null;
+};
