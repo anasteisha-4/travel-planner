@@ -3,9 +3,12 @@ from rapidfuzz import fuzz, process
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db
-from app.lib.russian_names import translate_destination_name
 from app.models import Destination, NameTranslationEntity
-from app.services.name_translation_service import destination_display_payload, load_translations
+from app.services.name_translation_service import (
+    destination_display_payload,
+    load_translations,
+    resolve_destination_display_name,
+)
 
 router = APIRouter(prefix="/destinations", tags=["destinations"])
 
@@ -21,13 +24,14 @@ def search_destinations(
         .filter(Destination.is_active == True)  # noqa: E712
         .all()
     )
+    translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in destinations])
 
     candidates: list[tuple[str, str]] = []
     dest_map: dict[str, Destination] = {}
     for d in destinations:
         key_en = f"{d.name}|{d.id}"
         candidates.append((d.name, key_en))
-        name_ru = translate_destination_name(d.name)
+        name_ru, _quality, _provider = resolve_destination_display_name(str(d.name), translations.get(str(d.id)))
         if name_ru and name_ru != d.name:
             candidates.append((name_ru, key_en))
         dest_map[key_en] = d
@@ -49,7 +53,6 @@ def search_destinations(
         if len(selected) >= limit:
             break
 
-    translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in selected])
     for d in selected:
         output.append(
             {

@@ -55,7 +55,7 @@ DESTINATION_RU: dict[str, str] = {
     "Helsinki": "Хельсинки",
     "Hong Kong": "Гонконг",
     "Hurghada": "Хургада",
-    "Iceland Blue Lagoon": "Голубая лагуна, Исландия",
+    "Iceland Blue Lagoon": "Голубая лагуна",
     "Istanbul": "Стамбул",
     "Jakarta": "Джакарта",
     "Jerusalem": "Иерусалим",
@@ -116,13 +116,54 @@ DESTINATION_RU: dict[str, str] = {
     "Yerevan": "Ереван",
     "Zanzibar": "Занзибар",
     "Zurich": "Цюрих",
+    "Amboseli": "Амбосели",
+    "Budta": "Будта",
+    "Camayenne": "Камайенн",
+    "Chitwan": "Читван",
+    "Colombo Fort": "Форт Коломбо",
+    "El Aaiún": "Эль-Аюн",
+    "Etosha": "Этоша",
+    "Evaton": "Эватон",
+    "Franz Josef": "Франц-Иосиф",
+    "Kampung Baru Subang": "Кампунг-Бару-Субанг",
+    "Kinosaki Onsen": "Киносаки-онсэн",
+    "Landmannalaugar": "Ландманналёйгар",
+    "Magome": "Магомэ",
+    "Maldives South Ari": "Южный Ари-Атолл",
+    "Mata-Utu": "Мата-Уту",
+    "Nairobi Karen": "Карен, Найроби",
+    "Natal Beach": "Натал",
+    "Ngorongoro": "Нгоронгоро",
+    "Olkhon": "Ольхон",
+    "Pai": "Пай",
+    "Port-aux-Français": "Порт-о-Франсе",
+    "Rasapūdipalem": "Расапудипалем",
+    "Rhine Valley": "Долина Рейна",
+    "Rwanda Volcanoes": "Вулканы Руанды",
+    "Shubrā al Khaymah": "Шубра-эль-Хейма",
+    "Soshanguve": "Сошангуве",
+    "Sulţānah": "Султана",
+    "Talatona": "Талатона",
+    "Tanzania Pemba": "о. Пемба",
+    "Uganda Bwindi": "Бвинди",
+    "Vang Vieng": "Ванг-Вьенг",
+    "Whitsundays": "Уитсанди",
+    "Yalata": "Ялата",
 }
 
 _CYRILLIC_RE = re.compile("[А-Яа-яЁё]")
+_BAD_TRANSLATION_MARKERS = (
+    "значения",
+    "не путать",
+)
+
+
+def has_cyrillic(value: str | None) -> bool:
+    return bool(value and _CYRILLIC_RE.search(value))
 
 
 def translate_destination_name(name: str | None) -> str | None:
-    if not name or _CYRILLIC_RE.search(name):
+    if not name or has_cyrillic(name):
         return name
     if name in DESTINATION_RU:
         return DESTINATION_RU[name]
@@ -139,3 +180,29 @@ def translate_destination_name(name: str | None) -> str | None:
             base = name[: -len(suffix)]
             return f"{DESTINATION_RU.get(base, base)}{ru_suffix}"
     return name
+
+
+def is_usable_destination_translation(original_name: str, translated_name: str | None, provider: str | None) -> bool:
+    if not translated_name or translated_name == original_name:
+        return False
+    if not has_cyrillic(translated_name):
+        return False
+    normalized = translated_name.casefold()
+    if any(marker in normalized for marker in _BAD_TRANSLATION_MARKERS):
+        return False
+    if "(" in translated_name or ")" in translated_name:
+        return False
+    return provider != "nominatim_reverse_ru"
+
+
+def resolve_destination_display_name(
+    original_name: str,
+    translated_name: str | None,
+    provider: str | None,
+) -> str:
+    if is_usable_destination_translation(original_name, translated_name, provider):
+        return str(translated_name)
+    local_name = translate_destination_name(original_name)
+    if local_name and local_name != original_name and has_cyrillic(local_name):
+        return local_name
+    return original_name

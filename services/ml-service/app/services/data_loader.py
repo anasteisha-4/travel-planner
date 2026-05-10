@@ -5,6 +5,8 @@ from psycopg2.extras import register_uuid
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.lib.russian_names import resolve_destination_display_name
+
 register_uuid()
 
 
@@ -17,8 +19,8 @@ def _destination_query(db: Session) -> str:
             "FROM destinations d WHERE d.is_active = true"
         )
     return (
-        "SELECT d.id, COALESCE(nt.translated_name, d.name) AS name, d.name AS name_original, "
-        "nt.translated_name AS name_ru, COALESCE(nt.translated_name, d.name) AS display_name, "
+        "SELECT d.id, d.name AS name, d.name AS name_original, "
+        "nt.translated_name AS name_ru, nt.translated_name AS display_name, nt.provider AS name_translation_provider, "
         "d.country_code, d.lat, d.lng, d.region, d.subregion "
         "FROM destinations d "
         "LEFT JOIN name_translations nt ON nt.entity_type = 'destination' "
@@ -29,7 +31,18 @@ def _destination_query(db: Session) -> str:
 
 def get_all_destinations(db: Session) -> list[dict]:
     result = db.execute(text(_destination_query(db)))
-    return [dict(row._mapping) for row in result]
+    destinations = [dict(row._mapping) for row in result]
+    for destination in destinations:
+        display_name = resolve_destination_display_name(
+            str(destination["name_original"]),
+            destination.get("name_ru"),
+            destination.get("name_translation_provider"),
+        )
+        destination["name"] = display_name
+        destination["name_ru"] = display_name
+        destination["display_name"] = display_name
+        destination.pop("name_translation_provider", None)
+    return destinations
 
 
 def get_destination_features(

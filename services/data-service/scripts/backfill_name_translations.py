@@ -86,6 +86,59 @@ GENERIC_POI_NAMES = {
     "viewpoint",
     "waterfall",
 }
+WIKIDATA_DISAMBIGUATION_QID = "Q416741"
+DESTINATION_BAD_TRANSLATION_MARKERS = (
+    "значения",
+    "не путать",
+)
+DESTINATION_QUERY_PREFIXES = (
+    "Cyprus",
+    "Ethiopia",
+    "Fiji",
+    "Ghana",
+    "Ivory Coast",
+    "Madagascar",
+    "Maldives",
+    "Mauritius",
+    "Mozambique",
+    "Namibia",
+    "Papua New Guinea",
+    "Reunion",
+    "Rwanda",
+    "Samoa",
+    "Senegal",
+    "Seychelles",
+    "Solomon Islands",
+    "Tanzania",
+    "Tonga",
+    "Uganda",
+    "Vanuatu",
+    "Zambia",
+    "Zanzibar",
+)
+DESTINATION_QUERY_SUFFIXES = ("Finland",)
+DESTINATION_QUERY_ALIASES = {
+    "Al Ain City": ["Al Ain"],
+    "Al Aḩmadī": ["Al Ahmadi", "Ahmadi"],
+    "El Aaiún": ["Laayoune", "El Aaiun"],
+    "Flam": ["Flåm"],
+    "Foz do Iguacu": ["Foz do Iguaçu"],
+    "Gabala": ["Qabala"],
+    "Ha Long": ["Hạ Long"],
+    "Jeti-Oguz": ["Jeti-Ögüz"],
+    "Khabarovsk Vtoroy": ["Khabarovsk"],
+    "Koh Lanta": ["Ko Lanta"],
+    "Kusadasi": ["Kuşadası"],
+    "Nesvizh": ["Niasviž", "Nesvizh"],
+    "Papeetē": ["Papeete"],
+    "Penjikent": ["Panjakent"],
+    "Phu Quoc": ["Phú Quốc"],
+    "Saranda": ["Sarandë"],
+    "Signagi": ["Sighnaghi"],
+    "Thāne": ["Thane"],
+    "Vang Vieng": ["Vangviang"],
+    "Yangshuo": ["Yangshuo County"],
+}
 T = TypeVar("T")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
@@ -134,6 +187,50 @@ def chunks(items: list[T], size: int) -> Iterable[list[T]]:
 def _normalize_name(value: str) -> str:
     value = value.lower().replace("&", "and")
     return re.sub(r"[^a-zа-яё0-9]+", "", value)
+
+
+def _safe_destination_label(original_name: str, label: str | None) -> bool:
+    if not label or label == original_name:
+        return False
+    if not has_cyrillic(label):
+        return False
+    normalized = label.casefold()
+    if any(marker in normalized for marker in DESTINATION_BAD_TRANSLATION_MARKERS):
+        return False
+    return "(" not in label and ")" not in label
+
+
+def _unsafe_destination_translation(row: NameTranslation | None) -> bool:
+    if row is None:
+        return True
+    return not _safe_destination_label(row.original_name, row.translated_name) or row.provider == "nominatim_reverse_ru"
+
+
+def _destination_query_variants(name: str) -> list[str]:
+    variants = [name]
+    variants.extend(DESTINATION_QUERY_ALIASES.get(name, []))
+
+    for prefix in DESTINATION_QUERY_PREFIXES:
+        marker = f"{prefix} "
+        if name.startswith(marker):
+            variants.append(name[len(marker) :])
+
+    for suffix in DESTINATION_QUERY_SUFFIXES:
+        marker = f" {suffix}"
+        if name.endswith(marker):
+            variants.append(name[: -len(marker)])
+
+    if " " in name:
+        variants.append(name.rsplit(" ", 1)[-1])
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for variant in variants:
+        cleaned = variant.strip()
+        if cleaned and cleaned.casefold() not in seen:
+            deduped.append(cleaned)
+            seen.add(cleaned.casefold())
+    return deduped
 
 
 def _distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -229,33 +326,107 @@ def upsert_translations(entity_type: NameTranslationEntity, rows: list[Translati
     return len(payload)
 
 
-def wikidata_destination_label(client: httpx.Client, name: str, country_code: str | None) -> tuple[str, str] | None:
-    escaped_name = json.dumps(name)
-    country_filter = ""
-    if country_code:
-        country_filter = f'?country wdt:P297 "{country_code.upper()}" .'
-    query = f"""
-    SELECT ?item ?itemLabelRu WHERE {{
-      ?item rdfs:label {escaped_name}@en .
-      OPTIONAL {{ ?item wdt:P17 ?country . }}
-      {country_filter}
-      ?item rdfs:label ?itemLabelRu FILTER(LANG(?itemLabelRu) = "ru") .
-    }}
-    LIMIT 1
-    """
-    response = client.get(
-        WIKIDATA_SPARQL_URL,
-        params={"query": query, "format": "json"},
+def _wikidata_claim_qids(entity: dict[str, Any], claim_id: str) -> set[str]:
+    qids: set[str] = set()
+    for claim in entity.get("claims", {}).get(claim_id, []):
+        value = claim.get("mainsnak", {}).get("datavalue", {}).get("value", {})
+        numeric_id = value.get("numeric-id")
+        if numeric_id is not None:
+            qids.add(f"Q{numeric_id}")
+    return qids
+
+
+def _wikidata_coordinate(entity: dict[str, Any]) -> tuple[float, float] | None:
+    coordinate_claims = entity.get("claims", {}).get("P625", [])
+    if not coordinate_claims:
+        return None
+    value = coordinate_claims[0].get("mainsnak", {}).get("datavalue", {}).get("value", {})
+    if value.get("latitude") is None or value.get("longitude") is None:
+        return None
+    return float(value["latitude"]), float(value["longitude"])
+
+
+def wikidata_destination_label(
+    client: httpx.Client,
+    name: str,
+    country_code: str | None,
+    lat: float,
+    lng: float,
+) -> tuple[str, str, float | None] | None:
+    for search_name in _destination_query_variants(name):
+        resolved = _wikidata_destination_label_for_query(client, name, search_name, country_code, lat, lng)
+        if resolved:
+            return resolved
+    return None
+
+
+def _wikidata_destination_label_for_query(
+    client: httpx.Client,
+    original_name: str,
+    search_name: str,
+    country_code: str | None,
+    lat: float,
+    lng: float,
+) -> tuple[str, str, float | None] | None:
+    search_response = _request_with_retry(
+        client,
+        "GET",
+        WIKIDATA_ENTITY_URL,
+        params={
+            "action": "wbsearchentities",
+            "search": search_name,
+            "language": "en",
+            "uselang": "ru",
+            "limit": 10,
+            "format": "json",
+        },
         headers=HEADERS,
         timeout=20,
     )
-    response.raise_for_status()
-    bindings = response.json().get("results", {}).get("bindings", [])
-    if not bindings:
+    qids = [item.get("id") for item in search_response.json().get("search", []) if item.get("id")]
+    if not qids:
         return None
-    item = bindings[0]["item"]["value"].rsplit("/", 1)[-1]
-    label = bindings[0]["itemLabelRu"]["value"]
-    return label, item
+
+    entities_response = _request_with_retry(
+        client,
+        "GET",
+        WIKIDATA_ENTITY_URL,
+        params={
+            "action": "wbgetentities",
+            "ids": "|".join(qids),
+            "props": "labels|aliases|claims",
+            "languages": "ru|en",
+            "format": "json",
+        },
+        headers=HEADERS,
+        timeout=20,
+    )
+    entities = entities_response.json().get("entities", {})
+    search_norm = _normalize_name(search_name)
+    for qid in qids:
+        entity = entities.get(qid) or {}
+        if WIKIDATA_DISAMBIGUATION_QID in _wikidata_claim_qids(entity, "P31"):
+            continue
+
+        labels = entity.get("labels", {})
+        ru_label = labels.get("ru", {}).get("value")
+        en_label = labels.get("en", {}).get("value")
+        aliases = entity.get("aliases", {}).get("en", [])
+        en_names = [en_label, *[alias.get("value") for alias in aliases]]
+        if search_norm not in {_normalize_name(en_name) for en_name in en_names if en_name}:
+            continue
+        if not _safe_destination_label(original_name, ru_label):
+            continue
+
+        coordinate = _wikidata_coordinate(entity)
+        if coordinate is None:
+            continue
+        distance_km = _distance_km(lat, lng, coordinate[0], coordinate[1])
+        if distance_km > 250:
+            continue
+        return str(ru_label), qid, distance_km
+
+    return None
 
 
 def nominatim_destination_label(client: httpx.Client, lat: float, lng: float) -> str | None:
@@ -284,7 +455,13 @@ def nominatim_destination_label(client: httpx.Client, lat: float, lng: float) ->
     return None
 
 
-def backfill_destinations(limit: int | None, sleep_seconds: float, missing_only: bool) -> None:
+def backfill_destinations(
+    limit: int | None,
+    sleep_seconds: float,
+    missing_only: bool,
+    local_only: bool,
+    unsafe_only: bool,
+) -> None:
     with SessionLocal() as db:
         q = db.query(Destination).filter(Destination.is_active == True)  # noqa: E712
         if missing_only:
@@ -298,9 +475,16 @@ def backfill_destinations(limit: int | None, sleep_seconds: float, missing_only:
                 .exists()
             )
         q = q.order_by(Destination.name)
-        if limit:
-            q = q.limit(limit)
         destinations = q.all()
+        if unsafe_only:
+            translations = load_destination_translations(db, [destination.id for destination in destinations])
+            destinations = [
+                destination
+                for destination in destinations
+                if _unsafe_destination_translation(translations.get(str(destination.id)))
+            ]
+        if limit:
+            destinations = destinations[:limit]
 
     saved = 0
     unresolved = 0
@@ -320,16 +504,41 @@ def backfill_destinations(limit: int | None, sleep_seconds: float, missing_only:
                 saved += upsert_translations(NameTranslationEntity.destination, [candidate])
                 continue
 
+            local_name = translate_destination_name(destination.name)
+            if local_name and local_name != destination.name and has_cyrillic(local_name):
+                candidate = TranslationCandidate(
+                    entity_id=destination.id,
+                    original_name=destination.name,
+                    translated_name=local_name,
+                    provider="local_curated",
+                    provider_ref=None,
+                    quality=NameTranslationQuality.manual,
+                    confidence=0.99,
+                    metadata={"country_code": destination.country_code},
+                )
+                saved += upsert_translations(NameTranslationEntity.destination, [candidate])
+                time.sleep(sleep_seconds)
+                continue
+            if local_only:
+                unresolved += 1
+                continue
+
             try:
-                resolved = wikidata_destination_label(client, destination.name, destination.country_code)
+                resolved = wikidata_destination_label(
+                    client,
+                    destination.name,
+                    destination.country_code,
+                    destination.lat,
+                    destination.lng,
+                )
             except Exception as exc:
                 print(f"[dest] error {destination.name}: {exc}")
                 unresolved += 1
                 time.sleep(sleep_seconds)
                 continue
 
-            if resolved and has_cyrillic(resolved[0]) and resolved[0] != destination.name:
-                label, wikidata_id = resolved
+            if resolved:
+                label, wikidata_id, distance_km = resolved
                 candidate = TranslationCandidate(
                     entity_id=destination.id,
                     original_name=destination.name,
@@ -337,51 +546,34 @@ def backfill_destinations(limit: int | None, sleep_seconds: float, missing_only:
                     provider="wikidata_ru_label",
                     provider_ref=wikidata_id,
                     quality=NameTranslationQuality.authoritative,
-                    confidence=0.98,
-                    metadata={"country_code": destination.country_code},
+                    confidence=0.97,
+                    metadata={
+                        "country_code": destination.country_code,
+                        "distance_km": round(distance_km, 2) if distance_km is not None else None,
+                    },
                 )
                 saved += upsert_translations(NameTranslationEntity.destination, [candidate])
             else:
-                local_name = translate_destination_name(destination.name)
-                if local_name and local_name != destination.name:
-                    candidate = TranslationCandidate(
-                        entity_id=destination.id,
-                        original_name=destination.name,
-                        translated_name=local_name,
-                        provider="local_curated",
-                        provider_ref=None,
-                        quality=NameTranslationQuality.manual,
-                        confidence=0.9,
-                        metadata={"country_code": destination.country_code},
-                    )
-                    saved += upsert_translations(NameTranslationEntity.destination, [candidate])
-                else:
-                    try:
-                        nominatim_name = nominatim_destination_label(client, destination.lat, destination.lng)
-                    except Exception:
-                        nominatim_name = None
-                    if nominatim_name and nominatim_name != destination.name:
-                        candidate = TranslationCandidate(
-                            entity_id=destination.id,
-                            original_name=destination.name,
-                            translated_name=nominatim_name,
-                            provider="nominatim_reverse_ru",
-                            provider_ref=None,
-                            quality=NameTranslationQuality.authoritative,
-                            confidence=0.86,
-                            metadata={
-                                "country_code": destination.country_code,
-                                "lat": destination.lat,
-                                "lng": destination.lng,
-                            },
-                        )
-                        saved += upsert_translations(NameTranslationEntity.destination, [candidate])
-                    else:
-                        unresolved += 1
-                        print(f"[dest] unresolved {destination.name} ({destination.country_code})")
+                unresolved += 1
+                print(f"[dest] unresolved {destination.name} ({destination.country_code})")
             time.sleep(sleep_seconds)
 
     print(f"destinations saved={saved} unresolved={unresolved} total={len(destinations)}")
+
+
+def load_destination_translations(db, entity_ids: list[uuid.UUID]) -> dict[str, NameTranslation]:
+    if not entity_ids:
+        return {}
+    rows = (
+        db.query(NameTranslation)
+        .filter(
+            NameTranslation.entity_type == NameTranslationEntity.destination,
+            NameTranslation.locale == "ru",
+            NameTranslation.entity_id.in_(entity_ids),
+        )
+        .all()
+    )
+    return {str(row.entity_id): row for row in rows}
 
 
 def _osm_type_from_external_id(external_id: str, source: POISource) -> tuple[str | None, str | None]:
@@ -877,6 +1069,8 @@ def main() -> None:
     dest_parser.add_argument("--limit", type=int)
     dest_parser.add_argument("--sleep", type=float, default=0.2)
     dest_parser.add_argument("--missing-only", action="store_true")
+    dest_parser.add_argument("--local-only", action="store_true")
+    dest_parser.add_argument("--unsafe-only", action="store_true")
 
     poi_parser = sub.add_parser("poi")
     poi_parser.add_argument("--limit", type=int)
@@ -892,7 +1086,7 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.mode == "destinations":
-        backfill_destinations(args.limit, args.sleep, args.missing_only)
+        backfill_destinations(args.limit, args.sleep, args.missing_only, args.local_only, args.unsafe_only)
     else:
         backfill_poi(
             args.limit,

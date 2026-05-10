@@ -163,6 +163,19 @@ jobs:
               echo ">>> No new migrations."
             fi
 
+            # --- Destination Russian-name seed ---
+            # Applies deterministic translated destination names. This does not call
+            # external providers and is safe to rerun.
+            if changed '^services/data-service/data/seed/destination_name_translations_ru\.json|^services/data-service/scripts/apply_destination_name_translations\.py|^services/data-service/app/lib/russian_names\.py|^services/data-service/app/services/name_translation_service\.py'; then
+              echo ">>> Destination translation seed changed — applying..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm data-service \
+                python scripts/apply_destination_name_translations.py
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d data-service ml-service
+              echo ">>> Destination translation seed applied."
+            else
+              echo ">>> No destination translation seed update needed."
+            fi
+
             # --- Synthetic budget data regeneration ---
             # Trigger: generator script changed, OR budget_formula.py changed
             # (formula constants are duplicated in generate_synthetic_data.py — must stay in sync)
