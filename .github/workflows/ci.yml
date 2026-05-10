@@ -60,7 +60,7 @@ jobs:
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: test-secret-key-for-ci
       CORS_ORIGINS: http://localhost:80
-      FXR_API_KEY: ""
+      FXR_API_KEY: ''
     steps:
       - uses: actions/checkout@v4
 
@@ -119,6 +119,7 @@ jobs:
 
   deploy:
     name: Deploy to VM
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     needs: [lint-backend, test-backend, lint-frontend, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -129,11 +130,13 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 60m
           script: |
             set -euo pipefail
             cd ~/travel-planner
 
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             # Detect which files changed in this push
             CHANGED=$(git diff HEAD~1 --name-only 2>/dev/null || git diff HEAD^ --name-only 2>/dev/null || echo "")

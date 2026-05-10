@@ -135,6 +135,34 @@ def _distance_bucket(km: float) -> int:
     return 5
 
 
+def _float_or_default(value: Any, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(numeric) or math.isinf(numeric):
+        return default
+    return numeric
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(numeric) or math.isinf(numeric):
+        return None
+    return numeric
+
+
+def _int_or_default(value: Any, default: int) -> int:
+    return int(_float_or_default(value, float(default)))
+
+
 def _build_pair_features(
     profile_snapshot: dict,
     dest_row: Any,
@@ -159,11 +187,11 @@ def _build_pair_features(
     Dims 34-72: destination feature vector (39 dims)
     """
     # Budget encoding
-    budget_tier = str(profile_snapshot.get("budget_tier", "mid"))
+    budget_tier = str(profile_snapshot.get("budget_tier") or "mid")
     b_low, b_high = BUDGET_TIER_RANGES.get(budget_tier, (0.25, 0.60))
-    budget_min_norm = float(profile_snapshot.get("budget_min_usd", 800)) / 20000.0
-    budget_max_norm = float(profile_snapshot.get("budget_max_usd", 2000)) / 20000.0
-    cost_index = float(dest_row.get("cost_index", 0.5))
+    budget_min_norm = _float_or_default(profile_snapshot.get("budget_min_usd"), 800.0) / 20000.0
+    budget_max_norm = _float_or_default(profile_snapshot.get("budget_max_usd"), 2000.0) / 20000.0
+    cost_index = _float_or_default(dest_row.get("cost_index"), 0.5)
     cost_mid = (b_low + b_high) / 2.0
     budget_fit = 1.0 - max(0.0, min(1.0, abs(cost_index - cost_mid) / 0.5))
 
@@ -175,7 +203,7 @@ def _build_pair_features(
         col = ACTIVITY_TYPE_MAP.get(act)
         if col and col in dest_row.index:
             w = 6 - rank
-            act_match += w * float(dest_row[col])
+            act_match += w * _float_or_default(dest_row[col], 0.0)
             w_total += w
     act_match_norm = act_match / w_total if w_total > 0 else 0.0
 
@@ -186,14 +214,14 @@ def _build_pair_features(
     top3_nature = float(any(ACTIVITY_TYPE_MAP.get(a) == "act_nature" for a in vacation_prefs[:3]))
 
     # Raw constraint preferences (LightGBM learns interaction with dest features)
-    risk_tolerance = int(profile_snapshot.get("risk_tolerance", 3))
+    risk_tolerance = _int_or_default(profile_snapshot.get("risk_tolerance"), 3)
     risk_norm = float(risk_tolerance) / 5.0
     is_safety_sensitive = float(risk_tolerance <= 2)
 
-    visa_tolerance = str(profile_snapshot.get("visa_tolerance", "any_visa"))
+    visa_tolerance = str(profile_snapshot.get("visa_tolerance") or "any_visa")
     visa_strictness = {"visa_free_only": 1.0, "evisa_ok": 0.5, "any_visa": 0.0}.get(visa_tolerance, 0.0)
 
-    crowd_pref = float(profile_snapshot.get("crowd_preference", 3)) / 5.0
+    crowd_pref = _float_or_default(profile_snapshot.get("crowd_preference"), 3.0) / 5.0
     n_prefs = float(len(vacation_prefs))
 
     # Climate preference encoding
@@ -203,19 +231,21 @@ def _build_pair_features(
     climate_any = float("any" in climate_prefs)
 
     # Origin and month
-    origin_lat = profile_snapshot.get("origin_lat")
-    origin_lng = profile_snapshot.get("origin_lng")
-    has_origin = float(origin_lat is not None)
+    origin_lat_raw = profile_snapshot.get("origin_lat")
+    origin_lng_raw = profile_snapshot.get("origin_lng")
+    origin_lat = _optional_float(origin_lat_raw)
+    origin_lng = _optional_float(origin_lng_raw)
+    has_origin = float(origin_lat is not None and origin_lng is not None)
     month_norm = float(travel_month) / 12.0
     # Month sine/cosine encoding (cyclical — Jan and Dec are adjacent)
     month_sin = math.sin(2 * math.pi * travel_month / 12)
     month_cos = math.cos(2 * math.pi * travel_month / 12)
 
     # Budget fit vs dest cost (matches independent_quality_score component 2)
-    avg_daily = float(dest_row.get("avg_daily_cost_usd", 80.0))
-    budget_min_usd = float(profile_snapshot.get("budget_min_usd") or 200)
-    budget_max_usd = float(profile_snapshot.get("budget_max_usd") or 2000)
-    duration_days = int(profile_snapshot.get("typical_duration_days") or 10)
+    avg_daily = _float_or_default(dest_row.get("avg_daily_cost_usd"), 80.0)
+    budget_min_usd = _float_or_default(profile_snapshot.get("budget_min_usd"), 200.0)
+    budget_max_usd = _float_or_default(profile_snapshot.get("budget_max_usd"), 2000.0)
+    duration_days = _int_or_default(profile_snapshot.get("typical_duration_days"), 10)
     trip_cost = avg_daily * duration_days
     if budget_min_usd <= trip_cost <= budget_max_usd:
         trip_budget_fit = 1.0
@@ -225,12 +255,12 @@ def _build_pair_features(
         trip_budget_fit = max(0.0, 1.0 - (trip_cost - budget_max_usd) / max(budget_max_usd, 1))
 
     # Dim 25: crowd_fit — how well dest crowd_index matches user crowd_preference
-    crowd_dest = float(dest_row.get("crowd_index_avg", 0.5))
+    crowd_dest = _float_or_default(dest_row.get("crowd_index_avg"), 0.5)
     crowd_fit = 1.0 - abs(crowd_pref - crowd_dest)
 
     # Dim 26: climate_match — intersection of climate_prefs with dest attributes
-    is_coastal = float(dest_row.get("is_coastal", 0))
-    has_mountains = float(dest_row.get("has_mountains", 0))
+    is_coastal = _float_or_default(dest_row.get("is_coastal"), 0.0)
+    has_mountains = _float_or_default(dest_row.get("has_mountains"), 0.0)
     if "any" in climate_prefs:
         climate_match = 0.5
     else:
@@ -238,21 +268,18 @@ def _build_pair_features(
             [
                 float(("tropical_warm" in climate_prefs or "mediterranean" in climate_prefs) and is_coastal > 0),
                 float("cold_snow" in climate_prefs and has_mountains > 0),
-                float("dry_desert" in climate_prefs and float(dest_row.get("safety_score", 0.5)) > 0.4),
+                float("dry_desert" in climate_prefs and _float_or_default(dest_row.get("safety_score"), 0.5) > 0.4),
             ]
         )
         climate_match = min(1.0, hits * 0.5)
 
     # Dim 27: origin_proximity — connectivity_score as accessibility proxy
-    if origin_lat is not None and origin_lng is not None:
-        proximity = float(dest_row.get("connectivity_score", 0.5))
-    else:
-        proximity = 0.5  # unknown origin → neutral
+    proximity = _float_or_default(dest_row.get("connectivity_score"), 0.5) if has_origin else 0.5
 
     # Dim 28: u_origin_distance_km — haversine distance from origin to destination
-    dest_lat = float(dest_row.get("lat", 0.0))
-    dest_lng = float(dest_row.get("lng", 0.0))
-    if origin_lat is not None and origin_lng is not None:
+    dest_lat = _float_or_default(dest_row.get("lat"), 0.0)
+    dest_lng = _float_or_default(dest_row.get("lng"), 0.0)
+    if has_origin and origin_lat is not None and origin_lng is not None:
         origin_distance_km = _haversine_km(origin_lat, origin_lng, dest_lat, dest_lng)
     else:
         origin_distance_km = 3000.0  # neutral default (medium distance)
@@ -263,7 +290,9 @@ def _build_pair_features(
     # Dim 30: u_likes_activity_sim — cosine similarity between dest activity vector
     #         and mean activity vector of liked destinations
     liked_dest_ids: list = profile_snapshot.get("liked_destination_ids") or []
-    dest_act_vec = np.array([float(dest_row.get(f"act_{a}", 0.0)) for a in ACTIVITY_TYPES_DEST], dtype=np.float64)
+    dest_act_vec = np.array(
+        [_float_or_default(dest_row.get(f"act_{a}"), 0.0) for a in ACTIVITY_TYPES_DEST], dtype=np.float64
+    )
     likes_activity_sim = 0.0  # default: no liked destinations
     liked_act_vec = np.array(profile_snapshot.get("liked_activity_vector") or [], dtype=np.float64)
     if liked_dest_ids and liked_act_vec.size == len(ACTIVITY_TYPES_DEST):
@@ -280,16 +309,16 @@ def _build_pair_features(
         likes_same_subregion = 1.0
 
     # Dim 32: u_visa_compatible — binary: dest visa_score passes user visa_tolerance threshold
-    dest_visa_score = float(dest_row.get("visa_score_ru", 0.5))
+    dest_visa_score = _float_or_default(dest_row.get("visa_score_ru"), 0.5)
     visa_threshold_val = {"visa_free_only": 0.80, "evisa_ok": 0.55, "any_visa": 0.0}.get(
-        str(profile_snapshot.get("visa_tolerance", "any_visa")), 0.0
+        str(profile_snapshot.get("visa_tolerance") or "any_visa"), 0.0
     )
     visa_compatible = float(dest_visa_score >= visa_threshold_val)
 
     # Dim 33: u_language_match — max of russian/english speaking score based on language_comfort
     language_comfort: list[str] = profile_snapshot.get("language_comfort") or ["any"]
-    ru_score = float(dest_row.get("russian_speaking_score", 0.1))
-    en_score = float(dest_row.get("english_speaking_score", 0.5))
+    ru_score = _float_or_default(dest_row.get("russian_speaking_score"), 0.1)
+    en_score = _float_or_default(dest_row.get("english_speaking_score"), 0.5)
     if "any" in language_comfort or ("ru" in language_comfort and "en" in language_comfort):
         language_match = max(ru_score, en_score)
     elif "ru" in language_comfort:
@@ -416,11 +445,11 @@ def _profile_from_user_features(row: Any) -> dict:
 
     return {
         "budget_tier": "mid",
-        "budget_min_usd": row.budget_min_usd,
-        "budget_max_usd": row.budget_max_usd,
-        "typical_duration_days": row.preferred_duration_days or 10,
-        "origin_lat": row.origin_lat,
-        "origin_lng": row.origin_lng,
+        "budget_min_usd": _float_or_default(row.budget_min_usd, 200.0),
+        "budget_max_usd": _float_or_default(row.budget_max_usd, 2000.0),
+        "typical_duration_days": _int_or_default(row.preferred_duration_days, 10),
+        "origin_lat": _optional_float(row.origin_lat),
+        "origin_lng": _optional_float(row.origin_lng),
         "vacation_preferences_ranked": [],
         "climate_preferences": ["any"],
         "language_comfort": ["any"],
