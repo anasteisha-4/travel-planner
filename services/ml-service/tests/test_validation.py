@@ -250,6 +250,24 @@ def test_validate_language_comfort_optional_warning(client: TestClient, db: Sess
     assert resp.json()["info"]["language_comfort_score"] == 0.2
 
 
+def test_validate_language_comfort_accepts_string_script_difficulty(client: TestClient, db: Session):
+    db.execute(
+        text(
+            "INSERT INTO destination_language_accessibility "
+            "(destination_id, russian_speaking_score, english_speaking_score, script_difficulty) "
+            "VALUES (:did, 0.8, 0.8, 'medium') ON CONFLICT (destination_id) DO UPDATE SET "
+            "russian_speaking_score = 0.8, english_speaking_score = 0.8, script_difficulty = 'medium'"
+        ),
+        {"did": str(DEST_ID)},
+    )
+    db.commit()
+
+    resp = client.post("/api/v1/validate", json={**_payload(), "preferred_language": "ru"})
+
+    assert resp.status_code == 200
+    assert resp.json()["info"]["script_difficulty"] == 0.5
+
+
 def test_validate_returns_destination_id(client: TestClient):
     resp = client.post("/api/v1/validate", json=_payload())
     assert resp.json()["destination_id"] == str(DEST_ID)

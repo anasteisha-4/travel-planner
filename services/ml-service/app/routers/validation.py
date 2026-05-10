@@ -58,6 +58,23 @@ def _safety_severity(safety_score: float, risk_tolerance: int | None) -> str | N
     return None
 
 
+def _script_difficulty_score(value) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int | float)):
+        return float(value)
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return None
+    label_scores = {"easy": 0.0, "medium": 0.5, "hard": 1.0}
+    if normalized in label_scores:
+        return label_scores[normalized]
+    try:
+        return float(normalized)
+    except ValueError:
+        return None
+
+
 @router.post("/validate", response_model=ValidateTripResponse)
 def validate_trip(
     request: ValidateTripRequest,
@@ -191,8 +208,9 @@ def validate_trip(
             comfort_score = float(language_row.comfort_score or 0.0)
             info["language_code"] = language
             info["language_comfort_score"] = comfort_score
-            if language_row.script_difficulty is not None:
-                info["script_difficulty"] = float(language_row.script_difficulty)
+            script_difficulty = _script_difficulty_score(language_row.script_difficulty)
+            if script_difficulty is not None:
+                info["script_difficulty"] = script_difficulty
             if comfort_score < 0.35:
                 warnings.append(
                     ValidationWarning(

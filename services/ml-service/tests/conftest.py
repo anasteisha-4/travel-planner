@@ -114,13 +114,16 @@ def create_ml_feature_tables(create_test_schema):
     with engine.connect() as conn:
         for tbl in reversed(_ML_FEATURE_TABLES):
             conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE destination_safety (
                 destination_id UUID PRIMARY KEY,
                 safety_score NUMERIC
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_costs (
                 destination_id UUID PRIMARY KEY,
                 cost_index NUMERIC,
@@ -134,8 +137,10 @@ def create_ml_feature_tables(create_test_schema):
                 luxury_usd NUMERIC,
                 seasonal_multiplier JSONB
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_seasonality (
                 destination_id UUID,
                 month INTEGER,
@@ -145,16 +150,20 @@ def create_ml_feature_tables(create_test_schema):
                 avg_humidity_pct NUMERIC,
                 PRIMARY KEY (destination_id, month)
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_activities (
                 destination_id UUID,
                 activity_type TEXT,
                 score NUMERIC,
                 PRIMARY KEY (destination_id, activity_type)
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE visa_rules (
                 citizenship_code TEXT,
                 destination_id UUID,
@@ -163,8 +172,10 @@ def create_ml_feature_tables(create_test_schema):
                 max_stay_days INTEGER,
                 PRIMARY KEY (citizenship_code, destination_id)
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_popularity (
                 destination_id UUID,
                 month INTEGER,
@@ -172,15 +183,19 @@ def create_ml_feature_tables(create_test_schema):
                 avg_pageviews NUMERIC,
                 PRIMARY KEY (destination_id, month)
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_connectivity (
                 destination_id UUID PRIMARY KEY,
                 connectivity_score NUMERIC,
                 mir_card_accepted BOOLEAN
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_attributes (
                 destination_id UUID PRIMARY KEY,
                 is_coastal BOOLEAN,
@@ -189,21 +204,26 @@ def create_ml_feature_tables(create_test_schema):
                 landscape TEXT,
                 altitude_m NUMERIC
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_language_accessibility (
                 destination_id UUID PRIMARY KEY,
                 russian_speaking_score NUMERIC,
                 english_speaking_score NUMERIC,
-                script_difficulty NUMERIC
+                script_difficulty TEXT
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE destination_infrastructure (
                 destination_id UUID PRIMARY KEY,
                 has_metro BOOLEAN,
                 healthcare_score NUMERIC,
                 avg_internet_mbps NUMERIC
             )
-        """))
+        """)
+        )
         conn.commit()
