@@ -286,15 +286,15 @@ def predict_budget(
     )
 
 
-def _monitor_status(projected_mid: float, budget_limit: float | None) -> str:
+def _monitor_status(current_spent: float, projected_mid: float, budget_limit: float | None) -> str:
     if budget_limit is None or budget_limit <= 0:
         return "forecast_only"
-    ratio = projected_mid / budget_limit
-    if ratio > 1.0:
+    if current_spent > budget_limit:
         return "over_budget"
-    if ratio > 0.92:
+    ratio = projected_mid / budget_limit
+    if ratio > 1.10:
         return "risk"
-    if ratio >= 0.78:
+    if ratio >= 0.85:
         return "on_track"
     return "under_budget"
 
@@ -322,7 +322,7 @@ def monitor_budget(
     budget_limit_usd = (
         request.trip_budget / SUPPORTED_CURRENCY_RATES.get(currency, 1.0) if request.trip_budget else None
     )
-    risk_status = _monitor_status(projected_mid, budget_limit_usd)
+    risk_status = _monitor_status(current_spent, projected_mid, budget_limit_usd)
 
     category_contributions = [
         BudgetMonitorCategoryContribution(
@@ -338,6 +338,7 @@ def monitor_budget(
     return BudgetMonitorResponse(
         currency=currency,
         current_spent=convert_from_usd(current_spent, currency),
+        planning_spent=convert_from_usd(baseline.planning_spent_usd, currency),
         locked_fixed_costs=convert_from_usd(baseline.locked_fixed_usd, currency),
         recurring_spent=convert_from_usd(baseline.recurring_spent_usd, currency),
         optional_activity_spent=convert_from_usd(baseline.optional_activity_spent_usd, currency),

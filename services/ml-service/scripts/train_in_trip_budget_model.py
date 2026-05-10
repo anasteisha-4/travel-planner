@@ -151,8 +151,6 @@ def build_checkpoint_rows(df: pd.DataFrame, seed: int = 42) -> tuple[np.ndarray,
             food_poi = max(0.0, remaining * rng.normal(1.0, 0.2))
             itinerary_fee = paid_poi * rng.normal(14.0, 4.0)
             pretrip_total_mid = total_actual * rng.normal(1.0, 0.08)
-            trip_budget = pretrip_total_mid * rng.normal(1.04, 0.15)
-
             baseline_remaining = max(
                 0.0,
                 (category_actual["housing"] - spent_by_category["housing"])
@@ -172,7 +170,7 @@ def build_checkpoint_rows(df: pd.DataFrame, seed: int = 42) -> tuple[np.ndarray,
                     float(remaining),
                     progress,
                     float(people),
-                    np.log1p(max(0.0, trip_budget)),
+                    np.log1p(max(0.0, pretrip_total_mid)),
                     np.log1p(max(0.0, pretrip_total_mid)),
                     np.log1p(current_spent),
                     np.log1p(locked_fixed),

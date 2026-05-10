@@ -29,6 +29,7 @@ async def test_converted_summary_multipair(client, auth_headers, trip_data):
             "amount": "10",
             "currency": "EUR",
             "category": "transport",
+            "expense_date": "2026-05-20",
         },
         headers=auth_headers,
     )
@@ -59,6 +60,8 @@ async def test_converted_summary_multipair(client, auth_headers, trip_data):
         # 10 EUR = 20 USD
         # Total = 21 USD
         assert Decimal(data["total"]) == Decimal("21.00")
+        assert Decimal(data["planning_total"]) == Decimal("20.00")
+        assert Decimal(data["in_trip_total"]) == Decimal("1.00")
         assert Decimal(data["by_category"]["food"]) == Decimal("1.00")
         assert Decimal(data["by_category"]["transport"]) == Decimal("20.00")
         assert data["target_currency"] == "USD"

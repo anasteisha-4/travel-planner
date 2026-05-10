@@ -60,6 +60,7 @@ class Expense(BaseModel):
     category: Mapped[ExpenseCategory] = mapped_column(Enum(ExpenseCategory), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_one_time: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class UserProfile(BaseModel):

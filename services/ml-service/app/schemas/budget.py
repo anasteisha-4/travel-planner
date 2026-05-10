@@ -58,6 +58,7 @@ class BudgetMonitorExpense(BaseModel):
     expense_date: date | None = None
     description: str | None = None
     converted_amount: float | None = Field(default=None, ge=0)
+    is_one_time: bool = False
 
 
 class BudgetMonitorItinerarySummary(BaseModel):
@@ -103,6 +104,7 @@ class BudgetMonitorCategoryContribution(BaseModel):
 class BudgetMonitorResponse(BaseModel):
     currency: str
     current_spent: float
+    planning_spent: float
     locked_fixed_costs: float
     recurring_spent: float
     optional_activity_spent: float

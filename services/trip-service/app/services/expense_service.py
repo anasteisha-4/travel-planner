@@ -62,6 +62,7 @@ def create_expense(
         category=data.category,
         description=data.description,
         expense_date=data.expense_date,
+        is_one_time=data.is_one_time,
     )
     db.add(expense)
     db.commit()
@@ -158,7 +159,7 @@ async def get_converted_summary(
 ) -> schemas.ConvertedExpenseSummary:
     from app.services.currency_service import convert_amount, get_exchange_rates
 
-    verify_trip_ownership(db, trip_id, user_id)
+    trip = verify_trip_ownership(db, trip_id, user_id)
 
     expenses = (
         db.query(models.Expense)
@@ -177,6 +178,8 @@ async def get_converted_summary(
 
     by_category: dict[str, Decimal] = {}
     total = Decimal("0")
+    planning_total = Decimal("0")
+    in_trip_total = Decimal("0")
     has_errors = False
 
     for exp in expenses:
@@ -188,9 +191,15 @@ async def get_converted_summary(
 
         by_category[cat_name] = by_category.get(cat_name, Decimal("0")) + converted
         total += converted
+        if exp.expense_date is not None and (exp.expense_date < trip.start_date or exp.expense_date > trip.end_date):
+            planning_total += converted
+        else:
+            in_trip_total += converted
 
     return schemas.ConvertedExpenseSummary(
         total=total.quantize(Decimal("0.01")),
+        planning_total=planning_total.quantize(Decimal("0.01")),
+        in_trip_total=in_trip_total.quantize(Decimal("0.01")),
         by_category={k: v.quantize(Decimal("0.01")) for k, v in by_category.items()},
         target_currency=target_currency.upper(),
         original_currencies=sorted(original_currencies),

@@ -23,6 +23,7 @@ def expense_to_response(expense) -> schemas.ExpenseResponse:
         category=expense.category.value if hasattr(expense.category, "value") else expense.category,
         description=expense.description,
         expense_date=expense.expense_date,
+        is_one_time=expense.is_one_time,
         created_at=expense.created_at.isoformat() if expense.created_at else "",
         updated_at=expense.updated_at.isoformat() if expense.updated_at else None,
     )

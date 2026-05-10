@@ -80,6 +80,7 @@ class ExpenseCreate(BaseModel):
     category: ExpenseCategory
     description: str | None = None
     expense_date: date | None = None
+    is_one_time: bool = False
 
 
 class ExpenseUpdate(BaseModel):
@@ -88,6 +89,7 @@ class ExpenseUpdate(BaseModel):
     category: ExpenseCategory | None = None
     description: str | None = None
     expense_date: date | None = None
+    is_one_time: bool | None = None
 
 
 class ExpenseResponse(BaseModel):
@@ -99,6 +101,7 @@ class ExpenseResponse(BaseModel):
     category: ExpenseCategory
     description: str | None
     expense_date: date | None
+    is_one_time: bool
     created_at: str
     updated_at: str | None
 
@@ -113,6 +116,8 @@ class ExpenseSummary(BaseModel):
 
 class ConvertedExpenseSummary(BaseModel):
     total: Decimal
+    planning_total: Decimal = Decimal("0")
+    in_trip_total: Decimal = Decimal("0")
     by_category: dict[str, Decimal]
     target_currency: str
     original_currencies: list[str]
