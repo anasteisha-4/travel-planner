@@ -2,6 +2,12 @@ import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { CATEGORY_META } from '@/entities/expense';
 import { CURRENCIES } from '@/shared/config';
 import {
+  HAPTIC_SINGLE_CONFIRM,
+  HAPTIC_SINGLE_ERROR,
+  HAPTIC_SINGLE_TAP,
+  useHapticFeedback,
+} from '@/shared/lib/useHapticFeedback';
+import {
   AdaptiveSheet,
   Button,
   Label,
@@ -10,9 +16,60 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from '@/shared/ui';
-import { Car, Coffee, Home, Loader2, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import { Car, Coffee, Home, Info, Loader2, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useExpenseForm } from '../model/useExpenseForm';
+
+const InfoTip = ({ text }: { text: string }) => {
+  const { play } = useHapticFeedback();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timeoutId = window.setTimeout(() => setOpen(false), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [open]);
+
+  return (
+    <TooltipProvider delayDuration={0}>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Подсказка"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              play(HAPTIC_SINGLE_TAP);
+              setOpen((current) => !current);
+            }}
+            className={`ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center text-stone-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+              open
+                ? 'text-blue-600 dark:text-blue-300'
+                : 'hover:text-blue-600 dark:text-stone-500 dark:hover:text-blue-300'
+            }`}
+          >
+            <Info className="h-3.5 w-3.5" strokeWidth={2.2} />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="max-w-[270px] rounded-[14px] border border-white/10 bg-stone-950 px-3.5 py-3 text-[12px] font-semibold leading-snug text-stone-100 shadow-[0_18px_45px_rgba(15,23,42,0.38)] dark:border-white/10 dark:bg-stone-950 dark:text-stone-100"
+        >
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   food: Coffee,
@@ -94,6 +151,8 @@ type ExpenseFormProps = {
   existingExpense?: Expense;
   onSuccess: () => void;
   onDeleteRequest?: () => void;
+  tripStartDate?: string;
+  tripEndDate?: string;
 };
 
 export const ExpenseForm = ({
@@ -104,53 +163,72 @@ export const ExpenseForm = ({
   existingExpense,
   onSuccess,
   onDeleteRequest,
+  tripStartDate,
+  tripEndDate,
 }: ExpenseFormProps) => {
+  const { play } = useHapticFeedback();
   const form = useExpenseForm(tripId, existingExpense, tripCurrency);
   const isEdit = !!existingExpense;
+
+  const isPlanningExpense =
+    !!form.expenseDate &&
+    !!tripStartDate &&
+    !!tripEndDate &&
+    (form.expenseDate < tripStartDate || form.expenseDate > tripEndDate);
+
+  const showOneTimeTip = form.isOneTime && !isPlanningExpense;
 
   const handleSubmit = async () => {
     const result = isEdit ? await form.handleUpdate(existingExpense.id) : await form.handleCreate();
     if (result) {
+      play(HAPTIC_SINGLE_CONFIRM);
       form.reset();
       onOpenChange(false);
       onSuccess();
+    } else {
+      play(HAPTIC_SINGLE_ERROR);
     }
   };
 
   const handleDelete = () => {
+    play(HAPTIC_SINGLE_ERROR);
     onOpenChange(false);
     onDeleteRequest?.();
   };
 
-  const footer = isEdit && onDeleteRequest ? (
-    <div className="flex gap-2.5">
+  const footer =
+    isEdit && onDeleteRequest ? (
+      <div className="flex gap-2.5">
+        <Button
+          variant="destructive"
+          haptic={false}
+          onClick={handleDelete}
+          disabled={form.isLoading}
+          className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(239,68,68,0.28)]"
+        >
+          Удалить
+        </Button>
+        <Button
+          haptic={false}
+          onClick={handleSubmit}
+          disabled={form.isLoading}
+          className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
+        >
+          {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Сохранить
+        </Button>
+      </div>
+    ) : (
       <Button
-        variant="destructive"
-        onClick={handleDelete}
-        disabled={form.isLoading}
-        className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(239,68,68,0.28)]"
-      >
-        Удалить
-      </Button>
-      <Button
+        haptic={false}
         onClick={handleSubmit}
         disabled={form.isLoading}
-        className="h-[52px] flex-1 rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
+        className="h-[52px] w-full rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
       >
         {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Сохранить
+        Добавить расход
       </Button>
-    </div>
-  ) : (
-    <Button
-      onClick={handleSubmit}
-      disabled={form.isLoading}
-      className="h-[52px] w-full rounded-2xl text-base font-bold shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
-    >
-      {form.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-      Добавить расход
-    </Button>
-  );
+    );
 
   return (
     <AdaptiveSheet
@@ -164,100 +242,159 @@ export const ExpenseForm = ({
       bodyClassName="pb-6"
       footer={footer}
     >
-        <div className="flex flex-col gap-4">
-          {/* Category */}
-          <div>
-            <Label className={labelClass}>Категория</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {CATEGORIES.map((cat) => {
-                const meta = CATEGORY_META[cat];
-                const isSelected = form.category === cat;
-                const Icon = CATEGORY_ICONS[cat] ?? MoreHorizontal;
-                const colors = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS['other'];
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => form.setCategory(cat)}
-                    className={`flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${
-                      isSelected
-                        ? `${colors.ring} ${colors.selectedBg}`
-                        : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'
-                    }`}
+      <div className="flex flex-col gap-4">
+        {/* Category */}
+        <div>
+          <Label className={labelClass}>Категория</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {CATEGORIES.map((cat) => {
+              const meta = CATEGORY_META[cat];
+              const isSelected = form.category === cat;
+              const Icon = CATEGORY_ICONS[cat] ?? MoreHorizontal;
+              const colors = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS['other'];
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    play(HAPTIC_SINGLE_TAP);
+                    form.setCategory(cat);
+                  }}
+                  className={`flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${
+                    isSelected
+                      ? `${colors.ring} ${colors.selectedBg}`
+                      : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'
+                  }`}
+                >
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-[10px] ${isSelected ? colors.selectedBg : colors.bg}`}
                   >
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-[10px] ${isSelected ? colors.selectedBg : colors.bg}`}
-                    >
-                      <Icon
-                        className={`h-4 w-4 ${isSelected ? colors.selectedIcon : colors.icon}`}
-                        strokeWidth={1.75}
-                      />
-                    </div>
-                    <span
-                      className={`text-[11px] font-semibold ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}
-                    >
-                      {meta.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                    <Icon
+                      className={`h-4 w-4 ${isSelected ? colors.selectedIcon : colors.icon}`}
+                      strokeWidth={1.75}
+                    />
+                  </div>
+                  <span
+                    className={`text-[11px] font-semibold ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}
+                  >
+                    {meta.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          {/* Amount + Currency */}
-          <div>
-            <Label className={labelClass}>Сумма</Label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="0"
-                value={form.amount}
-                onChange={(e) => form.setAmount(e.target.value)}
-                className={`${inputBase} flex-1`}
-              />
-              <Select value={form.currency} onValueChange={form.setCurrency}>
-                <SelectTrigger className="h-[52px] w-[84px] shrink-0 rounded-[14px] app-field text-[14px] font-bold text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CURRENCIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {form.errors.amount && (
-              <p className="mt-1 text-[12px] text-red-500">{form.errors.amount}</p>
+        {/* Amount + Currency */}
+        <div>
+          <Label className={labelClass}>Сумма</Label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              inputMode="decimal"
+              placeholder="0"
+              value={form.amount}
+              onChange={(e) => form.setAmount(e.target.value)}
+              className={`${inputBase} flex-1`}
+            />
+            <Select value={form.currency} onValueChange={form.setCurrency}>
+              <SelectTrigger className="app-field h-[52px] w-[84px] shrink-0 rounded-[14px] text-[14px] font-bold text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CURRENCIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {form.errors.amount && (
+            <p className="mt-1 text-[12px] text-red-500">{form.errors.amount}</p>
+          )}
+        </div>
+
+        {/* Date */}
+        <div>
+          <div className="mb-1.5 flex h-4 items-center">
+            <span className="inline-flex h-4 items-center text-[11px] font-bold uppercase leading-none tracking-widest text-stone-400 dark:text-stone-500">
+              Дата
+            </span>
+            {isPlanningExpense && (
+              <InfoTip text="Дата вне поездки. Расход попадёт в раздел «Подготовка» и не будет повторяться в дневном прогнозе" />
+            )}
+            {showOneTimeTip && (
+              <InfoTip text="Разовая трата — не будет считаться как ежедневный расход при прогнозе бюджета" />
             )}
           </div>
-
-          {/* Date */}
-          <div>
-            <Label className={labelClass}>Дата</Label>
-            <input
-              type="date"
-              value={form.expenseDate}
-              onChange={(e) => form.setExpenseDate(e.target.value)}
-              className={inputBase}
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <Label className={labelClass}>Описание</Label>
-            <input
-              type="text"
-              placeholder="Например: ужин в ресторане"
-              value={form.description}
-              onChange={(e) => form.setDescription(e.target.value)}
-              className={inputBase}
-            />
-          </div>
-
+          <input
+            type="date"
+            value={form.expenseDate}
+            onChange={(e) => form.setExpenseDate(e.target.value)}
+            className={inputBase}
+          />
         </div>
+
+        {/* One-time flag — shown only when date is within trip */}
+        {!isPlanningExpense && tripStartDate && tripEndDate && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={form.isOneTime}
+            onClick={() => {
+              play(HAPTIC_SINGLE_TAP);
+              form.setIsOneTime(!form.isOneTime);
+            }}
+            className={`flex min-h-[52px] w-full items-center gap-3 rounded-[14px] border-2 px-4 text-left transition-all ${
+              form.isOneTime
+                ? 'border-blue-500/50 bg-blue-50 shadow-[0_6px_20px_rgba(37,99,235,0.08)] dark:border-blue-500/50 dark:bg-blue-950/30'
+                : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'
+            }`}
+          >
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border-2 transition-all ${
+                form.isOneTime
+                  ? 'border-blue-600 bg-blue-600 dark:border-blue-400 dark:bg-blue-400'
+                  : 'border-stone-300 dark:border-stone-600'
+              }`}
+            >
+              {form.isOneTime && (
+                <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M2 6l3 3 5-5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </span>
+            <div>
+              <p
+                className={`text-[14px] font-bold ${
+                  form.isOneTime ? 'text-blue-700 dark:text-blue-300' : 'text-foreground'
+                }`}
+              >
+                Разовая трата
+              </p>
+            </div>
+          </button>
+        )}
+
+        {/* Description */}
+        <div>
+          <Label className={labelClass}>Описание</Label>
+          <input
+            type="text"
+            placeholder="Например: ужин в ресторане"
+            value={form.description}
+            onChange={(e) => form.setDescription(e.target.value)}
+            className={inputBase}
+          />
+        </div>
+      </div>
     </AdaptiveSheet>
   );
 };

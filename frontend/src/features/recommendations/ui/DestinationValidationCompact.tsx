@@ -1,8 +1,9 @@
 import { sendEvent } from '@/shared/api';
-import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { useDestinationValidation } from '../model/useDestinationValidation';
 import type { DestinationValidationStatus, DestinationValidationWarning } from '../model/types';
+import { useDestinationValidation } from '../model/useDestinationValidation';
 
 type Props = {
   destinationId: string | null;
@@ -42,7 +43,9 @@ const statusFromWarning = (warning?: DestinationValidationWarning): DestinationV
   return 'caution';
 };
 
-const getOverallStatus = (warnings: DestinationValidationWarning[]): DestinationValidationStatus => {
+const getOverallStatus = (
+  warnings: DestinationValidationWarning[]
+): DestinationValidationStatus => {
   if (warnings.some((warning) => warning.severity === 'high')) return 'not_recommended';
   if (warnings.length > 0) return 'caution';
   return 'suitable';
@@ -65,8 +68,9 @@ export const DestinationValidationCompact = ({
   preferredLanguage,
   className = '',
 }: Props) => {
+  const { play } = useHapticFeedback();
   const trackedKeys = useRef<Set<string>>(new Set());
-  const { data, isLoading, isError } = useDestinationValidation(
+  const { data, isFetching, isLoading, isError, refetch } = useDestinationValidation(
     destinationId
       ? {
           destination_id: destinationId,
@@ -75,7 +79,7 @@ export const DestinationValidationCompact = ({
           budget_per_day_usd: budgetPerDayUsd ?? null,
           duration_days: durationDays ?? null,
           risk_tolerance: riskTolerance ?? null,
-          preferred_language: preferredLanguage === 'any' ? null : preferredLanguage ?? null,
+          preferred_language: preferredLanguage === 'any' ? null : (preferredLanguage ?? null),
         }
       : null
   );
@@ -85,7 +89,7 @@ export const DestinationValidationCompact = ({
     const key = [
       destinationId,
       travelMonth,
-      budgetUnlimited ? 'unlimited' : budgetPerDayUsd ?? 'none',
+      budgetUnlimited ? 'unlimited' : (budgetPerDayUsd ?? 'none'),
       durationDays ?? 'duration-none',
       riskTolerance ?? 'risk-none',
       preferredLanguage ?? 'lang-none',
@@ -122,22 +126,59 @@ export const DestinationValidationCompact = ({
 
   if (!destinationId) {
     return (
-      <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
-        <p className="text-[12px] font-bold text-stone-700 dark:text-stone-200">Проверка направления</p>
-        <p className="mt-1 text-[12px] text-stone-400 dark:text-stone-500">
-          Выберите направление из подсказок, чтобы проверить визу, сезон, бюджет и риск.
-        </p>
+      <div
+        className={`h-[112px] rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
+              Проверка направления
+            </p>
+            <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
+              Выберите направление из подсказок
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {FACTORS.map((factor) => (
+            <div
+              key={factor.key}
+              className="truncate rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-2 py-1.5 text-center text-[11px] font-bold text-muted-foreground"
+            >
+              {factor.label}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (isLoading) {
+  if (isLoading || (isFetching && !data)) {
     return (
-      <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
-        <div className="h-4 w-36 animate-pulse rounded bg-[hsl(var(--surface-field))]" />
+      <div
+        className={`h-[112px] rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
+              Проверка направления
+            </p>
+            <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
+              Проверяем визу, сезон, бюджет и риск
+            </p>
+          </div>
+          <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 text-[11px] font-extrabold text-primary">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Проверка
+          </span>
+        </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5">
           {[0, 1, 2, 3].map((item) => (
-            <div key={item} className="h-7 animate-pulse rounded-xl bg-[hsl(var(--surface-field))]" />
+            <div
+              key={item}
+              className="h-[30.5px] truncate rounded-xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-2 py-1.5 text-center text-[11px] font-bold text-muted-foreground"
+            />
           ))}
         </div>
       </div>
@@ -146,30 +187,70 @@ export const DestinationValidationCompact = ({
 
   if (isError || !data) {
     return (
-      <div className={`rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
-        <p className="text-[12px] font-bold text-amber-700 dark:text-amber-300">Проверка временно недоступна</p>
+      <div
+        className={`h-[112px] rounded-2xl border border-red-500/25 bg-red-500/10 p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-red-700 dark:text-red-300">
+              Проверка направления
+            </p>
+            <p className="mt-0.5 text-[13px] font-bold text-red-700 dark:text-red-200">
+              Проверка временно недоступна
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              play('nudge');
+              void refetch();
+            }}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-red-500/25 bg-background/70 px-2.5 text-[11px] font-extrabold text-red-600 dark:text-red-300"
+            aria-label="Повторить проверку"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Повторить
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {FACTORS.map((factor) => (
+            <div
+              key={factor.key}
+              className="truncate rounded-xl border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-center text-[11px] font-bold text-red-700 dark:text-red-200"
+            >
+              {factor.label}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   const warningsByType = new Map(data.warnings.map((warning) => [warning.type, warning]));
-  const missingBudget = !budgetUnlimited && (budgetPerDayUsd === null || budgetPerDayUsd === undefined);
-  const overallStatus = missingBudget && data.warnings.length === 0 ? 'caution' : getOverallStatus(data.warnings);
+  const missingBudget =
+    !budgetUnlimited && (budgetPerDayUsd === null || budgetPerDayUsd === undefined);
+  const overallStatus =
+    missingBudget && data.warnings.length === 0 ? 'caution' : getOverallStatus(data.warnings);
   const overallMeta = STATUS_META[overallStatus];
   const OverallIcon = overallMeta.icon;
 
   return (
-    <div className={`rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}>
+    <div
+      className={`h-[112px] rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-3 transition-[opacity,transform,background-color,border-color] duration-300 ease-out ${className}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
             Проверка направления
           </p>
           <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
-            Виза, сезон, бюджет и риск
+            {isFetching ? 'Обновляем проверку...' : 'Виза, сезон, бюджет и риск'}
           </p>
         </div>
-        <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-extrabold ${overallMeta.classes}`}>
+        <span
+          className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-extrabold ${overallMeta.classes}`}
+        >
           <OverallIcon className="h-3.5 w-3.5" />
           {overallMeta.label}
         </span>
@@ -177,16 +258,17 @@ export const DestinationValidationCompact = ({
 
       <div className="mt-3 grid grid-cols-4 gap-1.5">
         {FACTORS.map((factor) => {
-          const status = factor.key === 'budget' && missingBudget
-            ? 'caution'
-            : statusFromWarning(warningsByType.get(factor.key));
+          const status =
+            factor.key === 'budget' && missingBudget
+              ? 'caution'
+              : statusFromWarning(warningsByType.get(factor.key));
           const meta = STATUS_META[status];
           const title =
             factor.key === 'budget' && budgetUnlimited
               ? 'Бюджет без лимита'
               : factor.key === 'budget' && missingBudget
                 ? 'Бюджет не проверен: нужен лимит поездки'
-                : warningsByType.get(factor.key)?.message ?? meta.label;
+                : (warningsByType.get(factor.key)?.message ?? meta.label);
           return (
             <div
               key={factor.key}

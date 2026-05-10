@@ -114,6 +114,7 @@ export type BudgetMonitorExpense = {
   expense_date?: string | null;
   description?: string | null;
   converted_amount?: number | null;
+  is_one_time?: boolean;
 };
 
 export type BudgetMonitorItinerarySummary = {
@@ -157,6 +158,7 @@ export type BudgetMonitorCategoryContribution = {
 export type BudgetMonitorResponse = {
   currency: string;
   current_spent: number;
+  planning_spent: number;
   locked_fixed_costs: number;
   recurring_spent: number;
   optional_activity_spent: number;

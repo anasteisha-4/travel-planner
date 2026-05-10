@@ -1,11 +1,14 @@
 import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { CATEGORY_META } from '@/entities/expense';
-import { Car, Coffee, Home, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import { CalendarClock, Car, Coffee, Home, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
 
 type ExpenseListProps = {
   expenses: Expense[];
   onEdit: (expense: Expense) => void;
   readonly?: boolean;
+  tripStartDate?: string;
+  tripEndDate?: string;
 };
 
 const formatDate = (dateStr: string) =>
@@ -57,7 +60,13 @@ const CategoryIcon = ({ category }: { category: ExpenseCategory }) => {
   );
 };
 
-export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) => {
+export const ExpenseList = ({ expenses, onEdit, readonly, tripStartDate, tripEndDate }: ExpenseListProps) => {
+  const { play } = useHapticFeedback();
+  const isPlanningExpense = (expense: Expense) =>
+    !!expense.expense_date &&
+    !!tripStartDate &&
+    !!tripEndDate &&
+    (expense.expense_date < tripStartDate || expense.expense_date > tripEndDate);
   if (expenses.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
@@ -103,20 +112,43 @@ export const ExpenseList = ({ expenses, onEdit, readonly }: ExpenseListProps) =>
           <div className="flex flex-col gap-2">
             {items.map((expense) => {
               const meta = CATEGORY_META[expense.category];
+              const planningExpense = isPlanningExpense(expense);
               return (
                 <div
                   key={expense.id}
-                  className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.05)] transition-all active:scale-[0.99] dark:shadow-none"
-                  onClick={() => !readonly && onEdit(expense)}
+                  className={`flex items-center gap-3 rounded-2xl border px-3 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.05)] transition-all active:scale-[0.99] dark:shadow-none ${
+                    planningExpense
+                      ? 'border-blue-200/80 bg-blue-50/45 dark:border-blue-900/60 dark:bg-blue-950/20'
+                      : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))]'
+                  }`}
+                  onClick={() => {
+                    if (!readonly) {
+                      play('nudge');
+                      onEdit(expense);
+                    }
+                  }}
                   role={readonly ? undefined : 'button'}
                   tabIndex={readonly ? undefined : 0}
-                  onKeyDown={(e) => !readonly && e.key === 'Enter' && onEdit(expense)}
+                  onKeyDown={(e) => {
+                    if (!readonly && e.key === 'Enter') {
+                      play('nudge');
+                      onEdit(expense);
+                    }
+                  }}
                 >
                   <CategoryIcon category={expense.category} />
                   <div className="flex-1 overflow-hidden">
-                    <p className="line-clamp-2 text-[15px] font-bold leading-snug text-stone-900 dark:text-white">
-                      {expense.description || meta.label}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="line-clamp-2 text-[15px] font-bold leading-snug text-stone-900 dark:text-white">
+                        {expense.description || meta.label}
+                      </p>
+                      {planningExpense && (
+                        <CalendarClock
+                          className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-300"
+                          aria-label="До поездки"
+                        />
+                      )}
+                    </div>
                     {expense.description && (
                       <p className="text-[12px] font-medium text-stone-400 dark:text-stone-500">
                         {meta.label}

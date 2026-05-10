@@ -4,6 +4,7 @@ import { profileApi } from '@/features/profile';
 import { useBudgetMonitor, useBudgetPrediction } from '@/features/recommendations';
 import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
 import { localizeDestinationName } from '@/shared/lib';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { Button } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
@@ -64,6 +65,7 @@ const getAccommodationTier = (
 };
 
 export const TripInfoTab = () => {
+  const { play } = useHapticFeedback();
   const navigate = useNavigate();
   const { trip, isStatusChanging, onStatusChange, onEditOpen, onCancelOpen, onDeleteOpen } =
     useOutletContext<TripDetailOutletContext>();
@@ -79,6 +81,7 @@ export const TripInfoTab = () => {
     budgetMonitoringStatus,
     burnRatePerDay,
     currency,
+    daysUntilStart,
     elapsedDays,
     projectedBudgetDiff,
     projectedBudgetPct,
@@ -123,40 +126,50 @@ export const TripInfoTab = () => {
       trip.start_date,
     ]
   );
-  const { data: budgetPrediction } = useBudgetPrediction(budgetPredictionParams);
+  const {
+    data: budgetPrediction,
+    isError: isBudgetPredictionError,
+    isFetching: isBudgetPredictionFetching,
+    isPending: isBudgetPredictionPending,
+    refetch: refetchBudgetPrediction,
+  } = useBudgetPrediction(budgetPredictionParams);
   const plannedDailyBudget = budgetPrediction
     ? budgetPrediction.total_mid / Math.max(budgetPrediction.duration_days, 1)
     : null;
   const todayParam = new Date().toISOString().slice(0, 10);
   const budgetMonitorParams = useMemo(
-    () => ({
-      trip_id: trip.id,
-      destination_id: trip.destination_id,
-      start_date: trip.start_date,
-      end_date: trip.end_date,
-      as_of_date: todayParam,
-      people_count: trip.people_count,
-      currency: trip.currency,
-      trip_budget: trip.budget,
-      accommodation_tier: budgetPredictionParams?.accommodation_tier ?? 'mid',
-      expenses: expenses.map((expense) => ({
-        amount: Number(expense.amount),
-        currency: expense.currency,
-        category: expense.category,
-        expense_date: expense.expense_date,
-        description: expense.description,
-      })),
-      pre_trip_prediction: budgetPrediction
-        ? {
-            total_min: budgetPrediction.total_min,
-            total_mid: budgetPrediction.total_mid,
-            total_max: budgetPrediction.total_max,
-            breakdown: budgetPrediction.breakdown,
-            model_version: budgetPrediction.model_version,
-          }
-        : null,
-      itinerary_summary: null,
-    }),
+    () =>
+      trip.destination_id && !budgetPrediction
+        ? null
+        : {
+            trip_id: trip.id,
+            destination_id: trip.destination_id,
+            start_date: trip.start_date,
+            end_date: trip.end_date,
+            as_of_date: todayParam,
+            people_count: trip.people_count,
+            currency: trip.currency,
+            trip_budget: trip.budget,
+            accommodation_tier: budgetPredictionParams?.accommodation_tier ?? 'mid',
+            expenses: expenses.map((expense) => ({
+              amount: Number(expense.amount),
+              currency: expense.currency,
+              category: expense.category,
+              expense_date: expense.expense_date,
+              description: expense.description,
+              is_one_time: expense.is_one_time,
+            })),
+            pre_trip_prediction: budgetPrediction
+              ? {
+                  total_min: budgetPrediction.total_min,
+                  total_mid: budgetPrediction.total_mid,
+                  total_max: budgetPrediction.total_max,
+                  breakdown: budgetPrediction.breakdown,
+                  model_version: budgetPrediction.model_version,
+                }
+              : null,
+            itinerary_summary: null,
+          },
     [
       budgetPrediction,
       budgetPredictionParams?.accommodation_tier,
@@ -171,7 +184,33 @@ export const TripInfoTab = () => {
       trip.start_date,
     ]
   );
-  const { data: budgetMonitor } = useBudgetMonitor(budgetMonitorParams);
+  const {
+    data: budgetMonitor,
+    isError: isBudgetMonitorError,
+    isFetching: isBudgetMonitorFetching,
+    isPending: isBudgetMonitorPending,
+    refetch: refetchBudgetMonitor,
+  } = useBudgetMonitor(budgetMonitorParams);
+  const hasBudgetForecastError =
+    (Boolean(budgetPredictionParams) && !budgetPrediction && isBudgetPredictionError) ||
+    (Boolean(budgetMonitorParams) && !budgetMonitor && isBudgetMonitorError);
+  const isBudgetForecastUpdating =
+    !hasBudgetForecastError &&
+    ((Boolean(budgetPredictionParams) &&
+      !budgetPrediction &&
+      (isBudgetPredictionPending || isBudgetPredictionFetching)) ||
+      isBudgetMonitorPending ||
+      (!budgetMonitor && isBudgetMonitorFetching));
+  const isBudgetForecastRetrying =
+    hasBudgetForecastError && (isBudgetPredictionFetching || isBudgetMonitorFetching);
+
+  const handleBudgetForecastRetry = () => {
+    if (Boolean(budgetPredictionParams) && (!budgetPrediction || isBudgetPredictionError)) {
+      void refetchBudgetPrediction();
+      return;
+    }
+    void refetchBudgetMonitor();
+  };
 
   const handleContinueTrip = async () => {
     await deleteFeedback();
@@ -282,10 +321,14 @@ export const TripInfoTab = () => {
             budgetMonitoringStatus={budgetMonitoringStatus}
             burnRatePerDay={burnRatePerDay}
             currency={currency}
+            daysUntilStart={daysUntilStart}
             elapsedDays={elapsedDays}
+            hasError={hasBudgetForecastError}
             peopleCount={trip.people_count}
             plannedDailyBudget={plannedDailyBudget}
             monitor={budgetMonitor}
+            isUpdating={isBudgetForecastUpdating || isBudgetForecastRetrying}
+            onRetry={handleBudgetForecastRetry}
             projectedBudgetDiff={projectedBudgetDiff}
             projectedBudgetPct={projectedBudgetPct}
             projectedFinalSpend={projectedFinalSpend}
@@ -381,7 +424,10 @@ export const TripInfoTab = () => {
             <button
               type="button"
               className={`flex h-[52px] shrink-0 items-center justify-center rounded-2xl border border-red-100 bg-red-50/70 dark:border-red-900/60 dark:bg-red-900/20 ${isCancelled || isCompleted ? 'w-full flex-1 gap-2' : 'w-[52px]'}`}
-              onClick={onDeleteOpen}
+              onClick={() => {
+                play('error');
+                onDeleteOpen();
+              }}
             >
               <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
               {(isCancelled || isCompleted) && (

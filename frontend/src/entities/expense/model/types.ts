@@ -29,6 +29,7 @@ export const ExpenseSchema = z.object({
   category: ExpenseCategoryEnum,
   description: z.string().nullable(),
   expense_date: z.string().nullable(),
+  is_one_time: z.boolean().default(false),
   created_at: z.string(),
   updated_at: z.string().nullable(),
 });
@@ -41,6 +42,7 @@ export const ExpenseCreateSchema = z.object({
   category: ExpenseCategoryEnum,
   description: z.string().nullable().optional(),
   expense_date: z.string().nullable().optional(),
+  is_one_time: z.boolean().optional(),
 });
 
 export type ExpenseCreate = z.infer<typeof ExpenseCreateSchema>;
@@ -57,6 +59,8 @@ export type ExpenseSummary = z.infer<typeof ExpenseSummarySchema>;
 
 export const ConvertedExpenseSummarySchema = z.object({
   total: z.union([z.string(), z.number()]).transform(String),
+  planning_total: z.union([z.string(), z.number()]).transform(String).default('0'),
+  in_trip_total: z.union([z.string(), z.number()]).transform(String).default('0'),
   by_category: z.record(z.string(), z.union([z.string(), z.number()]).transform(String)),
   target_currency: z.string(),
   original_currencies: z.array(z.string()),

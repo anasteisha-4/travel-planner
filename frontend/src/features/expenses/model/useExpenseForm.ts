@@ -16,6 +16,7 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
   const [expenseDate, setExpenseDate] = useState(
     existingExpense?.expense_date ?? new Date().toISOString().slice(0, 10)
   );
+  const [isOneTime, setIsOneTime] = useState(existingExpense?.is_one_time ?? false);
 
   useEffect(() => {
     if (existingExpense) {
@@ -24,6 +25,7 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
       setCategory(existingExpense.category);
       setDescription(existingExpense.description ?? '');
       setExpenseDate(existingExpense.expense_date ?? new Date().toISOString().slice(0, 10));
+      setIsOneTime(existingExpense.is_one_time ?? false);
     }
   }, [existingExpense]);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +50,7 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
       category,
       description: description.trim() || null,
       expense_date: expenseDate || null,
+      is_one_time: isOneTime,
     };
     const result = ExpenseCreateSchema.safeParse(raw);
     if (!result.success) {
@@ -130,6 +133,7 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
     setCategory('food');
     setDescription('');
     setExpenseDate(new Date().toISOString().slice(0, 10));
+    setIsOneTime(false);
     setErrors({});
   };
 
@@ -144,6 +148,8 @@ export const useExpenseForm = (tripId: string, existingExpense?: Expense, defaul
     setDescription,
     expenseDate,
     setExpenseDate,
+    isOneTime,
+    setIsOneTime,
     isLoading,
     errors,
     handleCreate,

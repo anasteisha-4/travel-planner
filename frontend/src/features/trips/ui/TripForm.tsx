@@ -8,6 +8,7 @@ import {
   UNLIMITED_BUDGET_SLIDER_VALUE,
   useDebouncedValue,
 } from '@/shared/lib';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { cn } from '@/shared/lib/utils';
 import {
   AppInput,
@@ -48,6 +49,7 @@ const DestinationSearchInput = ({
   onSelect,
   onClearError,
 }: DestinationSearchInputProps) => {
+  const { play } = useHapticFeedback();
   const debouncedQuery = useDebouncedValue(value, 400);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +68,7 @@ const DestinationSearchInput = ({
   };
 
   const handleSelect = (dest: DestinationSearchResult) => {
+    play('success');
     onSelect(dest);
     onClearError();
     setOpen(false);
@@ -76,7 +79,7 @@ const DestinationSearchInput = ({
     open && value.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
 
   return (
-    <div>
+    <div className="relative z-10 focus-within:z-40">
       <FieldLabel>{label}</FieldLabel>
       <div className="relative">
         <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
@@ -105,41 +108,40 @@ const DestinationSearchInput = ({
             ) : null}
           </div>
         )}
+        {showDropdown && (
+          <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] shadow-[0_16px_42px_rgba(0,0,0,0.18)]">
+            {isFetching && results.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-stone-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Поиск...
+              </div>
+            ) : (
+              results.map((dest) => (
+                <button
+                  key={dest.id}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    handleSelect(dest);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
+                    <MapPin className="h-3.5 w-3.5 text-stone-500" />
+                  </div>
+                  <div>
+                    <p className="line-clamp-2 text-[14px] font-semibold text-foreground">
+                      {dest.display_name ?? dest.name_ru ?? localizeDestinationName(dest.name)}
+                    </p>
+                    <p className="text-[12px] text-muted-foreground">{dest.country_code}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
       <FormError message={error} />
-
-      {showDropdown && (
-        <div className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] shadow-[0_16px_42px_rgba(0,0,0,0.18)]">
-          {isFetching && results.length === 0 ? (
-            <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-stone-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Поиск...
-            </div>
-          ) : (
-            results.map((dest) => (
-              <button
-                key={dest.id}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  handleSelect(dest);
-                }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
-                  <MapPin className="h-3.5 w-3.5 text-stone-500" />
-                </div>
-                <div>
-                  <p className="line-clamp-2 text-[14px] font-semibold text-foreground">
-                    {dest.display_name ?? dest.name_ru ?? localizeDestinationName(dest.name)}
-                  </p>
-                  <p className="text-[12px] text-muted-foreground">{dest.country_code}</p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      )}
     </div>
   );
 };
@@ -163,6 +165,7 @@ export const TripForm = ({
   validationSlot?: ReactNode;
   analyticsContext?: TripCreateAnalyticsContext;
 }) => {
+  const { play } = useHapticFeedback();
   const {
     destination,
     handleDestinationInput,
@@ -200,7 +203,12 @@ export const TripForm = ({
 
   const handleSubmit = async () => {
     const trip = existingTrip ? await handleUpdate(existingTrip.id) : await handleCreate();
-    if (trip) onSuccess(trip);
+    if (trip) {
+      play('success');
+      onSuccess(trip);
+    } else {
+      play('error');
+    }
   };
 
   const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-[hsl(var(--surface-border))]';
@@ -225,7 +233,10 @@ export const TripForm = ({
             <button
               type="button"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface-muted))] text-foreground disabled:opacity-40"
-              onClick={decrementPeople}
+              onClick={() => {
+                play('nudge');
+                decrementPeople();
+              }}
               disabled={peopleCount <= 1}
             >
               <Minus className="h-3.5 w-3.5" />
@@ -236,7 +247,10 @@ export const TripForm = ({
             <button
               type="button"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
-              onClick={incrementPeople}
+              onClick={() => {
+                play('nudge');
+                incrementPeople();
+              }}
               disabled={peopleCount >= 20}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -372,6 +386,7 @@ export const TripForm = ({
           </Button>
         )}
         <Button
+          haptic={false}
           onClick={handleSubmit}
           disabled={isLoading}
           className={cn(

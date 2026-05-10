@@ -14,12 +14,17 @@ export const useBudgetMonitor = (params: BudgetMonitorRequest | null) => {
       params?.people_count,
       params?.currency,
       params?.trip_budget ?? null,
-      params?.expenses.map((expense) => `${expense.category}:${expense.amount}:${expense.currency}:${expense.expense_date ?? ''}`).join('|') ?? '',
+      params?.expenses
+        .map(
+          (expense) =>
+            `${expense.category}:${expense.amount}:${expense.currency}:${expense.expense_date ?? ''}:${expense.description ?? ''}:${expense.is_one_time ? '1' : '0'}`
+        )
+        .join('|') ?? '',
       params?.pre_trip_prediction?.total_mid ?? null,
     ],
     queryFn: () => recommendationsApi.getBudgetMonitor(params!),
     enabled: params !== null,
-    staleTime: 60 * 1000,
+    staleTime: 0,
     retry: 1,
   });
 };

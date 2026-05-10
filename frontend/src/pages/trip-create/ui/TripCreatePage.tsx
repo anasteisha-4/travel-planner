@@ -1,13 +1,14 @@
-import type { Trip } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
+import type { Trip } from '@/entities/trip';
 import { profileApi } from '@/features/profile';
 import { DestinationValidationCompact, useBudgetPrediction } from '@/features/recommendations';
 import { TripForm, type TripFormInitialValues, type TripFormSnapshot } from '@/features/trips';
 import { sendEvent } from '@/shared/api';
 import { useDebouncedValue } from '@/shared/lib';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -39,11 +40,7 @@ const getAccommodationTier = (
 ): 'budget' | 'mid' | 'luxury' => {
   const requested = value === 'budget' || value === 'luxury' ? value : 'mid';
   const profileTier =
-    restLevel === 'economy'
-      ? 'budget'
-      : restLevel === 'luxury'
-        ? 'luxury'
-        : 'mid';
+    restLevel === 'economy' ? 'budget' : restLevel === 'luxury' ? 'luxury' : 'mid';
 
   if (budgetLimitUsd !== null && budgetLimitUsd !== undefined) {
     if (budgetLimitUsd < 900) return 'budget';
@@ -77,7 +74,99 @@ const formatBudgetAmount = (value: number, currency: string) => {
   return symbol.length > 1 ? `${symbol} ${amount}` : `${symbol}${amount}`;
 };
 
+const BudgetPredictionStateCard = ({
+  state,
+  onRetry,
+}: {
+  state: 'empty' | 'loading' | 'error';
+  onRetry?: () => void;
+}) => {
+  const { play } = useHapticFeedback();
+  const meta = {
+    empty: {
+      icon: Sparkles,
+      title: 'Выберите параметры поездки',
+      subtitle: 'Укажите направление из подсказок и даты',
+      text: 'После этого Triply рассчитает ваш бюджет',
+      headerClassName: 'bg-primary/10',
+      labelClassName: 'text-primary',
+      titleClassName: 'text-foreground',
+      iconClassName: 'bg-primary/10 text-primary',
+    },
+    loading: {
+      icon: Loader2,
+      title: 'Считаем прогноз бюджета',
+      subtitle: 'Проверяем сезон, длительность и другие особенности направления',
+      text: 'Расчёт занимает несколько секунд',
+      headerClassName: 'bg-primary/10',
+      labelClassName: 'text-primary',
+      titleClassName: 'text-foreground',
+      iconClassName: 'bg-primary/10 text-primary',
+    },
+    error: {
+      icon: AlertTriangle,
+      title: 'Временно недоступен',
+      subtitle: 'Можно попробовать ещё раз или продолжить без прогноза',
+      text: 'Не удалось рассчитать бюджет по выбранным параметрам',
+      headerClassName: 'bg-red-500/10',
+      labelClassName: 'text-red-600 dark:text-red-300',
+      titleClassName: 'text-red-700 dark:text-red-200',
+      iconClassName: 'bg-red-500/10 text-red-600 dark:text-red-300',
+    },
+  }[state];
+  const Icon = meta.icon;
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_18px_44px_rgba(2,8,23,0.08)] transition-[opacity,transform,background-color,border-color] duration-300 ease-out dark:shadow-[0_22px_56px_rgba(0,0,0,0.32)]">
+      <div
+        className={`border-b border-[hsl(var(--surface-border))] px-4 py-4 ${meta.headerClassName}`}
+      >
+        <div>
+          <p
+            className={`text-[11px] font-extrabold uppercase tracking-[0.06em] ${meta.labelClassName}`}
+          >
+            Прогноз Triply
+          </p>
+          <p className={`mt-1 text-[26px] font-extrabold tracking-tight ${meta.titleClassName}`}>
+            {meta.title}
+          </p>
+          <p className="mt-1 text-[12px] font-bold text-muted-foreground">{meta.subtitle}</p>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] px-3.5 py-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${meta.iconClassName}`}
+            >
+              <Icon className={`h-4.5 w-4.5 ${state === 'loading' ? 'animate-spin' : ''}`} />
+            </div>
+            <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
+              <p className="text-[13px] font-extrabold leading-snug text-foreground">{meta.text}</p>
+            </div>
+            {state === 'error' && onRetry && (
+              <button
+                type="button"
+                onClick={() => {
+                  play('nudge');
+                  onRetry();
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-500/25 bg-background/70 text-red-600 transition-colors active:scale-95 dark:text-red-300"
+                aria-label="Повторить прогноз"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const TripCreatePage = () => {
+  const { play } = useHapticFeedback();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const trackedBudgetKeys = useRef<Set<string>>(new Set());
@@ -112,19 +201,29 @@ export const TripCreatePage = () => {
 
   const initialDestinationId = searchParams.get('destination_id');
   const previewDestination = debouncedFormSnapshot?.destination ?? initialValues.destination;
-  const isInitialDestination = normalizeCity(previewDestination) === normalizeCity(initialValues.destination);
+  const isInitialDestination =
+    normalizeCity(previewDestination) === normalizeCity(initialValues.destination);
   const destinationId = debouncedFormSnapshot
-    ? debouncedFormSnapshot.destination_id ?? (isInitialDestination ? initialDestinationId : null)
+    ? (debouncedFormSnapshot.destination_id ?? (isInitialDestination ? initialDestinationId : null))
     : initialDestinationId;
   const previewStartDate = debouncedFormSnapshot?.start_date ?? initialValues.start_date;
   const previewEndDate = debouncedFormSnapshot?.end_date ?? initialValues.end_date;
-  const previewDepartureCity = debouncedFormSnapshot?.departure_city ?? initialValues.departure_city ?? profile?.origin_city_name;
-  const isProfileOrigin = normalizeCity(previewDepartureCity) === normalizeCity(profile?.origin_city_name);
+  const previewDepartureCity =
+    debouncedFormSnapshot?.departure_city ??
+    initialValues.departure_city ??
+    profile?.origin_city_name;
+  const isProfileOrigin =
+    normalizeCity(previewDepartureCity) === normalizeCity(profile?.origin_city_name);
   const selectedOriginLat = debouncedFormSnapshot?.departure_lat ?? null;
   const selectedOriginLng = debouncedFormSnapshot?.departure_lng ?? null;
-  const budgetDurationDays = getDurationDays(previewStartDate, previewEndDate) ?? profile?.typical_duration_days ?? 7;
+  const budgetDurationDays =
+    getDurationDays(previewStartDate, previewEndDate) ?? profile?.typical_duration_days ?? 7;
   const budgetPeopleCount = debouncedFormSnapshot?.people_count ?? initialValues.people_count ?? 1;
-  const budgetCurrency = debouncedFormSnapshot?.currency ?? initialValues.currency ?? profile?.preferred_currency ?? 'RUB';
+  const budgetCurrency =
+    debouncedFormSnapshot?.currency ??
+    initialValues.currency ??
+    profile?.preferred_currency ??
+    'RUB';
   const budgetValue = debouncedFormSnapshot?.budget ?? initialValues.budget ?? -1;
   const needsUsdRate = budgetValue > 0 && budgetCurrency !== 'USD';
   const { data: validationRates } = useQuery({
@@ -149,11 +248,12 @@ export const TripCreatePage = () => {
     profile?.rest_level,
     validationBudgetUsd
   );
-  const validationBudgetPerDayUsd = validationBudgetUsd !== null
-    ? validationBudgetUsd / Math.max(budgetDurationDays * budgetPeopleCount, 1)
-    : null;
-  const { data: budgetPrediction } = useBudgetPrediction(
-    destinationId
+  const validationBudgetPerDayUsd =
+    validationBudgetUsd !== null
+      ? validationBudgetUsd / Math.max(budgetDurationDays * budgetPeopleCount, 1)
+      : null;
+  const budgetPredictionParams =
+    destinationId && previewStartDate && previewEndDate
       ? {
           destination_id: destinationId,
           duration_days: budgetDurationDays,
@@ -166,10 +266,16 @@ export const TripCreatePage = () => {
           origin_lat: selectedOriginLat ?? (isProfileOrigin ? profile?.origin_lat : null),
           origin_lng: selectedOriginLng ?? (isProfileOrigin ? profile?.origin_lng : null),
         }
-      : null
-  );
+      : null;
+  const {
+    data: budgetPrediction,
+    isFetching: isBudgetPredictionFetching,
+    isError: isBudgetPredictionError,
+    refetch: refetchBudgetPrediction,
+  } = useBudgetPrediction(budgetPredictionParams);
   const budgetAssumptions = budgetPrediction?.assumptions;
-  const hasBudgetTravelFareData = budgetAssumptions?.travel_cost_source?.startsWith('travelpayouts') ?? false;
+  const hasBudgetTravelFareData =
+    budgetAssumptions?.travel_cost_source?.startsWith('travelpayouts') ?? false;
   const budgetTravelCost = budgetPrediction?.breakdown.travel_to_destination ?? 0;
   const budgetDisplayTotalMid = budgetPrediction
     ? Math.max(0, budgetPrediction.total_mid - (hasBudgetTravelFareData ? 0 : budgetTravelCost))
@@ -200,7 +306,8 @@ export const TripCreatePage = () => {
         {
           label: 'Прогноз',
           value: formatBudgetAmount(budgetDisplayTotalMid, budgetPrediction.currency),
-          className: 'border-primary/35 bg-primary/10 text-foreground shadow-[0_12px_34px_rgba(37,99,235,0.16)]',
+          className:
+            'border-primary/35 bg-primary/10 text-foreground shadow-[0_12px_34px_rgba(37,99,235,0.16)]',
         },
         {
           label: 'Верхняя граница',
@@ -213,7 +320,8 @@ export const TripCreatePage = () => {
     ? `${formatBudgetAmount(budgetTravelCost, budgetPrediction?.currency ?? budgetCurrency)} · ${budgetTravelSource}`
     : budgetTravelSource;
   const budgetDistanceValue =
-    budgetAssumptions?.travel_distance_km !== null && budgetAssumptions?.travel_distance_km !== undefined
+    budgetAssumptions?.travel_distance_km !== null &&
+    budgetAssumptions?.travel_distance_km !== undefined
       ? `${Math.round(budgetAssumptions.travel_distance_km).toLocaleString('ru-RU')} км`
       : 'Расстояние неизвестно';
 
@@ -255,7 +363,10 @@ export const TripCreatePage = () => {
           <button
             type="button"
             className="flex h-9 w-9 shrink-0 items-center justify-center"
-            onClick={handleCancel}
+            onClick={() => {
+              play('nudge');
+              handleCancel();
+            }}
           >
             <ChevronLeft className="h-5 w-5 text-stone-700 dark:text-stone-200" />
           </button>
@@ -266,8 +377,14 @@ export const TripCreatePage = () => {
       </AppPageHeader>
 
       <PageContent pb="pb-28" className="pt-4">
-        {budgetPrediction && (
-          <div className="mb-4 overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_18px_44px_rgba(2,8,23,0.08)] transition-[opacity,transform,background-color,border-color] duration-300 ease-out dark:shadow-[0_22px_56px_rgba(0,0,0,0.32)]">
+        {!budgetPredictionParams ? (
+          <BudgetPredictionStateCard state="empty" />
+        ) : isBudgetPredictionFetching && !budgetPrediction ? (
+          <BudgetPredictionStateCard state="loading" />
+        ) : isBudgetPredictionError && !budgetPrediction ? (
+          <BudgetPredictionStateCard state="error" onRetry={() => void refetchBudgetPrediction()} />
+        ) : budgetPrediction ? (
+          <div className="mb-4 min-h-[184px] origin-top overflow-hidden rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_18px_44px_rgba(2,8,23,0.08)] transition-[opacity,transform,background-color,border-color,max-height] duration-500 ease-out animate-in fade-in-0 slide-in-from-top-2 dark:shadow-[0_22px_56px_rgba(0,0,0,0.32)]">
             <div className="border-b border-[hsl(var(--surface-border))] bg-primary/10 px-4 py-4">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-primary">
@@ -293,9 +410,7 @@ export const TripCreatePage = () => {
                     <p className="text-[10px] font-extrabold uppercase leading-tight tracking-[0.04em]">
                       {item.label}
                     </p>
-                    <p className="mt-1.5 text-[13px] font-extrabold leading-tight">
-                      {item.value}
-                    </p>
+                    <p className="mt-1.5 text-[13px] font-extrabold leading-tight">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -321,14 +436,17 @@ export const TripCreatePage = () => {
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
                     Дорога
                   </p>
-                  <p className="mt-1 break-words font-extrabold leading-snug text-foreground" title={budgetRouteValue}>
+                  <p
+                    className="mt-1 break-words font-extrabold leading-snug text-foreground"
+                    title={budgetRouteValue}
+                  >
                     {budgetRouteValue}
                   </p>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        ) : null}
         {isProfileLoading ? null : (
           <TripForm
             initialValues={initialValues}
@@ -347,7 +465,9 @@ export const TripCreatePage = () => {
                 budgetUnlimited={isBudgetUnlimited}
                 durationDays={budgetDurationDays}
                 riskTolerance={profile?.risk_tolerance}
-                preferredLanguage={profile?.language_comfort?.find((language) => language !== 'any') ?? null}
+                preferredLanguage={
+                  profile?.language_comfort?.find((language) => language !== 'any') ?? null
+                }
               />
             }
           />

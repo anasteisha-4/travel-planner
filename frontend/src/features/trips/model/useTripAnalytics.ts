@@ -6,6 +6,13 @@ import { placeApi } from '@/entities/place';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
+const isFixedCostExpense = (expense: Expense, tripStart: string, tripEnd: string): boolean => {
+  if (expense.expense_date && (expense.expense_date < tripStart || expense.expense_date > tripEnd)) {
+    return true;
+  }
+  return expense.is_one_time;
+};
+
 type BudgetTier = 'green' | 'amber' | 'orange' | 'red';
 export type BudgetMonitoringStatus = 'under_budget' | 'on_track' | 'risk' | 'over_budget';
 
@@ -48,20 +55,45 @@ export const useTripAnalytics = (trip: Trip) => {
       const end = parseTripDate(trip.end_date);
       const today = new Date();
       const todayAtMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      if (todayAtMidnight < start) {
+        const daysUntilStart = Math.max(1, Math.ceil((start.getTime() - todayAtMidnight.getTime()) / DAY_MS));
+        return { daysUntilStart, elapsedDays: 0, remainingDays: durationDays };
+      }
       const activeEnd = todayAtMidnight < start ? start : todayAtMidnight > end ? end : todayAtMidnight;
       const elapsedDays = diffDaysInclusive(start, activeEnd);
       const remainingDays = Math.max(0, durationDays - elapsedDays);
 
-      return { elapsedDays, remainingDays };
+      return { daysUntilStart: 0, elapsedDays, remainingDays };
     } catch {
-      return { elapsedDays: 1, remainingDays: 0 };
+      return { daysUntilStart: 0, elapsedDays: 1, remainingDays: 0 };
     }
   }, [durationDays, trip.end_date, trip.start_date]);
 
   const totalSpent = Number(summaryQuery.data?.total ?? '0');
-  const avgPerDay = totalSpent / durationDays;
-  const burnRatePerDay = totalSpent / tripProgress.elapsedDays;
-  const projectedFinalSpend = burnRatePerDay * durationDays;
+  const planningSpent = Number(summaryQuery.data?.planning_total ?? '0');
+  const inTripSpent = Number(summaryQuery.data?.in_trip_total ?? summaryQuery.data?.total ?? '0');
+  const avgPerDay = inTripSpent / durationDays;
+
+  const recurringInTripSpent = useMemo(() => {
+    const expenses = expensesQuery.data ?? [];
+    if (!expenses.length) return inTripSpent;
+    const withinTripExpenses = expenses.filter(
+      (e) => !e.expense_date || (e.expense_date >= trip.start_date && e.expense_date <= trip.end_date)
+    );
+    const withinTripRaw = withinTripExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    if (withinTripRaw === 0) return 0;
+    const recurringRaw = withinTripExpenses
+      .filter((e) => !isFixedCostExpense(e, trip.start_date, trip.end_date))
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const recurringFraction = recurringRaw / withinTripRaw;
+    return inTripSpent * recurringFraction;
+  }, [expensesQuery.data, inTripSpent, trip.start_date, trip.end_date]);
+
+  const burnRatePerDay = tripProgress.elapsedDays > 0 ? inTripSpent / tripProgress.elapsedDays : 0;
+  const forecastRecurringRatePerDay =
+    tripProgress.elapsedDays > 0 ? recurringInTripSpent / tripProgress.elapsedDays : 0;
+  const projectedFinalSpend =
+    planningSpent + inTripSpent + forecastRecurringRatePerDay * tripProgress.remainingDays;
   const placesVisited = placesQuery.data?.length ?? 0;
 
   const budget = trip.budget ?? null;
@@ -103,9 +135,12 @@ export const useTripAnalytics = (trip: Trip) => {
   return {
     loading: summaryQuery.isLoading || placesQuery.isLoading || expensesQuery.isLoading,
     totalSpent,
+    planningSpent,
+    inTripSpent,
     avgPerDay,
     burnRatePerDay,
     projectedFinalSpend,
+    daysUntilStart: tripProgress.daysUntilStart,
     elapsedDays: tripProgress.elapsedDays,
     remainingDays: tripProgress.remainingDays,
     durationDays,

@@ -1,5 +1,15 @@
 import type { ConvertedExpenseSummary, ExpenseCategory } from '@/entities/expense';
-import { AlertTriangle, Car, Coffee, Home, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import {
+  AlertTriangle,
+  Car,
+  CheckCircle2,
+  Coffee,
+  Gauge,
+  Home,
+  MoreHorizontal,
+  Music,
+  ShoppingBag,
+} from 'lucide-react';
 
 type ExpenseSummaryProps = {
   summary: ConvertedExpenseSummary;
@@ -52,10 +62,48 @@ const RING_R = 54;
 const RING_SIZE = 128;
 const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
+type BudgetSummaryStatus = 'under_budget' | 'on_track' | 'risk' | 'over_budget';
+
+const STATUS_META: Record<
+  BudgetSummaryStatus,
+  {
+    badge: string;
+    icon: typeof CheckCircle2;
+    tone: string;
+  }
+> = {
+  under_budget: {
+    badge: 'В рамках',
+    icon: CheckCircle2,
+    tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  on_track: {
+    badge: 'В рамках',
+    icon: Gauge,
+    tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  risk: {
+    badge: 'Почти лимит',
+    icon: AlertTriangle,
+    tone: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+  },
+  over_budget: {
+    badge: 'Превышен',
+    icon: AlertTriangle,
+    tone: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+  },
+};
+
+const getBudgetSummaryStatus = (pct: number): BudgetSummaryStatus => {
+  if (pct > 1) return 'over_budget';
+  if (pct >= 0.9) return 'risk';
+  if (pct >= 0.5) return 'on_track';
+  return 'under_budget';
+};
+
 const getRingColor = (pct: number, isOver: boolean): string => {
   if (isOver) return '#EF4444';
   if (pct >= 0.9) return '#F97316';
-  if (pct >= 0.5) return '#F59E0B';
   return '#22C55E';
 };
 
@@ -67,11 +115,16 @@ const fmtBudgetShort = (v: number): string => {
 
 export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
   const total = Number(summary.total);
+  const planningTotal = Number(summary.planning_total);
+  const inTripTotal = Number(summary.in_trip_total);
   const currency = summary.target_currency;
   const remaining = budget ? budget - total : null;
   const pct = budget && budget > 0 ? total / budget : 0;
   const isOverBudget = pct > 1;
   const hasExpenses = total > 0;
+  const status = budget && budget > 0 ? getBudgetSummaryStatus(pct) : null;
+  const statusMeta = status ? STATUS_META[status] : null;
+  const StatusIcon = statusMeta?.icon;
 
   const ringColor = getRingColor(pct, isOverBudget);
   const clampedPct = Math.min(pct, 1);
@@ -97,14 +150,16 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
           : ''
       }`}
     >
-      {/* Header */}
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
           Бюджет
-        </span>
-        {isOverBudget && (
-          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-600 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-400">
-            Превышен
+        </p>
+        {statusMeta && StatusIcon && (
+          <span
+            className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${statusMeta.tone}`}
+          >
+            <StatusIcon className="h-3.5 w-3.5" />
+            {statusMeta.badge}
           </span>
         )}
       </div>
@@ -226,6 +281,27 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
         <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           Некоторые валюты не удалось сконвертировать
+        </div>
+      )}
+
+      {planningTotal > 0 && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+              До поездки
+            </p>
+            <p className="mt-1 text-[15px] font-extrabold text-stone-900 dark:text-white">
+              {fmt(planningTotal)} {currency}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+              В поездке
+            </p>
+            <p className="mt-1 text-[15px] font-extrabold text-stone-900 dark:text-white">
+              {fmt(inTripTotal)} {currency}
+            </p>
+          </div>
         </div>
       )}
 
