@@ -1,3 +1,4 @@
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { cn } from '@/shared/lib/utils';
 
 type TabItem<T> = {
@@ -13,34 +14,41 @@ type TabBarProps<T extends string> = {
   className?: string;
 };
 
-export const TabBar = <T extends string,>({ tabs, active, onChange, className }: TabBarProps<T>) => (
-  <div className={cn('flex min-w-max border-b border-[hsl(var(--surface-border))]', className)}>
-    {tabs.map(({ id, label, count }) => (
-      <button
-        key={id}
-        type="button"
-        onClick={() => onChange(id)}
-        className={cn(
-          'flex min-h-11 items-center gap-1.5 pb-2.5 pr-5 text-[15px] font-semibold transition-colors',
-          active === id
-            ? 'border-b-[2.5px] border-primary text-stone-900 dark:text-white'
-            : 'text-stone-400 dark:text-stone-500'
-        )}
-      >
-        {label}
-        {count !== undefined && (
-          <span
-            className={cn(
-              'rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
-              active === id
-                ? 'bg-primary/10 text-primary dark:bg-primary/20'
-                : 'bg-stone-100 text-stone-400 dark:bg-[hsl(var(--surface-muted))] dark:text-stone-500'
-            )}
-          >
-            {count}
-          </span>
-        )}
-      </button>
-    ))}
-  </div>
-);
+export const TabBar = <T extends string,>({ tabs, active, onChange, className }: TabBarProps<T>) => {
+  const { play } = useHapticFeedback();
+
+  return (
+    <div className={cn('flex min-w-max border-b border-[hsl(var(--surface-border))]', className)}>
+      {tabs.map(({ id, label, count }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => {
+            if (active !== id) play('nudge');
+            onChange(id);
+          }}
+          className={cn(
+            'flex min-h-11 items-center gap-1.5 pb-2.5 pr-5 text-[15px] font-semibold transition-colors',
+            active === id
+              ? 'border-b-[2.5px] border-primary text-stone-900 dark:text-white'
+              : 'text-stone-400 dark:text-stone-500'
+          )}
+        >
+          {label}
+          {count !== undefined && (
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
+                active === id
+                  ? 'bg-primary/10 text-primary dark:bg-primary/20'
+                  : 'bg-stone-100 text-stone-400 dark:bg-[hsl(var(--surface-muted))] dark:text-stone-500'
+              )}
+            >
+              {count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+};

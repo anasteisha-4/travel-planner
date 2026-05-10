@@ -7,6 +7,7 @@ import {
   PageLayout,
   StepIndicator,
 } from '@/shared/ui';
+import { HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 
 import { useOnboardingV2 } from '../model/useOnboardingV2';
 import type { ClimatePref, DurationOption, LanguageOption, RestLevel, VisaTolerance } from '../model/types';
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export const OnboardingV2Wizard = ({ onComplete }: Props) => {
+  const { play } = useHapticFeedback();
   const {
     currentStep,
     vacationPreferencesRanked,
@@ -79,7 +81,10 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
           {currentStep > 1 ? (
             <button
               type="button"
-              onClick={goBack}
+              onClick={() => {
+                play(HAPTIC_SINGLE_TAP);
+                goBack();
+              }}
               className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] transition-colors active:bg-[hsl(var(--surface-field))]"
             >
               <ChevronLeft className="h-5 w-5 text-foreground" />
@@ -101,7 +106,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
         </div>
       </AppPageHeader>
 
-      <PageContent pb="pb-36">
+      <PageContent pb="pb-36" scrollHaptic>
         <div
           key={currentStep}
           className="animate-in fade-in slide-in-from-right-4 duration-200"
@@ -175,6 +180,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
       >
         <Button
+          haptic={isLastStep ? false : HAPTIC_SINGLE_TAP}
           onClick={isLastStep ? handleComplete : goNext}
           disabled={isSaving}
           className="mb-2 h-[52px] w-full rounded-2xl shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
@@ -184,6 +190,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
         </Button>
         <Button
           variant="ghost"
+          haptic={false}
           onClick={handleSaveAndExit}
           disabled={isSaving}
           className="h-[44px] w-full text-[14px] text-muted-foreground"

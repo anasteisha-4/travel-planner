@@ -3,6 +3,8 @@ import { MapPin, Loader2, Check, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { useDebouncedValue } from '@/shared/lib';
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { cn } from '@/shared/lib/utils';
 import { DURATION_OPTIONS } from '@/shared/config';
 import { AppInput, FieldLabel } from '@/shared/ui';
@@ -21,6 +23,8 @@ type Props = {
 };
 
 export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange, cityError, durationError }: Props) => {
+  const { play } = useHapticFeedback();
+  const dropdownScrollHaptics = useScrollHaptics();
   const [inputValue, setInputValue] = useState(cityName);
   const debouncedQuery = useDebouncedValue(inputValue, 400);
   const [open, setOpen] = useState(false);
@@ -42,6 +46,7 @@ export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange,
   };
 
   const handleSelect = (dest: DestinationSearchResult) => {
+    play(HAPTIC_SINGLE_CONFIRM);
     setInputValue(dest.name);
     setOpen(false);
     onSelect({ name: dest.name, lat: dest.lat, lng: dest.lng });
@@ -89,7 +94,10 @@ export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange,
         {cityError && <p className="mt-2 text-[13px] text-red-500">{cityError}</p>}
 
         {showDropdown && (
-          <div className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
+          <div
+            className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
+            {...dropdownScrollHaptics}
+          >
             {isFetching && results.length === 0 ? (
               <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -124,7 +132,10 @@ export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange,
             <button
               key={d.id}
               type="button"
-              onClick={() => onDurationChange(duration === d.id ? null : d.id as DurationOption)}
+              onClick={() => {
+                play(duration === d.id ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
+                onDurationChange(duration === d.id ? null : d.id as DurationOption);
+              }}
               className={cn(
                 'flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98]',
                 duration === d.id

@@ -3,6 +3,8 @@ import { Globe, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDebouncedValue } from '@/shared/lib';
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { AppInput, FieldLabel } from '@/shared/ui';
 
 import { onboardingV2Api } from '../api/onboarding-v2.api';
@@ -16,6 +18,8 @@ type Props = {
 };
 
 export const StepLikedDests = ({ dests, onChange }: Props) => {
+  const { play } = useHapticFeedback();
+  const dropdownScrollHaptics = useScrollHaptics();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 400);
   const [open, setOpen] = useState(false);
@@ -31,12 +35,14 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
 
   const handleSelect = (dest: DestinationSearchResult) => {
     if (selectedIds.includes(dest.id) || dests.length >= 10) return;
+    play(HAPTIC_SINGLE_CONFIRM);
     onChange([...dests, { id: dest.id, name: dest.name, country_code: dest.country_code }]);
     setQuery('');
     setOpen(false);
   };
 
   const handleRemove = (id: string) => {
+    play(HAPTIC_SINGLE_TAP);
     onChange(dests.filter((d) => d.id !== id));
   };
 
@@ -95,7 +101,10 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
         )}
 
         {showDropdown && (
-          <div className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
+          <div
+            className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
+            {...dropdownScrollHaptics}
+          >
             {isFetching && results.length === 0 ? (
               <div className="flex items-center gap-2 px-4 py-3 text-[14px] text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,3 +1,4 @@
+import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { cn } from '@/shared/lib/utils';
 
 type PageLayoutProps = {
@@ -37,8 +38,18 @@ type PageContentProps = {
   children: React.ReactNode;
   pb?: string;
   className?: string;
+  scrollHaptic?: boolean;
 };
 
-export const PageContent = ({ children, pb = 'pb-24', className }: PageContentProps) => (
-  <div className={cn('flex-1 overflow-y-auto px-5 no-scrollbar', pb, className)}>{children}</div>
-);
+export const PageContent = ({ children, pb = 'pb-24', className, scrollHaptic = false }: PageContentProps) => {
+  const scrollHaptics = useScrollHaptics({ enabled: scrollHaptic });
+
+  return (
+    <div
+      className={cn('flex-1 overflow-y-auto px-5 no-scrollbar', pb, className)}
+      {...(scrollHaptic ? scrollHaptics : {})}
+    >
+      {children}
+    </div>
+  );
+};

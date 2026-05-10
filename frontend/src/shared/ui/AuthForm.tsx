@@ -1,3 +1,4 @@
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { AppPageHeader, PageContent, PageLayout } from './page-layout';
 
 type AuthFormProps = {
@@ -23,6 +24,8 @@ export const AuthForm = ({
   onFooterLinkClick,
   isLoading,
 }: AuthFormProps) => {
+  const { play } = useHapticFeedback();
+
   return (
     <PageLayout fullScreen>
       <AppPageHeader pb="pb-6" className="flex flex-col items-center">
@@ -54,7 +57,10 @@ export const AuthForm = ({
 
         <button
           type="button"
-          onClick={onYandexLogin}
+          onClick={() => {
+            play('nudge');
+            onYandexLogin();
+          }}
           disabled={isLoading}
           className="flex h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl border border-[#FC3F1D]/25 bg-[#FC3F1D]/10 text-[15px] font-semibold text-[#FC3F1D] transition-all active:bg-[#FC3F1D]/20 disabled:opacity-50"
         >
@@ -69,7 +75,14 @@ export const AuthForm = ({
       >
         <p className="text-[14px] text-stone-400 dark:text-stone-500">
           {footerText}{' '}
-          <button type="button" onClick={onFooterLinkClick} className="font-semibold text-primary">
+          <button
+            type="button"
+            onClick={() => {
+              play('nudge');
+              onFooterLinkClick();
+            }}
+            className="font-semibold text-primary"
+          >
             {footerLinkText}
           </button>
         </p>

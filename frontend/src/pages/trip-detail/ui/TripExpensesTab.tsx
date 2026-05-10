@@ -1,11 +1,13 @@
 import type { Expense } from '@/entities/expense';
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { DeleteExpenseSheet, ExpenseForm, ExpenseList, ExpenseSummary, useExpenses } from '@/features/expenses';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 
 export const TripExpensesTab = () => {
+  const { play } = useHapticFeedback();
   const { trip } = useOutletContext<TripDetailOutletContext>();
 
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -49,6 +51,7 @@ export const TripExpensesTab = () => {
             type="button"
             className="flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2 text-[13px] font-semibold text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)]"
             onClick={() => {
+              play('nudge');
               setEditingExpense(undefined);
               setShowExpenseForm(true);
             }}
@@ -73,6 +76,8 @@ export const TripExpensesTab = () => {
               expenses={expenses}
               onEdit={handleEditExpense}
               readonly={isReadonly}
+              tripStartDate={trip.start_date}
+              tripEndDate={trip.end_date}
             />
           </div>
         )}
@@ -86,6 +91,8 @@ export const TripExpensesTab = () => {
         existingExpense={editingExpense}
         onSuccess={refetch}
         onDeleteRequest={editingExpense ? () => setDeletingExpenseId(editingExpense.id) : undefined}
+        tripStartDate={trip.start_date}
+        tripEndDate={trip.end_date}
       />
 
       <DeleteExpenseSheet

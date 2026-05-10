@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { BUDGET_LIMITS } from '@/shared/config';
 import { expenseApi } from '@/entities/expense';
 import { sendEvent } from '@/shared/api';
+import {
+  HAPTIC_SINGLE_CONFIRM,
+  HAPTIC_SINGLE_ERROR,
+  useHapticFeedback,
+} from '@/shared/lib/useHapticFeedback';
 import { invalidateProfileDependentQueries } from '@/shared/lib/profile-dependent-queries';
 
 import { onboardingV2Api } from '../api/onboarding-v2.api';
@@ -131,6 +136,7 @@ const stateToStepPayload = (step: number, state: OnboardingState): OnboardingSte
 
 export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
   const qc = useQueryClient();
+  const { play } = useHapticFeedback();
 
   const [state, setState] = useState<OnboardingState>(() => {
     const cached = qc.getQueryData<UserProfileV2>(['profile']);
@@ -152,14 +158,21 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
       qc.setQueryData(['profile'], updated);
       invalidateProfileDependentQueries(qc);
     },
+    onError: () => {
+      play(HAPTIC_SINGLE_ERROR);
+    },
   });
 
   const completeMutation = useMutation({
     mutationFn: onboardingV2Api.completeOnboarding,
     onSuccess: (updated) => {
+      play(HAPTIC_SINGLE_CONFIRM);
       qc.setQueryData(['profile'], updated);
       invalidateProfileDependentQueries(qc);
       onComplete();
+    },
+    onError: () => {
+      play(HAPTIC_SINGLE_ERROR);
     },
   });
 
@@ -232,6 +245,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
 
   const handleSaveAndExit = async () => {
     await saveMutation.mutateAsync({ step: state.currentStep, data: stateToStepPayload(state.currentStep, state) });
+    play(HAPTIC_SINGLE_CONFIRM);
     onComplete();
   };
 

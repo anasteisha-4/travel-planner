@@ -5,6 +5,13 @@ import { useState } from 'react';
 import { BUDGET_LIMITS } from '@/shared/config';
 import { expenseApi } from '@/entities/expense';
 import { sendEvent } from '@/shared/api';
+import {
+  HAPTIC_SINGLE_CONFIRM,
+  HAPTIC_SINGLE_ERROR,
+  HAPTIC_SINGLE_TAP,
+  useHapticFeedback,
+} from '@/shared/lib/useHapticFeedback';
+import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { invalidateProfileDependentQueries } from '@/shared/lib/profile-dependent-queries';
 import {
   Button,
@@ -84,6 +91,8 @@ type Props = {
 
 export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: Props) => {
   const qc = useQueryClient();
+  const { play } = useHapticFeedback();
+  const scrollHaptics = useScrollHaptics();
   const [step, setStep] = useState(1);
   const [state, setState] = useState<EditState>(() => profileToEditState(initialData));
 
@@ -126,6 +135,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
   const patchMutation = useMutation({
     mutationFn: (data: Partial<UserProfileV2>) => profileApi.patchProfile(data),
     onSuccess: (updated) => {
+      play(HAPTIC_SINGLE_CONFIRM);
       const initial = profileToEditState(initialData);
       const changedFields = [
         hasArrayChanged(initial.vacationPreferencesRanked, state.vacationPreferencesRanked)
@@ -194,6 +204,9 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
       onSaved();
       onOpenChange(false);
     },
+    onError: () => {
+      play(HAPTIC_SINGLE_ERROR);
+    },
   });
 
   const handleSave = () => {
@@ -236,7 +249,10 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
             {step > 1 ? (
               <button
                 type="button"
-                onClick={() => setStep((s) => s - 1)}
+                onClick={() => {
+                  play(HAPTIC_SINGLE_TAP);
+                  setStep((s) => s - 1);
+                }}
                 className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] transition-colors active:bg-[hsl(var(--surface-field))]"
               >
                 <ChevronLeft className="h-5 w-5 text-foreground" />
@@ -254,7 +270,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           <p className="text-[13px] text-muted-foreground">{meta.subtitle}</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-4">
+        <div className="flex-1 overflow-y-auto px-5 pb-4" {...scrollHaptics}>
           <div key={step} className="animate-in fade-in slide-in-from-right-4 duration-200">
             {step === 1 && (
               <StepVacationPrefs
@@ -317,6 +333,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)' }}
         >
           <Button
+            haptic={isLastStep ? false : HAPTIC_SINGLE_TAP}
             onClick={isLastStep ? handleSave : () => setStep((s) => s + 1)}
             disabled={patchMutation.isPending}
             className="mb-2 h-[52px] w-full rounded-2xl shadow-[0_4px_16px_rgba(37,99,235,0.28)]"
@@ -327,6 +344,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           {!isLastStep && (
             <Button
               variant="ghost"
+              haptic={false}
               onClick={handleSave}
               disabled={patchMutation.isPending}
               className="h-[44px] w-full text-[14px] text-stone-400"

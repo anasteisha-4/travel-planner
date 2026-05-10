@@ -6,6 +6,7 @@ import {
   formatBudgetLimit,
   UNLIMITED_BUDGET_SLIDER_VALUE,
 } from '@/shared/lib';
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { cn } from '@/shared/lib/utils';
 import {
   FieldLabel,
@@ -36,6 +37,7 @@ export const StepBudgetDuration = ({
   onBudgetChange,
   onRestLevelChange,
 }: Props) => {
+  const { play } = useHapticFeedback();
   const cfg = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS.RUB;
   const min = budgetMin ?? cfg.min;
   const max = budgetMax ?? null;
@@ -48,7 +50,13 @@ export const StepBudgetDuration = ({
     <div className="flex flex-col gap-6">
       <div>
         <FieldLabel>Валюта бюджета</FieldLabel>
-        <Select value={currency} onValueChange={onCurrencyChange}>
+        <Select
+          value={currency}
+          onValueChange={(value) => {
+            play(HAPTIC_SINGLE_CONFIRM);
+            onCurrencyChange(value);
+          }}
+        >
           <SelectTrigger className="h-[52px] w-full rounded-[14px] border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-field))] text-[15px] font-semibold">
             <SelectValue />
           </SelectTrigger>
@@ -77,6 +85,7 @@ export const StepBudgetDuration = ({
         </div>
         <div className="px-1">
           <Slider
+            haptic={HAPTIC_SINGLE_TAP}
             value={sliderValue}
             onValueChange={([a, b]) => {
               const nextMin = budgetSliderValueToAmount(Math.min(a, UNLIMITED_BUDGET_SLIDER_VALUE - 1), cfg);
@@ -104,7 +113,10 @@ export const StepBudgetDuration = ({
               <button
                 key={option.id}
                 type="button"
-                onClick={() => onRestLevelChange(option.id)}
+                onClick={() => {
+                  play(selected ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
+                  onRestLevelChange(option.id);
+                }}
                 className={cn(
                   'min-h-[78px] rounded-2xl border px-3 py-2.5 text-left transition-colors',
                   selected

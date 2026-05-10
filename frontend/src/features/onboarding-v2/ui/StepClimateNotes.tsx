@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/utils';
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { FieldLabel, Slider, Textarea } from '@/shared/ui';
 
 import { CLIMATE_OPTIONS, CROWD_LABELS } from '@/shared/config';
@@ -29,9 +30,12 @@ export const StepClimateNotes = ({
   onClimateChange,
   onNotesChange,
 }: Props) => {
+  const { play } = useHapticFeedback();
   const crowd = crowdPreference ?? 3;
 
   const toggleClimate = (id: ClimatePref) => {
+    play(climatePreferences.includes(id) ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
+
     if (id === 'any') {
       onClimateChange(climatePreferences.includes('any') ? [] : ['any']);
       return;
@@ -56,6 +60,7 @@ export const StepClimateNotes = ({
         </div>
         <div className="px-1">
           <Slider
+            haptic={HAPTIC_SINGLE_TAP}
             value={[crowd]}
             onValueChange={([v]) => onCrowdChange(v)}
             min={1}

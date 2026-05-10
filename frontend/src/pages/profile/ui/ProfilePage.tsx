@@ -13,6 +13,7 @@ import {
 } from '@/shared/ui';
 import { ProfileEditWizard } from '@/widgets/profile-edit-wizard';
 import { sendEvent } from '@/shared/api';
+import { HAPTIC_SINGLE_ERROR, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -220,6 +221,7 @@ const ProfilePreferencesSkeleton = () => (
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
+  const { play } = useHapticFeedback();
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDrawerOpen, setIsDeleteDrawerOpen] = useState(false);
   const didTrackProfileView = useRef(false);
@@ -308,7 +310,10 @@ export const ProfilePage = () => {
                 hasPreferences ? (
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {
+                      play(HAPTIC_SINGLE_TAP);
+                      setIsEditing(true);
+                    }}
                     className="flex h-[30px] items-center gap-1.5 rounded-xl bg-[hsl(var(--surface-muted))] px-3 text-[13px] font-semibold text-muted-foreground disabled:opacity-40"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -328,6 +333,7 @@ export const ProfilePage = () => {
               <div className="flex flex-col gap-3">
                 <EmptyState icon={ClipboardList} message="Анкета предпочтений еще не заполнена" />
                 <Button
+                  haptic={HAPTIC_SINGLE_TAP}
                   onClick={() => navigate('/onboarding')}
                   className="h-[52px] flex-1 rounded-2xl"
                 >
@@ -340,7 +346,10 @@ export const ProfilePage = () => {
           <div className="mb-4">
             <button
               type="button"
-              onClick={() => setIsDeleteDrawerOpen(true)}
+              onClick={() => {
+                play(HAPTIC_SINGLE_ERROR);
+                setIsDeleteDrawerOpen(true);
+              }}
               className="flex w-full items-center gap-3 rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3.5 text-left transition-colors active:bg-red-100/80 dark:border-red-900/40 dark:bg-red-900/10"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100/80 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20">

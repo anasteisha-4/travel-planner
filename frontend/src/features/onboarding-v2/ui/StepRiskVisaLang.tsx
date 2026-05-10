@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/utils';
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { FieldLabel, Slider } from '@/shared/ui';
 
 import { LANGUAGE_OPTIONS, RISK_TOLERANCE_LABELS, VISA_OPTIONS } from '@/shared/config';
@@ -29,6 +30,7 @@ export const StepRiskVisaLang = ({
   onVisaChange,
   onLanguageChange,
 }: Props) => {
+  const { play } = useHapticFeedback();
   const risk = riskTolerance ?? 3;
 
   const selectedLanguage = languageComfort[0] ?? null;
@@ -43,6 +45,7 @@ export const StepRiskVisaLang = ({
         </div>
         <div className="px-1">
           <Slider
+            haptic={HAPTIC_SINGLE_TAP}
             value={[risk]}
             onValueChange={([v]) => onRiskChange(v)}
             min={1}
@@ -64,7 +67,10 @@ export const StepRiskVisaLang = ({
             <button
               key={opt.id}
               type="button"
-              onClick={() => onVisaChange(opt.id)}
+              onClick={() => {
+                play(visaTolerance === opt.id ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
+                onVisaChange(opt.id);
+              }}
               className={cn(
                 'flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98]',
                 visaTolerance === opt.id
@@ -109,7 +115,10 @@ export const StepRiskVisaLang = ({
             <button
               key={opt.id}
               type="button"
-              onClick={() => onLanguageChange([opt.id])}
+              onClick={() => {
+                play(selectedLanguage === opt.id ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
+                onLanguageChange([opt.id]);
+              }}
               className={cn(
                 'flex h-10 min-w-0 items-center justify-center rounded-[12px] px-2 text-center text-[clamp(11px,3.1vw,13px)] font-semibold leading-none transition-all active:scale-95',
                 selectedLanguage === opt.id

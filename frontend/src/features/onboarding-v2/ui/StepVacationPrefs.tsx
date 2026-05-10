@@ -16,6 +16,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 
+import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { cn } from '@/shared/lib/utils';
 import { FieldLabel } from '@/shared/ui';
 
@@ -79,6 +80,7 @@ type Props = {
 };
 
 export const StepVacationPrefs = ({ selected, onChange, error }: Props) => {
+  const { play } = useHapticFeedback();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
@@ -86,8 +88,10 @@ export const StepVacationPrefs = ({ selected, onChange, error }: Props) => {
 
   const toggle = (id: VacationPreference) => {
     if (selected.includes(id)) {
+      play(HAPTIC_SINGLE_TAP);
       onChange(selected.filter((x) => x !== id));
     } else if (selected.length < 5) {
+      play(HAPTIC_SINGLE_CONFIRM);
       onChange([...selected, id]);
     }
   };
@@ -97,6 +101,7 @@ export const StepVacationPrefs = ({ selected, onChange, error }: Props) => {
     if (over && active.id !== over.id) {
       const oldIdx = selected.indexOf(active.id as VacationPreference);
       const newIdx = selected.indexOf(over.id as VacationPreference);
+      play(HAPTIC_SINGLE_CONFIRM);
       onChange(arrayMove(selected, oldIdx, newIdx));
     }
   };
@@ -150,7 +155,12 @@ export const StepVacationPrefs = ({ selected, onChange, error }: Props) => {
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Приоритет — перетащите для изменения порядка
           </p>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={() => play(HAPTIC_SINGLE_TAP)}
+            onDragEnd={handleDragEnd}
+          >
             <SortableContext items={selected} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-2">
                 {selected.map((id, idx) => {
@@ -162,7 +172,10 @@ export const StepVacationPrefs = ({ selected, onChange, error }: Props) => {
                       rank={idx + 1}
                       label={pref.label}
                       icon={pref.icon}
-                      onRemove={() => onChange(selected.filter((x) => x !== id))}
+                      onRemove={() => {
+                        play(HAPTIC_SINGLE_TAP);
+                        onChange(selected.filter((x) => x !== id));
+                      }}
                     />
                   );
                 })}

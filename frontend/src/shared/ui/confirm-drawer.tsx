@@ -49,15 +49,17 @@ const VARIANT_STYLES = {
       onClick: () => void,
       disabled: boolean,
     ) => (
-      <button
+      <Button
+        haptic="error"
         type="button"
-        className="flex h-[52px] w-full items-center justify-center rounded-2xl border border-amber-300 bg-transparent text-base font-bold text-amber-700 disabled:opacity-50 dark:border-amber-700 dark:text-amber-400"
+        variant="outline"
+        className="h-[52px] w-full rounded-2xl border-amber-300 bg-transparent text-base font-bold text-amber-700 dark:border-amber-700 dark:text-amber-400"
         onClick={onClick}
         disabled={disabled}
       >
         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {label}
-      </button>
+      </Button>
     ),
   },
 } satisfies Record<

@@ -1,4 +1,5 @@
 import { AdaptiveSheet } from '@/shared/ui/adaptive-sheet';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { cn } from '@/shared/lib/utils';
 import { Loader2, MapPin, Star } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -19,30 +20,37 @@ const StarRow = ({
   label: string;
   value: number | null;
   onChange: (v: number) => void;
-}) => (
-  <div className="flex items-center justify-between gap-3">
-    <span className="text-[14px] font-medium text-foreground">{label}</span>
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onChange(star)}
-          className="p-0.5 transition-transform active:scale-90"
-        >
-          <Star
-            className={cn(
-              'h-7 w-7 transition-colors',
-              value !== null && star <= value
-                ? 'fill-[#F59E0B] text-[#F59E0B]'
-                : 'fill-transparent text-stone-300'
-            )}
-          />
-        </button>
-      ))}
+}) => {
+  const { play } = useHapticFeedback();
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[14px] font-medium text-foreground">{label}</span>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => {
+              play('nudge');
+              onChange(star);
+            }}
+            className="p-0.5 transition-transform active:scale-90"
+          >
+            <Star
+              className={cn(
+                'h-7 w-7 transition-colors',
+                value !== null && star <= value
+                  ? 'fill-[#F59E0B] text-[#F59E0B]'
+                  : 'fill-transparent text-stone-300'
+              )}
+            />
+          </button>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const RevisitButton = ({
   value,
@@ -54,22 +62,29 @@ const RevisitButton = ({
   label: string;
   selected: boolean;
   onClick: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      'flex-1 rounded-[12px] border py-3 text-[14px] font-semibold transition-all active:scale-95',
-      selected
-        ? value
-          ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-          : 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300'
-        : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] text-muted-foreground'
-    )}
-  >
-    {label}
-  </button>
-);
+}) => {
+  const { play } = useHapticFeedback();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        play('nudge');
+        onClick();
+      }}
+      className={cn(
+        'flex-1 rounded-[12px] border py-3 text-[14px] font-semibold transition-all active:scale-95',
+        selected
+          ? value
+            ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            : 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300'
+          : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] text-muted-foreground'
+      )}
+    >
+      {label}
+    </button>
+  );
+};
 
 type FormState = {
   overall: number | null;
@@ -88,6 +103,7 @@ const emptyForm: FormState = {
 };
 
 export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Props) => {
+  const { play } = useHapticFeedback();
   const { submit, isPending, existing, alreadySubmitted } = useFeedback(tripId, destination);
 
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -131,6 +147,7 @@ export const PostTripFeedbackSheet = ({ open, onClose, tripId, destination }: Pr
       would_revisit: wouldRevisit,
       free_text: freeText.trim() || null,
     });
+    play('success');
     onClose();
   };
 
