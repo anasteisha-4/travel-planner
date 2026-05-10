@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, Query
-from rapidfuzz import fuzz, process
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db
 from app.models import Destination, NameTranslationEntity
+from app.services.destination_search import (
+    DestinationSearchCandidate,
+    destination_search_aliases,
+    rank_destination_candidates,
+)
 from app.services.name_translation_service import (
     destination_display_payload,
     load_translations,
@@ -26,32 +30,44 @@ def search_destinations(
     )
     translations = load_translations(db, NameTranslationEntity.destination, [d.id for d in destinations])
 
-    candidates: list[tuple[str, str]] = []
+    candidates: list[DestinationSearchCandidate] = []
     dest_map: dict[str, Destination] = {}
     for d in destinations:
         key_en = f"{d.name}|{d.id}"
-        candidates.append((d.name, key_en))
+        candidates.append(
+            DestinationSearchCandidate(
+                key=key_en,
+                name=d.name,
+                country_code=d.country_code,
+                population=d.population,
+                capital=d.capital,
+            )
+        )
         name_ru, _quality, _provider = resolve_destination_display_name(str(d.name), translations.get(str(d.id)))
         if name_ru and name_ru != d.name:
-            candidates.append((name_ru, key_en))
+            candidates.append(
+                DestinationSearchCandidate(
+                    key=key_en,
+                    name=name_ru,
+                    country_code=d.country_code,
+                    population=d.population,
+                    capital=d.capital,
+                )
+            )
+        for alias in destination_search_aliases(str(d.name), name_ru):
+            candidates.append(
+                DestinationSearchCandidate(
+                    key=key_en,
+                    name=alias,
+                    country_code=d.country_code,
+                    population=d.population,
+                    capital=d.capital,
+                )
+            )
         dest_map[key_en] = d
 
-    results = process.extract(q, [c[0] for c in candidates], scorer=fuzz.WRatio, limit=limit * 3)
-
-    seen: set[str] = set()
     output = []
-    selected: list[Destination] = []
-    for _match_name, score, idx in results:
-        if score < 40:
-            continue
-        key = candidates[idx][1]
-        if key in seen:
-            continue
-        seen.add(key)
-        d = dest_map[key]
-        selected.append(d)
-        if len(selected) >= limit:
-            break
+    selected = [dest_map[match.key] for match in rank_destination_candidates(q, candidates, limit)]
 
     for d in selected:
         output.append(

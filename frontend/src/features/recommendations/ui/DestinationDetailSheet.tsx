@@ -1,5 +1,5 @@
 import type { UserProfileV2 } from '@/entities/user';
-import { localizeDestinationName } from '@/shared/lib';
+import { getCountryFlag, localizeDestinationName } from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
 import { sendEvent } from '@/shared/api';
 import { AdaptiveSheet, Button } from '@/shared/ui';
@@ -15,29 +15,6 @@ import type {
 } from '../model/types';
 import { useBudgetPrediction } from '../model/useBudgetPrediction';
 import { useDestinationValidation } from '../model/useDestinationValidation';
-
-const COUNTRY_FLAGS: Record<string, string> = {
-  BS: '🇧🇸',
-  ZA: '🇿🇦',
-  AE: '🇦🇪',
-  AU: '🇦🇺',
-  CU: '🇨🇺',
-  TR: '🇹🇷',
-  GE: '🇬🇪',
-  TH: '🇹🇭',
-  JP: '🇯🇵',
-  KR: '🇰🇷',
-  FR: '🇫🇷',
-  IT: '🇮🇹',
-  ES: '🇪🇸',
-  RU: '🇷🇺',
-  US: '🇺🇸',
-  GB: '🇬🇧',
-  DE: '🇩🇪',
-  PT: '🇵🇹',
-  GR: '🇬🇷',
-  VN: '🇻🇳',
-};
 
 const BREAKDOWN_LABELS: Record<string, string> = {
   activity_match: 'Активности',
@@ -594,7 +571,7 @@ export const DestinationDetailSheet = ({
   const title = destination
     ? destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name)
     : 'Направление';
-  const flag = destination ? COUNTRY_FLAGS[destination.country_code] ?? '🌍' : '🌍';
+  const flag = getCountryFlag(destination?.country_code);
   const matchPct = destination ? Math.round(destination.score * 100) : 0;
   const topReasons = destination ? getTopReasons(destination) : [];
 

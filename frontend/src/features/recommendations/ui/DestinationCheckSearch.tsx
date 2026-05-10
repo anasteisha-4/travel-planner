@@ -1,8 +1,8 @@
 import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
-import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
+import { getCountryFlag, localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { AppInput } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, MapPin, Search } from 'lucide-react';
+import { CheckCircle2, Loader2, Search } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 type DestinationCheckSearchProps = {
@@ -97,8 +97,8 @@ export const DestinationCheckSearch = ({ onSelect }: DestinationCheckSearchProps
                 }}
                 className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-muted))]">
-                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-muted))] text-[18px] leading-none">
+                  {getCountryFlag(destination.country_code)}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-[14px] font-extrabold text-foreground">

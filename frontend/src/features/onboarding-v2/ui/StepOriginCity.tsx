@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MapPin, Loader2, Check, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { useDebouncedValue } from '@/shared/lib';
+import { getCountryFlag, useDebouncedValue } from '@/shared/lib';
 import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { cn } from '@/shared/lib/utils';
@@ -111,8 +111,8 @@ export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange,
                   onMouseDown={() => handleSelect(dest)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-field))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-field))]">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-field))] text-[18px] leading-none">
+                    {getCountryFlag(dest.country_code)}
                   </div>
                   <div>
                     <p className="text-[14px] font-semibold text-foreground">{dest.name}</p>

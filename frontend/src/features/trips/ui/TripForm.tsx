@@ -4,6 +4,7 @@ import { BUDGET_LIMITS, CURRENCIES } from '@/shared/config';
 import {
   budgetAmountToSliderValue,
   budgetSliderValueToAmount,
+  getCountryFlag,
   localizeDestinationName,
   UNLIMITED_BUDGET_SLIDER_VALUE,
   useDebouncedValue,
@@ -126,8 +127,8 @@ const DestinationSearchInput = ({
                   }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--surface-muted))] active:bg-[hsl(var(--surface-muted))] [&:not(:last-child)]:border-b [&:not(:last-child)]:border-[hsl(var(--surface-border))]"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
-                    <MapPin className="h-3.5 w-3.5 text-stone-500" />
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-[18px] leading-none dark:bg-[hsl(var(--surface-muted))]">
+                    {getCountryFlag(dest.country_code)}
                   </div>
                   <div>
                     <p className="line-clamp-2 text-[14px] font-semibold text-foreground">
