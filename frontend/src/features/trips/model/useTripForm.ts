@@ -29,6 +29,11 @@ type SelectedDestination = {
   lng: number | null;
 };
 
+const normalizeOptionalId = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
 export type TripFormInitialValues = Partial<
   Pick<
     TripCreate,
@@ -77,7 +82,7 @@ export const useTripForm = (
     existingTrip?.destination ?? initialValues?.destination ?? ''
   );
   const [selectedDestination, setSelectedDestination] = useState<SelectedDestination>({
-    id: existingTrip?.destination_id ?? initialValues?.destination_id ?? null,
+    id: normalizeOptionalId(existingTrip?.destination_id ?? initialValues?.destination_id),
     lat: initialValues?.destination_lat ?? null,
     lng: initialValues?.destination_lng ?? null,
   });
@@ -89,7 +94,7 @@ export const useTripForm = (
     existingTrip?.departure_city ?? initialValues?.departure_city ?? ''
   );
   const [selectedDepartureCity, setSelectedDepartureCity] = useState<SelectedDestination>({
-    id: initialValues?.departure_destination_id ?? null,
+    id: normalizeOptionalId(initialValues?.departure_destination_id),
     lat: initialValues?.departure_lat ?? null,
     lng: initialValues?.departure_lng ?? null,
   });

@@ -27,6 +27,13 @@ class TripCreate(BaseModel):
     departure_city: str | None = None
     notes: str | None = None
 
+    @field_validator("destination_id", mode="before")
+    @classmethod
+    def empty_destination_id_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class TripUpdate(BaseModel):
     destination: str | None = None
@@ -41,6 +48,13 @@ class TripUpdate(BaseModel):
     season: str | None = None
     departure_city: str | None = None
     notes: str | None = None
+
+    @field_validator("destination_id", mode="before")
+    @classmethod
+    def empty_destination_id_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class TripResponse(BaseModel):

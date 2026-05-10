@@ -64,6 +64,22 @@ const getAccommodationTier = (
   return 'luxury';
 };
 
+const FIXED_EXPENSE_KEYWORDS =
+  /авиа|самолет|самолёт|перелет|перелёт|рейс|поезд|жд|билет|брон|отель|гостиниц|виза|страхов|flight|airfare|airline|train|ticket|booking|hotel|visa|insurance/i;
+
+const isManualForecastExpense = (expense: { category: string; description?: string | null; expense_date?: string | null; is_one_time?: boolean }, tripStart: string, tripEnd: string) => {
+  if (expense.expense_date && (expense.expense_date < tripStart || expense.expense_date > tripEnd)) {
+    return false;
+  }
+  if (expense.is_one_time || expense.category === 'housing') {
+    return false;
+  }
+  if (FIXED_EXPENSE_KEYWORDS.test(`${expense.category} ${expense.description ?? ''}`)) {
+    return false;
+  }
+  return ['food', 'transport', 'other'].includes(expense.category);
+};
+
 export const TripInfoTab = () => {
   const { play } = useHapticFeedback();
   const navigate = useNavigate();
@@ -137,9 +153,13 @@ export const TripInfoTab = () => {
     ? budgetPrediction.total_mid / Math.max(budgetPrediction.duration_days, 1)
     : null;
   const todayParam = new Date().toISOString().slice(0, 10);
+  const manualForecastExpenseCount = expenses.filter((expense) =>
+    isManualForecastExpense(expense, trip.start_date, trip.end_date)
+  ).length;
+  const hasBudgetForecastInput = Boolean(trip.destination_id) || manualForecastExpenseCount >= 2;
   const budgetMonitorParams = useMemo(
     () =>
-      trip.destination_id && !budgetPrediction
+      !hasBudgetForecastInput || (trip.destination_id && !budgetPrediction)
         ? null
         : {
             trip_id: trip.id,
@@ -174,6 +194,7 @@ export const TripInfoTab = () => {
       budgetPrediction,
       budgetPredictionParams?.accommodation_tier,
       expenses,
+      hasBudgetForecastInput,
       todayParam,
       trip.budget,
       trip.currency,
@@ -199,8 +220,8 @@ export const TripInfoTab = () => {
     ((Boolean(budgetPredictionParams) &&
       !budgetPrediction &&
       (isBudgetPredictionPending || isBudgetPredictionFetching)) ||
-      isBudgetMonitorPending ||
-      (!budgetMonitor && isBudgetMonitorFetching));
+      (Boolean(budgetMonitorParams) &&
+        (isBudgetMonitorPending || (!budgetMonitor && isBudgetMonitorFetching))));
   const isBudgetForecastRetrying =
     hasBudgetForecastError && (isBudgetPredictionFetching || isBudgetMonitorFetching);
 
@@ -324,6 +345,7 @@ export const TripInfoTab = () => {
             daysUntilStart={daysUntilStart}
             elapsedDays={elapsedDays}
             hasError={hasBudgetForecastError}
+            hasForecastInput={hasBudgetForecastInput}
             peopleCount={trip.people_count}
             plannedDailyBudget={plannedDailyBudget}
             monitor={budgetMonitor}

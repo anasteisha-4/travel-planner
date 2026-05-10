@@ -1,12 +1,16 @@
 import { z } from 'zod';
 
 export const TripStatusEnum = z.enum(['planned', 'active', 'completed', 'cancelled']);
+const OptionalDestinationIdSchema = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  z.string().nullable().optional()
+);
 
 export const TripSchema = z.object({
   id: z.string(),
   user_id: z.string(),
   destination: z.string(),
-  destination_id: z.string().nullable().optional(),
+  destination_id: OptionalDestinationIdSchema,
   start_date: z.string(),
   end_date: z.string(),
   budget: z.number().nullable(),
@@ -26,7 +30,7 @@ export type TripStatus = z.infer<typeof TripStatusEnum>;
 
 export const TripCreateSchema = z.object({
   destination: z.string().min(1),
-  destination_id: z.string().nullable().optional(),
+  destination_id: OptionalDestinationIdSchema,
   start_date: z.string().min(1),
   end_date: z.string().min(1),
   budget: z.number().nullable().optional(),

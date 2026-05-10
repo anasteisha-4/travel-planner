@@ -135,7 +135,7 @@ export const DestinationValidationCompact = ({
               Проверка направления
             </p>
             <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
-              Выберите направление из подсказок
+              Для проверки выберите направление из каталога
             </p>
           </div>
         </div>

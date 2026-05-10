@@ -18,6 +18,26 @@ class TestCreateTrip:
         assert response.status_code == 201
         assert response.json()["destination_id"] == destination_id
 
+    def test_create_manual_destination_without_catalog_match(self, client, auth_headers, trip_data):
+        response = client.post(
+            "/api/trips/",
+            json={**trip_data, "destination": "Остров без записи в датасете", "destination_id": None},
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["destination"] == "Остров без записи в датасете"
+        assert data["destination_id"] is None
+
+    def test_create_with_blank_destination_id_treats_as_manual(self, client, auth_headers, trip_data):
+        response = client.post(
+            "/api/trips/",
+            json={**trip_data, "destination": "Новый ручной город", "destination_id": ""},
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        assert response.json()["destination_id"] is None
+
     def test_create_with_type_and_season(self, client, auth_headers, trip_data):
         extended_data = {**trip_data, "trip_type": "beach", "season": "summer"}
         response = client.post("/api/trips/", json=extended_data, headers=auth_headers)
@@ -121,6 +141,19 @@ class TestUpdateTrip:
         response = client.put(f"/api/trips/{trip_id}", json={"destination_id": destination_id}, headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["destination_id"] == destination_id
+
+    def test_update_blank_destination_id_clears_catalog_match(self, client, auth_headers, trip_data):
+        destination_id = "22222222-2222-2222-2222-222222222222"
+        resp = client.post(
+            "/api/trips/",
+            json={**trip_data, "destination_id": destination_id},
+            headers=auth_headers,
+        )
+        trip_id = resp.json()["id"]
+
+        response = client.put(f"/api/trips/{trip_id}", json={"destination_id": ""}, headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["destination_id"] is None
 
     def test_update_status(self, client, auth_headers, trip_data):
         resp = client.post("/api/trips/", json=trip_data, headers=auth_headers)

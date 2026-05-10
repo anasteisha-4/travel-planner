@@ -86,7 +86,7 @@ const BudgetPredictionStateCard = ({
     empty: {
       icon: Sparkles,
       title: 'Выберите параметры поездки',
-      subtitle: 'Укажите направление из подсказок и даты',
+      subtitle: 'Укажите направление из каталога и даты',
       text: 'После этого Triply рассчитает ваш бюджет',
       headerClassName: 'bg-primary/10',
       labelClassName: 'text-primary',
@@ -199,7 +199,7 @@ export const TripCreatePage = () => {
     setFormSnapshot(snapshot);
   }, []);
 
-  const initialDestinationId = searchParams.get('destination_id');
+  const initialDestinationId = searchParams.get('destination_id')?.trim() || null;
   const previewDestination = debouncedFormSnapshot?.destination ?? initialValues.destination;
   const isInitialDestination =
     normalizeCity(previewDestination) === normalizeCity(initialValues.destination);

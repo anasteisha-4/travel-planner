@@ -38,6 +38,7 @@ type BudgetMonitoringCardProps = {
   daysUntilStart?: number;
   elapsedDays: number;
   hasError?: boolean;
+  hasForecastInput?: boolean;
   isUpdating?: boolean;
   onRetry?: () => void;
   monitor?: BudgetMonitorCardData;
@@ -122,6 +123,7 @@ export const BudgetMonitoringCard = ({
   daysUntilStart = 0,
   elapsedDays,
   hasError = false,
+  hasForecastInput = true,
   isUpdating = false,
   monitor,
   onRetry,
@@ -198,6 +200,7 @@ export const BudgetMonitoringCard = ({
   }
 
   if (
+    !hasForecastInput ||
     !monitor &&
     (budget === null ||
       budget <= 0 ||
@@ -215,10 +218,12 @@ export const BudgetMonitoringCard = ({
               Контроль бюджета
             </p>
             <p className="mt-1 text-[15px] font-bold leading-snug text-stone-900 dark:text-white">
-              Бюджет не задан
+              {hasForecastInput ? 'Бюджет не задан' : 'Недостаточно данных'}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-              Добавьте лимит поездки, чтобы видеть прогноз расходов
+              {hasForecastInput
+                ? 'Добавьте лимит поездки, чтобы видеть прогноз расходов'
+                : 'Для прогноза нужны расходы или направление из каталога'}
             </p>
           </div>
         </div>
