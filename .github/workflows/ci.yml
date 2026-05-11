@@ -179,6 +179,22 @@ jobs:
               echo ">>> No destination translation seed update needed."
             fi
 
+            # --- Destination duplicate merges ---
+            # Applies curated canonical destination merges and rewrites dependent
+            # POI, ML training rows, trips, analytics and cached recommendation references.
+            # The script is idempotent and safe to rerun.
+            if changed '^services/data-service/data/seed/destination_duplicate_merges\.json|^services/data-service/scripts/apply_destination_duplicate_merges\.py'; then
+              echo ">>> Destination duplicate merge seed changed — applying..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm data-service \
+                python scripts/apply_destination_duplicate_merges.py
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d data-service ml-service trip-service analytics-service
+              echo ">>> Destination duplicate merges applied."
+              DESTINATION_MERGES_CHANGED=1
+            else
+              DESTINATION_MERGES_CHANGED=0
+              echo ">>> No destination duplicate merge update needed."
+            fi
+
             # --- Synthetic budget data regeneration ---
             # Trigger: generator script changed, OR budget_formula.py changed
             # (formula constants are duplicated in generate_synthetic_data.py — must stay in sync)
@@ -202,8 +218,9 @@ jobs:
             #   - feature_matrix.py         — destination feature computation used in training
             # NOT triggered by budget_scorer.py — that's inference only, model artifact unchanged
             if [ "$BUDGET_CHANGED" = "1" ] || \
+               [ "$DESTINATION_MERGES_CHANGED" = "1" ] || \
                changed '^services/ml-service/scripts/train_budget_model\.py|^services/ml-service/app/services/budget_formula\.py|^services/ml-service/app/services/feature_matrix\.py'; then
-              echo ">>> Budget model code changed — retraining..."
+              echo ">>> Budget training inputs changed — retraining..."
               docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
                 python scripts/train_budget_model.py
               echo ">>> Budget retrain done."
@@ -216,8 +233,9 @@ jobs:
             # Trigger: model training script or inference scorer changed.
             # The model is trained from synthetic checkpoint rows derived from trip_budget_actuals.
             if [ "$BUDGET_CHANGED" = "1" ] || \
+               [ "$DESTINATION_MERGES_CHANGED" = "1" ] || \
                changed '^services/ml-service/scripts/train_in_trip_budget_model\.py|^services/ml-service/app/services/in_trip_budget_scorer\.py'; then
-              echo ">>> In-trip budget model code changed — retraining..."
+              echo ">>> In-trip budget training inputs changed — retraining..."
               docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
                 python scripts/train_in_trip_budget_model.py
               echo ">>> In-trip budget retrain done."
@@ -235,8 +253,9 @@ jobs:
             #   - feature_matrix.py       — destination features used both in pair gen and training
             #   - data_loader.py          — destination features used in generate_ltr_pairs.py
             # NOT triggered by ranker_scorer.py alone — that's inference code, not training
-            if changed '^services/ml-service/scripts/generate_ltr_pairs\.py|^services/ml-service/scripts/train_ranker\.py|^services/ml-service/app/services/content_scorer\.py|^services/ml-service/app/services/feature_matrix\.py|^services/ml-service/app/services/data_loader\.py'; then
-              echo ">>> Ranker model code changed — regenerating LTR pairs and retraining..."
+            if [ "$DESTINATION_MERGES_CHANGED" = "1" ] || \
+               changed '^services/ml-service/scripts/generate_ltr_pairs\.py|^services/ml-service/scripts/train_ranker\.py|^services/ml-service/app/services/content_scorer\.py|^services/ml-service/app/services/feature_matrix\.py|^services/ml-service/app/services/data_loader\.py'; then
+              echo ">>> Ranker training inputs changed — regenerating LTR pairs and retraining..."
               docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
                 python scripts/generate_ltr_pairs.py --n-profiles 3000 --dests-per-query 150
               docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \

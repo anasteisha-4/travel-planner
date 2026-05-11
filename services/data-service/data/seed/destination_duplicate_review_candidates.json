@@ -1,0 +1,323 @@
+{
+  "version": 1,
+  "description": "Manual review list for ambiguous destination duplicate candidates. This file is not applied by deploy. Move approved pairs into destination_duplicate_merges.json only after human confirmation.",
+  "default_action": "approved_candidates_promoted_to_destination_duplicate_merges",
+  "candidates": [
+    {
+      "id": "hk-victoria",
+      "decision": "approved_for_merge",
+      "distance_km": 5.1,
+      "reason": "Same Hong Kong Victoria naming, but one row may represent the whole city/admin area and the other a district-level destination.",
+      "destinations": [
+        {
+          "id": "3b363c93-fc2e-471c-86c0-9b88577770fe",
+          "name": "City of Victoria",
+          "country_code": "HK",
+          "lat": 22.267,
+          "lng": 114.188,
+          "population": 7500000
+        },
+        {
+          "id": "c75c18d9-a630-4a5f-9f3b-f6f7788414e3",
+          "name": "Victoria",
+          "country_code": "HK",
+          "lat": 22.2875,
+          "lng": 114.14417,
+          "population": 956800
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "jm-kingston-new-kingston",
+      "decision": "approved_for_merge",
+      "distance_km": 1.6,
+      "reason": "New Kingston is probably a district/business area inside Kingston, not necessarily a duplicate destination.",
+      "destinations": [
+        {
+          "id": "1e1199bc-22cb-4b27-8c3f-fbea43fe7c70",
+          "name": "Kingston",
+          "country_code": "JM",
+          "lat": 17.99702,
+          "lng": -76.79358,
+          "population": 937700
+        },
+        {
+          "id": "a421fad9-1deb-4093-b51a-c2fdba0733ab",
+          "name": "New Kingston",
+          "country_code": "JM",
+          "lat": 18.00747,
+          "lng": -76.78319,
+          "population": 583958
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "tw-taipei-new-taipei",
+      "decision": "approved_for_merge",
+      "distance_km": 7.3,
+      "reason": "Very close and textually related, but Taipei and New Taipei City are separate municipalities.",
+      "destinations": [
+        {
+          "id": "8865f622-174f-4352-b3ac-dc64e835aad6",
+          "name": "Taipei",
+          "country_code": "TW",
+          "lat": 25.03,
+          "lng": 121.52,
+          "population": 7871900
+        },
+        {
+          "id": "34187a87-b62a-4c7d-8999-aff0b390b31e",
+          "name": "New Taipei City",
+          "country_code": "TW",
+          "lat": 25.06199,
+          "lng": 121.45703,
+          "population": 4004367
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "do-santo-domingo-east-west",
+      "decision": "approved_for_merge",
+      "distance_km": 5.8,
+      "reason": "Santo Domingo Este/Oeste are adjacent municipalities; they may be useful as separate catalog destinations rather than duplicates.",
+      "destinations": [
+        {
+          "id": "fe151dd6-0980-4506-9c9d-8aaa021da7b5",
+          "name": "Santo Domingo",
+          "country_code": "DO",
+          "lat": 18.47,
+          "lng": -69.9,
+          "population": 2201941
+        },
+        {
+          "id": "1d0f7ad4-6e5f-4b59-95f2-180f88825d5f",
+          "name": "Santo Domingo Este",
+          "country_code": "DO",
+          "lat": 18.48511,
+          "lng": -69.84757,
+          "population": 700000
+        },
+        {
+          "id": "c5b5a5bc-39b4-45cf-83c3-7d089ed0fbda",
+          "name": "Santo Domingo Oeste",
+          "country_code": "DO",
+          "lat": 18.5,
+          "lng": -70,
+          "population": 701269
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "hu-budapest-buda-pest",
+      "decision": "approved_for_merge",
+      "distance_km": 3.5,
+      "reason": "Buda and Pest are historical/city-part names inside Budapest, but may have distinct POI clusters and user-facing meaning.",
+      "destinations": [
+        {
+          "id": "0f103f1c-a865-4bcc-973a-f7636aa1c226",
+          "name": "Budapest",
+          "country_code": "HU",
+          "lat": 47.5,
+          "lng": 19.08,
+          "population": 1741041
+        },
+        {
+          "id": "fb23b967-2910-44dd-a9b6-d0dc257a291d",
+          "name": "Buda",
+          "country_code": "HU",
+          "lat": 47.5,
+          "lng": 19.03333,
+          "population": 510108
+        },
+        {
+          "id": "8b7d0a91-9e89-4abb-9c77-025552ddd33f",
+          "name": "Pest",
+          "country_code": "HU",
+          "lat": 47.5,
+          "lng": 19.08333,
+          "population": 1001748
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "ke-nairobi-karen",
+      "decision": "approved_for_merge",
+      "distance_km": 12.6,
+      "reason": "Nairobi Karen is likely a neighborhood/suburb, not a pure duplicate of Nairobi.",
+      "destinations": [
+        {
+          "id": "29855352-ed56-4a14-8e1b-5b64b689d2e1",
+          "name": "Nairobi",
+          "country_code": "KE",
+          "lat": -1.30261,
+          "lng": 36.82884,
+          "population": 4397073
+        },
+        {
+          "id": "3d0a19f5-35ff-4f8b-bb0d-0ceac419e184",
+          "name": "Nairobi Karen",
+          "country_code": "KE",
+          "lat": -1.3172,
+          "lng": 36.7161,
+          "population": 500000
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "lk-colombo-fort",
+      "decision": "approved_for_merge",
+      "distance_km": 2.2,
+      "reason": "Colombo Fort is a district inside Colombo and may be intentionally separate.",
+      "destinations": [
+        {
+          "id": "20f305c0-591d-416e-89a1-344bff0b104d",
+          "name": "Colombo",
+          "country_code": "LK",
+          "lat": 6.9271,
+          "lng": 79.8612,
+          "population": 648034
+        },
+        {
+          "id": "20e3e967-ab0d-4816-b11b-86149d74ff88",
+          "name": "Colombo Fort",
+          "country_code": "LK",
+          "lat": 6.9344,
+          "lng": 79.8428,
+          "population": 50000
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "ru-khabarovsk-vtoroy",
+      "decision": "approved_for_merge",
+      "distance_km": 5.7,
+      "reason": "Khabarovsk Vtoroy is probably a district/station area; region metadata also conflicts, so it needs manual confirmation.",
+      "destinations": [
+        {
+          "id": "fba9e223-59ec-432f-be37-559a710bc4a7",
+          "name": "Khabarovsk",
+          "country_code": "RU",
+          "lat": 48.4721,
+          "lng": 135.0732,
+          "population": 618150
+        },
+        {
+          "id": "dc00a94b-f93c-4613-a93a-50ef794633bf",
+          "name": "Khabarovsk Vtoroy",
+          "country_code": "RU",
+          "lat": 48.43787,
+          "lng": 135.12994,
+          "population": 578303
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "ru-ryazan-far-coordinates",
+      "decision": "approved_for_merge",
+      "distance_km": 111.8,
+      "reason": "Names look like the same city, but coordinates are materially different; likely bad geocoding or a distinct object.",
+      "destinations": [
+        {
+          "id": "874da676-0ca2-4058-8e48-a1ae031936af",
+          "name": "Ryazan",
+          "country_code": "RU",
+          "lat": 54.6209,
+          "lng": 41.4406,
+          "population": 535954
+        },
+        {
+          "id": "65ff4c3a-6114-4cc9-984a-83a82beadb1c",
+          "name": "Ryazan’",
+          "country_code": "RU",
+          "lat": 54.62696,
+          "lng": 39.70415,
+          "population": 538962
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "ru-yalta-yalata",
+      "decision": "approved_for_merge",
+      "distance_km": 4.7,
+      "reason": "Very close and similar text, but Yalata may be a different settlement/object rather than a typo.",
+      "destinations": [
+        {
+          "id": "f593e7b9-acaa-49c3-b43e-d45c19170b1f",
+          "name": "Yalta",
+          "country_code": "RU",
+          "lat": 44.4952,
+          "lng": 34.1602,
+          "population": 76000
+        },
+        {
+          "id": "c6579292-5d86-4ab6-adeb-600f20ec0c38",
+          "name": "Yalata",
+          "country_code": "RU",
+          "lat": 44.4936,
+          "lng": 34.2199,
+          "population": 3630
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "tm-mary-merv",
+      "decision": "approved_for_merge",
+      "distance_km": 32,
+      "reason": "Mary is a modern city; Merv is a nearby historic destination/site. Same travel area, but not the same object.",
+      "destinations": [
+        {
+          "id": "501ab498-5ae8-4cc3-8118-bd4870d081a6",
+          "name": "Mary",
+          "country_code": "TM",
+          "lat": 37.5914,
+          "lng": 61.8311,
+          "population": 167027
+        },
+        {
+          "id": "c524e285-896a-4588-ac52-5e765fd02dcc",
+          "name": "Merv",
+          "country_code": "TM",
+          "lat": 37.66,
+          "lng": 62.1833,
+          "population": 100000
+        }
+      ],
+      "promoted_to_merge_seed": true
+    },
+    {
+      "id": "tz-zanzibar-stone-town",
+      "decision": "approved_for_merge",
+      "distance_km": 16.1,
+      "reason": "Stone Town is a specific historic area inside Zanzibar, not necessarily a duplicate of the island/city destination.",
+      "destinations": [
+        {
+          "id": "c0dac489-7af2-4fa8-b0be-c2846e48c9dd",
+          "name": "Zanzibar",
+          "country_code": "TZ",
+          "lat": -6.09997,
+          "lng": 39.32095,
+          "population": 709809
+        },
+        {
+          "id": "3f96c2b8-9939-4bd3-8e14-c6cff21c7f13",
+          "name": "Zanzibar Stone Town",
+          "country_code": "TZ",
+          "lat": -6.1622,
+          "lng": 39.1894,
+          "population": 223033
+        }
+      ],
+      "promoted_to_merge_seed": true
+    }
+  ]
+}

@@ -1,0 +1,358 @@
+{
+  "version": 1,
+  "description": "Curated destination duplicate merge map. Each duplicate_id is merged into canonical_id. Includes safe automatic candidates and manually approved review candidates.",
+  "merges": [
+    {
+      "canonical_id": "37abd742-876a-4139-9683-ebc0bbe1f0a1",
+      "duplicate_ids": [
+        "2dd51492-4abc-44ee-b4cb-b2c2a4c467ef"
+      ],
+      "reason": "Cusco/Cuzco duplicate, same city and nearby coordinates"
+    },
+    {
+      "canonical_id": "03ce3b7d-5580-435a-a23a-6c08660e08e2",
+      "duplicate_ids": [
+        "5afd34d7-1af1-450c-83e6-90ee2e165400"
+      ],
+      "reason": "Honiara/Solomon Islands Honiara duplicate"
+    },
+    {
+      "canonical_id": "79d1c36f-cbc0-4bf1-b3b5-6c0043581c1f",
+      "duplicate_ids": [
+        "a84e272b-add3-4ab0-bd7d-189a84cc27bc"
+      ],
+      "reason": "Port Moresby/Papua New Guinea Port Moresby duplicate"
+    },
+    {
+      "canonical_id": "e11c1453-335b-43e0-871d-595f00d4960f",
+      "duplicate_ids": [
+        "da85a6a6-3834-431f-b069-12faf8dc1842"
+      ],
+      "reason": "Asuncion/Asuncion accented duplicate"
+    },
+    {
+      "canonical_id": "8805e6fc-3b34-44a2-b57f-0ff5b6921a1a",
+      "duplicate_ids": [
+        "27408003-3f2d-4733-ada1-a92f45b4c6ab"
+      ],
+      "reason": "Cordoba/Cordoba accented duplicate in Argentina"
+    },
+    {
+      "canonical_id": "6362eae4-9c94-454e-99d0-47841614b4c5",
+      "duplicate_ids": [
+        "ebef155d-5b32-4318-8474-c170388d0c37"
+      ],
+      "reason": "Male/Male accented duplicate"
+    },
+    {
+      "canonical_id": "ca2df475-8fc2-4ba4-b16f-36eaf53cce97",
+      "duplicate_ids": [
+        "d4e37616-3a67-4497-b55a-05e035396d1c"
+      ],
+      "reason": "Port Vila/Vanuatu Port Vila duplicate"
+    },
+    {
+      "canonical_id": "a0b28ab3-0a05-42ce-a7c6-2cdbc133a1d2",
+      "duplicate_ids": [
+        "98af1449-5095-409a-8944-beec50482317"
+      ],
+      "reason": "Nizhny/Nizhniy Novgorod transliteration duplicate"
+    },
+    {
+      "canonical_id": "49f645e2-773d-4ab9-988b-b3fe74b84797",
+      "duplicate_ids": [
+        "1627b53e-7626-4d9b-b173-b75615ab98bc"
+      ],
+      "reason": "Krakow/Krakow accented duplicate"
+    },
+    {
+      "canonical_id": "8ccb7c3b-1c12-45ac-b09f-3b9b5cf812a0",
+      "duplicate_ids": [
+        "45962e1a-248c-4b44-859a-da78b46ae59a"
+      ],
+      "reason": "Marrakech/Marrakesh duplicate"
+    },
+    {
+      "canonical_id": "d425d04e-9086-4eff-bd06-2a99bdb14e8f",
+      "duplicate_ids": [
+        "a2d705ca-f2a9-4d44-86c8-0ca453562166"
+      ],
+      "reason": "Fez/Fes duplicate"
+    },
+    {
+      "canonical_id": "54584e9d-4b2c-44b2-abcf-795051fa215c",
+      "duplicate_ids": [
+        "124be60a-0410-4425-8863-50700f519cc1"
+      ],
+      "reason": "Belem/Belem accented duplicate"
+    },
+    {
+      "canonical_id": "97c08ac6-46f6-474f-a25a-fc8e1425c9c2",
+      "duplicate_ids": [
+        "fe3f766c-abd8-4180-87c1-1f5ea25fc0b6"
+      ],
+      "reason": "Maceio/Maceio accented duplicate"
+    },
+    {
+      "canonical_id": "d705a55d-2925-4571-b1a8-7adb11c8882c",
+      "duplicate_ids": [
+        "746b4e08-8e13-4869-ae62-5d804eddf0bc"
+      ],
+      "reason": "Malaga/Malaga accented duplicate"
+    },
+    {
+      "canonical_id": "e3cb20ce-03aa-48e1-920e-f79b86454343",
+      "duplicate_ids": [
+        "81da9827-5869-463f-82e7-477720c82eb4"
+      ],
+      "reason": "Seville/Sevilla duplicate"
+    },
+    {
+      "canonical_id": "b470ecaf-7060-4757-b20a-bfebb99a40fe",
+      "duplicate_ids": [
+        "e90063fd-1d31-4ff6-b88c-9da29419cecd"
+      ],
+      "reason": "Chattogram/Chittagong duplicate"
+    },
+    {
+      "canonical_id": "01c27ed4-51b4-4d0d-8ac7-7c2431790b9e",
+      "duplicate_ids": [
+        "a4d27611-2486-45eb-b12d-332241b65804"
+      ],
+      "reason": "Suva/Fiji Suva duplicate"
+    },
+    {
+      "canonical_id": "3a252e4f-8858-47ca-8912-1d16a2117cfe",
+      "duplicate_ids": [
+        "79de1d29-c1e3-410d-bfe6-65be476cb594"
+      ],
+      "reason": "Chisinau/Chisinau accented duplicate"
+    },
+    {
+      "canonical_id": "d6f25b8a-2d1e-46e9-92b4-af2f4f158052",
+      "duplicate_ids": [
+        "38c5311b-d12a-4fa0-8f74-69e9bfc13a74"
+      ],
+      "reason": "Medellin/Medellin accented duplicate"
+    },
+    {
+      "canonical_id": "29b96e29-45f4-4ca5-8e0c-8afbdbf2ab93",
+      "duplicate_ids": [
+        "8c299d7e-33b9-423c-a42c-7a39fc8c6f10"
+      ],
+      "reason": "Apia/Samoa Apia duplicate"
+    },
+    {
+      "canonical_id": "84d0d8e4-1794-43d5-9fcd-5670fd0fa8db",
+      "duplicate_ids": [
+        "8fb41bf5-68c4-413d-b0e8-1ebed74c8a97"
+      ],
+      "reason": "Kumasi/Ghana Kumasi duplicate"
+    },
+    {
+      "canonical_id": "5db103d1-8e27-4c6f-abdc-16142d674336",
+      "duplicate_ids": [
+        "d13b64ae-35b1-4cae-81ae-947a05577772"
+      ],
+      "reason": "Andijon/Andijan duplicate"
+    },
+    {
+      "canonical_id": "ac8602ab-0a15-4247-a84b-c716985a85a1",
+      "duplicate_ids": [
+        "a3fe61f0-e9b5-4d73-9182-66033e52915d"
+      ],
+      "reason": "Cologne/Koln duplicate"
+    },
+    {
+      "canonical_id": "ae8d7848-1438-4274-9f17-68b1889b5b04",
+      "duplicate_ids": [
+        "96dab6e8-5f87-4f86-a5ea-fd219eb809b7"
+      ],
+      "reason": "Cartagena de Indias/Cartagena duplicate with same coordinates"
+    },
+    {
+      "canonical_id": "1181ed32-d506-41bf-bc63-8912e685d841",
+      "duplicate_ids": [
+        "11d37431-da70-4490-8d0d-71d760eeb67f"
+      ],
+      "reason": "Cancun/Cancun accented duplicate"
+    },
+    {
+      "canonical_id": "78823254-94c5-4646-ab46-54812fefb4cd",
+      "duplicate_ids": [
+        "1cdf560b-1b03-4883-8ff9-0b12ae830414"
+      ],
+      "reason": "Nuku'alofa/Tonga Nuku'alofa duplicate"
+    },
+    {
+      "canonical_id": "f7a3876d-e139-46c9-b7d9-b0c7f873f627",
+      "duplicate_ids": [
+        "a23d8d5e-8225-4e1f-aab1-96abee870b5f"
+      ],
+      "reason": "Wroclaw/Wroclaw accented duplicate"
+    },
+    {
+      "canonical_id": "f9d4e416-8daa-490a-b1e5-49a5210d9b74",
+      "duplicate_ids": [
+        "9f21069f-7814-4404-adb3-b91eee761eeb"
+      ],
+      "reason": "Port Louis/Mauritius Port Louis duplicate"
+    },
+    {
+      "canonical_id": "79bfb948-fbd4-47b5-b30f-0ee852e8d80b",
+      "duplicate_ids": [
+        "c438e111-956a-41d0-b519-5eb316cc6151"
+      ],
+      "reason": "Poznan/Poznan accented duplicate"
+    },
+    {
+      "canonical_id": "c2bab0bc-3b5b-4721-8c54-5cd52fcfa5ed",
+      "duplicate_ids": [
+        "25316ee3-df54-486b-b219-c86c546bbded"
+      ],
+      "reason": "Stepantsminda/Kazbegi same settlement duplicate"
+    },
+    {
+      "canonical_id": "bb7c9aa2-59d5-4900-ab44-fef94a6634c3",
+      "duplicate_ids": [
+        "6416e80f-5fa0-4971-83d3-6a232f4ea81f"
+      ],
+      "reason": "Izmir/Izmir accented duplicate"
+    },
+    {
+      "canonical_id": "df09c3d5-1ecc-4ab9-ab33-c4aea0a706ae",
+      "duplicate_ids": [
+        "db692ecd-fa0a-4371-8b9f-2d5619fbf774"
+      ],
+      "reason": "Quebec City/Quebec duplicate with same coordinates"
+    },
+    {
+      "canonical_id": "2819c87f-ee5b-4a99-bb2b-e8c711556f76",
+      "duplicate_ids": [
+        "337eed6c-cfd9-49fc-af62-ca35783d4927"
+      ],
+      "reason": "Saint-Denis/Reunion Saint-Denis duplicate"
+    },
+    {
+      "canonical_id": "c8686afa-58b1-40f5-814e-8400d29ab1a7",
+      "duplicate_ids": [
+        "d241b307-13f8-411f-8ecb-ddbe3fddc09f"
+      ],
+      "reason": "San Jose/San Jose accented duplicate in Costa Rica"
+    },
+    {
+      "canonical_id": "79ef5798-0c9d-4bed-bdcd-6cb248b18ca8",
+      "duplicate_ids": [
+        "218cac64-deb2-4dca-89e7-01a50cfcc5b4"
+      ],
+      "reason": "Natal/Natal Beach duplicate near same coordinates"
+    },
+    {
+      "canonical_id": "20a3121c-26d0-40b4-9835-585395919594",
+      "duplicate_ids": [
+        "ed3e4bc9-846c-4789-bddf-8e0647d7b681"
+      ],
+      "reason": "Mahe/Seychelles Mahe duplicate with same coordinates"
+    },
+    {
+      "canonical_id": "6eb893a0-d28c-4fc7-829c-91f632020c02",
+      "duplicate_ids": [
+        "2413699d-72c9-41e4-b8af-101322b9321e"
+      ],
+      "reason": "Goteborg/Gothenburg duplicate"
+    },
+    {
+      "canonical_id": "d6841125-dfaf-4b82-a776-1d8f59a4ac27",
+      "duplicate_ids": [
+        "f406f466-dca9-42ca-ba37-0756ff2c2668"
+      ],
+      "reason": "Frankfurt am Main/Frankfurt duplicate with nearby coordinates"
+    },
+    {
+      "canonical_id": "3b363c93-fc2e-471c-86c0-9b88577770fe",
+      "duplicate_ids": [
+        "c75c18d9-a630-4a5f-9f3b-f6f7788414e3"
+      ],
+      "reason": "hk-victoria: approved manual duplicate merge. Same Hong Kong Victoria naming, but one row may represent the whole city/admin area and the other a district-level destination."
+    },
+    {
+      "canonical_id": "1e1199bc-22cb-4b27-8c3f-fbea43fe7c70",
+      "duplicate_ids": [
+        "a421fad9-1deb-4093-b51a-c2fdba0733ab"
+      ],
+      "reason": "jm-kingston-new-kingston: approved manual duplicate merge. New Kingston is probably a district/business area inside Kingston, not necessarily a duplicate destination."
+    },
+    {
+      "canonical_id": "8865f622-174f-4352-b3ac-dc64e835aad6",
+      "duplicate_ids": [
+        "34187a87-b62a-4c7d-8999-aff0b390b31e"
+      ],
+      "reason": "tw-taipei-new-taipei: approved manual duplicate merge. Very close and textually related, but Taipei and New Taipei City are separate municipalities."
+    },
+    {
+      "canonical_id": "fe151dd6-0980-4506-9c9d-8aaa021da7b5",
+      "duplicate_ids": [
+        "1d0f7ad4-6e5f-4b59-95f2-180f88825d5f",
+        "c5b5a5bc-39b4-45cf-83c3-7d089ed0fbda"
+      ],
+      "reason": "do-santo-domingo-east-west: approved manual duplicate merge. Santo Domingo Este/Oeste are adjacent municipalities; they may be useful as separate catalog destinations rather than duplicates."
+    },
+    {
+      "canonical_id": "0f103f1c-a865-4bcc-973a-f7636aa1c226",
+      "duplicate_ids": [
+        "fb23b967-2910-44dd-a9b6-d0dc257a291d",
+        "8b7d0a91-9e89-4abb-9c77-025552ddd33f"
+      ],
+      "reason": "hu-budapest-buda-pest: approved manual duplicate merge. Buda and Pest are historical/city-part names inside Budapest, but may have distinct POI clusters and user-facing meaning."
+    },
+    {
+      "canonical_id": "29855352-ed56-4a14-8e1b-5b64b689d2e1",
+      "duplicate_ids": [
+        "3d0a19f5-35ff-4f8b-bb0d-0ceac419e184"
+      ],
+      "reason": "ke-nairobi-karen: approved manual duplicate merge. Nairobi Karen is likely a neighborhood/suburb, not a pure duplicate of Nairobi."
+    },
+    {
+      "canonical_id": "20f305c0-591d-416e-89a1-344bff0b104d",
+      "duplicate_ids": [
+        "20e3e967-ab0d-4816-b11b-86149d74ff88"
+      ],
+      "reason": "lk-colombo-fort: approved manual duplicate merge. Colombo Fort is a district inside Colombo and may be intentionally separate."
+    },
+    {
+      "canonical_id": "fba9e223-59ec-432f-be37-559a710bc4a7",
+      "duplicate_ids": [
+        "dc00a94b-f93c-4613-a93a-50ef794633bf"
+      ],
+      "reason": "ru-khabarovsk-vtoroy: approved manual duplicate merge. Khabarovsk Vtoroy is probably a district/station area; region metadata also conflicts, so it needs manual confirmation."
+    },
+    {
+      "canonical_id": "874da676-0ca2-4058-8e48-a1ae031936af",
+      "duplicate_ids": [
+        "65ff4c3a-6114-4cc9-984a-83a82beadb1c"
+      ],
+      "reason": "ru-ryazan-far-coordinates: approved manual duplicate merge. Names look like the same city, but coordinates are materially different; likely bad geocoding or a distinct object."
+    },
+    {
+      "canonical_id": "f593e7b9-acaa-49c3-b43e-d45c19170b1f",
+      "duplicate_ids": [
+        "c6579292-5d86-4ab6-adeb-600f20ec0c38"
+      ],
+      "reason": "ru-yalta-yalata: approved manual duplicate merge. Very close and similar text, but Yalata may be a different settlement/object rather than a typo."
+    },
+    {
+      "canonical_id": "501ab498-5ae8-4cc3-8118-bd4870d081a6",
+      "duplicate_ids": [
+        "c524e285-896a-4588-ac52-5e765fd02dcc"
+      ],
+      "reason": "tm-mary-merv: approved manual duplicate merge. Mary is a modern city; Merv is a nearby historic destination/site. Same travel area, but not the same object."
+    },
+    {
+      "canonical_id": "c0dac489-7af2-4fa8-b0be-c2846e48c9dd",
+      "duplicate_ids": [
+        "3f96c2b8-9939-4bd3-8e14-c6cff21c7f13"
+      ],
+      "reason": "tz-zanzibar-stone-town: approved manual duplicate merge. Stone Town is a specific historic area inside Zanzibar, not necessarily a duplicate of the island/city destination."
+    }
+  ]
+}
