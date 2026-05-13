@@ -1,9 +1,10 @@
+import type { LngLat } from '../yandex-maps/types'
+import { getRuntimeEnv } from '../runtime-env'
+import { sendEvent } from '../../api/analytics'
+
 const YANDEX_GEOCODER_URL = 'https://geocode-maps.yandex.ru/1.x'
 const YANDEX_GEOSUGGEST_URL = 'https://suggest-maps.yandex.ru/v1/suggest'
 const GEOAPIFY_URL = 'https://api.geoapify.com/v1/geocode'
-
-import type { LngLat } from '../yandex-maps/types'
-import { getRuntimeEnv } from '../runtime-env'
 
 export type GeocoderResult = {
   name: string
@@ -54,6 +55,20 @@ const YANDEX_EXCLUDED_KINDS = new Set(['street', 'district'])
 const GEOSUGGEST_EXCLUDED_TAGS = new Set(['street', 'district', 'province', 'country', 'other'])
 const GEOAPIFY_EXCLUDED_TYPES = new Set(['street', 'suburb', 'district', 'county', 'state'])
 
+const trackExternalGeoApi = (
+  provider: 'yandex_geosuggest' | 'yandex_geocoder' | 'geoapify',
+  durationMs: number,
+  ok: boolean,
+  status?: number,
+) => {
+  sendEvent('external_api_call_completed', {
+    provider,
+    duration_ms: Math.round(durationMs),
+    ok,
+    status,
+  })
+}
+
 const isRussiaOrCIS = ([lon, lat]: LngLat): boolean =>
   lon >= 19 && lon <= 180 && lat >= 41 && lat <= 82
 
@@ -93,7 +108,9 @@ const searchYandexGeosuggest = async (query: string, results: number, bias?: Lng
     params.set('spn', '5,5')
   }
   try {
+    const startedAt = performance.now()
     const resp = await fetch(`${YANDEX_GEOSUGGEST_URL}?${params}`)
+    trackExternalGeoApi('yandex_geosuggest', performance.now() - startedAt, resp.ok, resp.status)
     if (!resp.ok) return []
     const data: GeosuggestResponse = await resp.json()
     const items = (data.results ?? []).filter(
@@ -110,6 +127,7 @@ const searchYandexGeosuggest = async (query: string, results: number, bias?: Lng
     )
     return resolved.filter((r): r is GeocoderResult => r !== null)
   } catch {
+    trackExternalGeoApi('yandex_geosuggest', 0, false)
     return []
   }
 }
@@ -128,7 +146,9 @@ const searchYandex = async (query: string, results: number, bias?: LngLat): Prom
     params.set('spn', '5,5')
   }
   try {
+    const startedAt = performance.now()
     const resp = await fetch(`${YANDEX_GEOCODER_URL}?${params}`)
+    trackExternalGeoApi('yandex_geocoder', performance.now() - startedAt, resp.ok, resp.status)
     if (!resp.ok) return []
     const data: YandexApiResponse = await resp.json()
     return data.response.GeoObjectCollection.featureMember
@@ -141,6 +161,7 @@ const searchYandex = async (query: string, results: number, bias?: LngLat): Prom
       })
       .map((m) => parseYandex(m.GeoObject))
   } catch {
+    trackExternalGeoApi('yandex_geocoder', 0, false)
     return []
   }
 }
@@ -159,7 +180,9 @@ const reverseYandex = async (lat: number, lon: number): Promise<string | null> =
   let geocoderName: string | null = null
   let addressText: string | null = null
   try {
+    const startedAt = performance.now()
     const resp = await fetch(`${YANDEX_GEOCODER_URL}?${params}`)
+    trackExternalGeoApi('yandex_geocoder', performance.now() - startedAt, resp.ok, resp.status)
     if (resp.ok) {
       const data: YandexApiResponse = await resp.json()
       const member = data.response.GeoObjectCollection.featureMember[0]
@@ -169,6 +192,7 @@ const reverseYandex = async (lat: number, lon: number): Promise<string | null> =
       }
     }
   } catch {
+    trackExternalGeoApi('yandex_geocoder', 0, false)
     return null
   }
 
@@ -187,14 +211,16 @@ const reverseYandex = async (lat: number, lon: number): Promise<string | null> =
         spn: '0.001,0.001',
         ull: `${lon},${lat}`,
       })
+      const startedAt = performance.now()
       const suggestResp = await fetch(`${YANDEX_GEOSUGGEST_URL}?${suggestParams}`)
+      trackExternalGeoApi('yandex_geosuggest', performance.now() - startedAt, suggestResp.ok, suggestResp.status)
       if (suggestResp.ok) {
         const suggestData: GeosuggestResponse = await suggestResp.json()
         const first = suggestData.results?.[0]
         if (first && (first.distance?.value ?? Infinity) < 100) return first.title.text
       }
     } catch {
-      // fallthrough
+      trackExternalGeoApi('yandex_geosuggest', 0, false)
     }
   }
 
@@ -213,7 +239,9 @@ const searchGeoapify = async (query: string, results: number, bias?: LngLat): Pr
     params.set('bias', `proximity:${bias[0]},${bias[1]}`)
   }
   try {
+    const startedAt = performance.now()
     const resp = await fetch(`${GEOAPIFY_URL}/autocomplete?${params}`)
+    trackExternalGeoApi('geoapify', performance.now() - startedAt, resp.ok, resp.status)
     if (!resp.ok) return []
     const data: GeoapifyResponse = await resp.json()
     return data.features
@@ -221,6 +249,7 @@ const searchGeoapify = async (query: string, results: number, bias?: LngLat): Pr
       .filter((f) => f.properties.name ?? f.properties.address_line1)
       .map(parseGeoapify)
   } catch {
+    trackExternalGeoApi('geoapify', 0, false)
     return []
   }
 }
@@ -231,18 +260,23 @@ const reverseGeoapify = async (lat: number, lon: number): Promise<string | null>
   try {
     const poiParams = new URLSearchParams(base)
     poiParams.set('type', 'amenity')
+    const poiStartedAt = performance.now()
     const poiResp = await fetch(`${GEOAPIFY_URL}/reverse?${poiParams}`)
+    trackExternalGeoApi('geoapify', performance.now() - poiStartedAt, poiResp.ok, poiResp.status)
     if (poiResp.ok) {
       const poiData: GeoapifyResponse = await poiResp.json()
       const poi = poiData.features[0]
       if (poi?.properties.name) return poi.properties.name
     }
+    const startedAt = performance.now()
     const resp = await fetch(`${GEOAPIFY_URL}/reverse?${base}`)
+    trackExternalGeoApi('geoapify', performance.now() - startedAt, resp.ok, resp.status)
     if (!resp.ok) return null
     const data: GeoapifyResponse = await resp.json()
     const f = data.features[0]
     return f ? (f.properties.name ?? f.properties.address_line1 ?? null) : null
   } catch {
+    trackExternalGeoApi('geoapify', 0, false)
     return null
   }
 }

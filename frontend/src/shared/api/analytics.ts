@@ -52,6 +52,13 @@ type EventType =
   | 'profile_preferences_changed'
   | 'currency_changed'
   | 'rest_level_changed'
+  | 'failed_api_request'
+  | 'slow_api_request'
+  | 'frontend_error'
+  | 'frontend_unhandled_rejection'
+  | 'service_worker_error'
+  | 'network_status_changed'
+  | 'external_api_call_completed'
   | 'onboarding_step_completed'
   | 'onboarding_completed'
   | 'onboarding_abandoned';
@@ -94,6 +101,7 @@ let sessionStartedSent = false;
 let sessionEndedSent = false;
 let lastPageViewPath: string | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let frontendObservabilityInitialized = false;
 
 const getSessionId = (): string => {
   let id = sessionStorage.getItem(SESSION_KEY);
@@ -241,6 +249,48 @@ export const sendPageViewed = (path: string) => {
   sendEvent('page_viewed', { path });
 };
 
+export const initFrontendObservability = () => {
+  if (frontendObservabilityInitialized) return;
+  frontendObservabilityInitialized = true;
+
+  window.addEventListener('analytics:operational_event', (event) => {
+    const detail = (event as CustomEvent<{ eventType?: EventType; context?: Record<string, unknown> }>).detail;
+    if (!detail?.eventType) return;
+    sendEvent(detail.eventType, detail.context);
+  });
+
+  window.addEventListener('error', (event) => {
+    sendEvent('frontend_error', {
+      message: event.message,
+      source: event.filename,
+      line: event.lineno,
+      column: event.colno,
+    });
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    sendEvent('frontend_unhandled_rejection', {
+      reason_type: typeof event.reason,
+      reason_name: event.reason instanceof Error ? event.reason.name : undefined,
+      reason_message: event.reason instanceof Error ? event.reason.message : undefined,
+    });
+  });
+
+  window.addEventListener('online', () => {
+    sendEvent('network_status_changed', { status: 'online' });
+  });
+
+  window.addEventListener('offline', () => {
+    sendEvent('network_status_changed', { status: 'offline' });
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      sendEvent('service_worker_error', { reason_code: 'controller_changed' });
+    });
+  }
+};
+
 export const sendRecommendationEvent = (
   eventType: Extract<
     EventType,
@@ -267,7 +317,11 @@ export const sendTripEvent = (
 export const sendBudgetEvent = (
   eventType: Extract<
     EventType,
-    'budget_predicted' | 'budget_prediction_viewed' | 'budget_prediction_changed' | 'budget_monitor_viewed' | 'budget_risk_shown'
+    | 'budget_predicted'
+    | 'budget_prediction_viewed'
+    | 'budget_prediction_changed'
+    | 'budget_monitor_viewed'
+    | 'budget_risk_shown'
   >,
   context: Record<string, unknown>,
   entityId?: string,

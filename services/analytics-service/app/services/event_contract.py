@@ -62,6 +62,13 @@ EventType = Literal[
     "profile_preferences_changed",
     "currency_changed",
     "rest_level_changed",
+    "failed_api_request",
+    "slow_api_request",
+    "frontend_error",
+    "frontend_unhandled_rejection",
+    "service_worker_error",
+    "network_status_changed",
+    "external_api_call_completed",
 ]
 
 CANONICAL_EVENT_TYPES = set(get_args(EventType))
@@ -119,6 +126,11 @@ EVENT_REQUIRED_CONTEXT: dict[str, set[str]] = {
     "profile_preferences_changed": {"vacation_preferences_count", "liked_destinations_count", "language_comfort_count"},
     "currency_changed": {"preferred_currency"},
     "rest_level_changed": {"rest_level"},
+    "failed_api_request": {"method", "path"},
+    "slow_api_request": {"method", "path", "duration_ms"},
+    "frontend_error": {"message"},
+    "network_status_changed": {"status"},
+    "external_api_call_completed": {"provider", "duration_ms", "ok"},
     "onboarding_step_completed": {"step"},
 }
 

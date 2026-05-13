@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ import redis
 
 from app.config import settings
 from app.deps import get_redis
+from app.observability import record_cache, record_external_api
 from app.services.iata_resolver import resolve_iata
 
 logger = logging.getLogger(__name__)
@@ -57,20 +59,26 @@ def _cache_get(cache_key: str) -> FareEstimate | None:
     try:
         raw = get_redis().get(cache_key)
     except redis.RedisError:
+        record_cache("travelpayouts_fare", "error")
         return None
     if not raw:
+        record_cache("travelpayouts_fare", "miss")
         return None
     try:
         data = json.loads(raw)
+        record_cache("travelpayouts_fare", "hit")
         return FareEstimate(**data)
     except (TypeError, ValueError):
+        record_cache("travelpayouts_fare", "error")
         return None
 
 
 def _cache_set(cache_key: str, fare: FareEstimate) -> None:
     try:
         get_redis().setex(cache_key, settings.TRAVELPAYOUTS_CACHE_TTL_SECONDS, json.dumps(fare.__dict__))
+        record_cache("travelpayouts_fare", "set")
     except redis.RedisError:
+        record_cache("travelpayouts_fare", "error")
         return
 
 
@@ -324,6 +332,7 @@ def get_cached_fare_usd(
         with httpx.Client(timeout=settings.TRAVELPAYOUTS_TIMEOUT_SECONDS, headers=headers) as client:
             fare = None
             if destination_iata and _rate_limit_allows("prices_for_dates", _PRICES_FOR_DATES_RATE_LIMIT_PER_MIN):
+                started_at = time.perf_counter()
                 resp = client.get(
                     _PRICES_FOR_DATES_URL,
                     params={
@@ -343,8 +352,15 @@ def get_cached_fare_usd(
                 )
                 resp.raise_for_status()
                 fare = _extract_prices_for_dates(resp.json(), origin_iata, destination_iata, fare_strategy, trip_class)
+                record_external_api(
+                    "travelpayouts_prices_for_dates",
+                    (time.perf_counter() - started_at) * 1000,
+                    ok=True,
+                    no_coverage=fare is None,
+                )
 
             if fare is None and _rate_limit_allows("nearest_places_matrix", _NEAREST_PLACES_RATE_LIMIT_PER_MIN):
+                started_at = time.perf_counter()
                 resp = client.get(
                     _NEAREST_PLACES_URL,
                     params={
@@ -362,6 +378,12 @@ def get_cached_fare_usd(
                 )
                 resp.raise_for_status()
                 fare = _extract_nearest_places(resp.json(), origin_iata, destination_hint, fare_strategy, trip_class)
+                record_external_api(
+                    "travelpayouts_nearest_places",
+                    (time.perf_counter() - started_at) * 1000,
+                    ok=True,
+                    no_coverage=fare is None,
+                )
 
             if fare_strategy == "business_comfort":
                 economy_fare = get_cached_fare_usd(
@@ -389,6 +411,7 @@ def get_cached_fare_usd(
                         expires_at=economy_fare.expires_at,
                     )
     except (httpx.HTTPError, ValueError) as exc:
+        record_external_api("travelpayouts", 0, ok=False)
         logger.info("Travelpayouts fare lookup skipped: %s", exc)
         return None
 

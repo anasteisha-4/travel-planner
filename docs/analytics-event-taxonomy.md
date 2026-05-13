@@ -195,6 +195,23 @@ Learning use: profile fields are the cold-start layer for recommendations. Profi
 change events help invalidate stale behavioral aggregates and explain shifts in
 recommendation outcomes.
 
+## Operational Observability
+
+| Event | Source | Required context | Optional context | Entity |
+| --- | --- | --- | --- | --- |
+| `failed_api_request` | Axios response interceptor | `method`, `path` | `status`, `duration_ms`, `request_id`, `backend_request_id`, `error_code` | none |
+| `slow_api_request` | Axios response interceptor | `method`, `path`, `duration_ms` | `status`, `request_id`, `backend_request_id` | none |
+| `frontend_error` | `window.onerror` | `message` | `source`, `line`, `column` | none |
+| `frontend_unhandled_rejection` | `window.unhandledrejection` | none | `reason_type`, `reason_name`, `reason_message` | none |
+| `service_worker_error` | PWA registration/runtime | none | `reason_code`, `error_name`, `error_message` | none |
+| `network_status_changed` | browser online/offline events | `status` | none | none |
+| `external_api_call_completed` | geocoder/maps/fare clients | `provider`, `duration_ms`, `ok` | `status` | none |
+
+Operational events are for incident debugging and should not include request
+bodies, response bodies, cookies, tokens, emails, or free text. `request_id` is
+generated client-side and propagated as `X-Request-ID`; `backend_request_id`
+echoes the value returned by FastAPI services.
+
 ## Funnel Reconstruction
 
 Minimum path from recommendation to trip:
