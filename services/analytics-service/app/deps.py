@@ -53,3 +53,11 @@ def get_optional_user_id(authorization: str | None = Header(None)) -> UUID | Non
         return get_current_user_id(authorization)
     except AppException:
         return None
+
+
+def get_admin_user_id(authorization: str | None = Header(None)) -> UUID:
+    current_user_id = get_current_user_id(authorization)
+    admin_ids = {item.strip() for item in settings.ADMIN_USER_IDS.split(",") if item.strip()}
+    if str(current_user_id) not in admin_ids:
+        raise AppException(status_code=403, code="ADMIN_REQUIRED", message="Admin access required")
+    return current_user_id

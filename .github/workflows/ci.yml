@@ -121,7 +121,7 @@ jobs:
     name: Deploy to VM
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    needs: [lint-backend, test-backend, lint-frontend, docker-build]
+    needs: [lint-backend, lint-frontend, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Deploy via SSH

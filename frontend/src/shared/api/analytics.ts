@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { getCachedFeatureFlag } from './feature-flags';
 
 type EventType =
   | 'app_opened'
@@ -142,6 +143,7 @@ const sanitizeContext = (context?: Record<string, unknown>): Record<string, unkn
 };
 
 const isAnalyticsEnabled = (): boolean => {
+  if (!getCachedFeatureFlag('analytics_collection_enabled', true)) return false;
   return localStorage.getItem(COLLECTION_KEY) !== 'false';
 };
 

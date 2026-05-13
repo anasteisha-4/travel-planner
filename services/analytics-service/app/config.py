@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     CORS_ORIGINS: str
     TRIP_SERVICE_URL: str = "http://trip-service:8000"
+    ADMIN_USER_IDS: str = ""
 
     class Config:
         env_file = find_env_file()

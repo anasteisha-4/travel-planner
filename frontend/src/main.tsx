@@ -4,8 +4,10 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
 import './app/styles/index.css';
 import { initFrontendObservability, sendEvent } from './shared/api/analytics';
+import { refreshFeatureFlags } from './shared/api/feature-flags';
 
 initFrontendObservability();
+refreshFeatureFlags().catch(() => undefined);
 
 registerSW({
   immediate: true,

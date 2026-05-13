@@ -1,4 +1,5 @@
 export * from './client';
+export * from './feature-flags';
 export {
   sendAppOpened,
   sendBudgetEvent,
