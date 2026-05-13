@@ -6,7 +6,7 @@ from app.config import settings
 from app.exceptions import AppException
 from app.observability import add_observability
 from app.observability import store as observability_store
-from app.routers import events, experiments, feature_flags, feedback
+from app.routers import admin_dashboards, events, experiments, feature_flags, feedback
 from app.routers.features import internal_router
 from app.routers.features import router as features_router
 
@@ -42,6 +42,7 @@ app.include_router(feature_flags.router)
 app.include_router(feature_flags.admin_router)
 app.include_router(experiments.router)
 app.include_router(experiments.admin_router)
+app.include_router(admin_dashboards.router)
 app.include_router(features_router)
 app.include_router(internal_router)
 
