@@ -73,6 +73,7 @@ EventType = Literal[
     "budget_monitor_served",
     "itinerary_candidate_generated",
     "validation_result_served",
+    "experiment_exposed",
 ]
 
 CANONICAL_EVENT_TYPES = set(get_args(EventType))
@@ -139,6 +140,7 @@ EVENT_REQUIRED_CONTEXT: dict[str, set[str]] = {
     "budget_monitor_served": {"trip_id", "model_version", "current_spend", "projected_final", "risk_status"},
     "itinerary_candidate_generated": {"trip_id", "itinerary_id", "ranker_version", "days", "places"},
     "validation_result_served": {"destination_id", "travel_month", "warnings_count", "warning_types"},
+    "experiment_exposed": {"experiment_id", "variant"},
     "onboarding_step_completed": {"step"},
 }
 

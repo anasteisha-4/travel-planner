@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { getCachedExperimentContext } from './experiments';
 import { getCachedFeatureFlag } from './feature-flags';
 
 type EventType =
@@ -217,6 +218,11 @@ export const sendEvent = (
       path: window.location.pathname,
       referrer: document.referrer,
     },
+  });
+  const last = queue[queue.length - 1];
+  last.context = sanitizeContext({
+    ...(last.context ?? {}),
+    ...getCachedExperimentContext(),
   });
   writeQueue(queue);
   scheduleFlush();
