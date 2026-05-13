@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user_id
+from app.services.analytics_events import emit_ml_quality_event
 from app.services.currency import convert_usd, normalize_currency
 
 router = APIRouter()
@@ -78,6 +79,7 @@ def _script_difficulty_score(value) -> float | None:
 @router.post("/validate", response_model=ValidateTripResponse)
 def validate_trip(
     request: ValidateTripRequest,
+    authorization: str | None = Header(default=None),
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> ValidateTripResponse:
@@ -255,8 +257,26 @@ def validate_trip(
                     )
                 )
 
-    return ValidateTripResponse(
+    response = ValidateTripResponse(
         destination_id=request.destination_id,
         warnings=warnings,
         info=info,
     )
+    emit_ml_quality_event(
+        "validation_result_served",
+        {
+            "destination_id": str(request.destination_id),
+            "travel_month": request.travel_month,
+            "warnings_count": len(warnings),
+            "warning_types": [warning.type for warning in warnings],
+            "warning_severities": [warning.severity for warning in warnings],
+            "visa_state": info.get("visa_type"),
+            "season_score": info.get("season_score"),
+            "safety_score": info.get("safety_score"),
+            "language_comfort_score": info.get("language_comfort_score"),
+        },
+        entity_type="destination",
+        entity_id=request.destination_id,
+        authorization=authorization,
+    )
+    return response

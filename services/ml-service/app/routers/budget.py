@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.schemas.budget import (
     BudgetPredictRequest,
     BudgetPredictResponse,
 )
+from app.services.analytics_events import emit_ml_quality_event
 from app.services.budget_formula import estimate_travel_cost, haversine
 from app.services.budget_scorer import get_budget_scorer
 from app.services.content_scorer import resolve_accommodation_tier
@@ -142,6 +143,7 @@ def _resolve_requested_tier(request: BudgetPredictRequest, profile: dict) -> str
 @router.post("/budget/predict", response_model=BudgetPredictResponse)
 def predict_budget(
     request: BudgetPredictRequest,
+    authorization: str | None = Header(default=None),
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> BudgetPredictResponse:
@@ -261,7 +263,7 @@ def predict_budget(
     one_time_costs_usd = max(0.0, breakdown_usd["travel_to_destination"])
     daily_recurring_mid_usd = max(0.0, total_mid_usd - one_time_costs_usd) / max(request.duration_days, 1)
 
-    return BudgetPredictResponse(
+    response = BudgetPredictResponse(
         destination_id=dest_id,
         duration_days=request.duration_days,
         people_count=request.people_count,
@@ -294,6 +296,25 @@ def predict_budget(
         ),
         model_version=str(result["model_version"]),
     )
+    emit_ml_quality_event(
+        "budget_prediction_served",
+        {
+            "destination_id": str(dest_id),
+            "model_version": response.model_version,
+            "p10": response.total_min,
+            "p50": response.total_mid,
+            "p90": response.total_max,
+            "formula_baseline": result.get("baseline"),
+            "currency": currency,
+            "duration_days": request.duration_days,
+            "people_count": request.people_count,
+            "travel_cost_source": travel_cost_source,
+        },
+        entity_type="destination",
+        entity_id=dest_id,
+        authorization=authorization,
+    )
+    return response
 
 
 def _monitor_status(current_spent: float, projected_mid: float, budget_limit: float | None) -> str:
@@ -312,6 +333,7 @@ def _monitor_status(current_spent: float, projected_mid: float, budget_limit: fl
 @router.post("/budget/monitor", response_model=BudgetMonitorResponse)
 def monitor_budget(
     request: BudgetMonitorRequest,
+    authorization: str | None = Header(default=None),
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> BudgetMonitorResponse:
@@ -345,7 +367,7 @@ def monitor_budget(
         if amount > 0 or baseline.category_spent_usd.get(category, 0.0) > 0
     ]
 
-    return BudgetMonitorResponse(
+    response = BudgetMonitorResponse(
         currency=currency,
         current_spent=convert_from_usd(current_spent, currency),
         planning_spent=convert_from_usd(baseline.planning_spent_usd, currency),
@@ -372,3 +394,19 @@ def monitor_budget(
         baseline_version="in-trip-formula-v1",
         used_ml_model=used_ml,
     )
+    emit_ml_quality_event(
+        "budget_monitor_served",
+        {
+            "trip_id": str(request.trip_id),
+            "model_version": response.model_version,
+            "fallback": not used_ml,
+            "current_spend": response.current_spent,
+            "projected_final": response.projected_final_mid,
+            "risk_status": response.risk_status,
+            "currency": currency,
+        },
+        entity_type="trip",
+        entity_id=request.trip_id,
+        authorization=authorization,
+    )
+    return response

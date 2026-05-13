@@ -212,6 +212,20 @@ bodies, response bodies, cookies, tokens, emails, or free text. `request_id` is
 generated client-side and propagated as `X-Request-ID`; `backend_request_id`
 echoes the value returned by FastAPI services.
 
+## ML Quality Events
+
+| Event | Source | Required context | Optional context | Entity |
+| --- | --- | --- | --- | --- |
+| `budget_prediction_served` | ML budget API | `destination_id`, `model_version`, `p10`, `p50`, `p90`, `currency` | `formula_baseline`, `duration_days`, `people_count`, `travel_cost_source` | `destination:{destination_id}` |
+| `budget_monitor_served` | ML budget monitor API | `trip_id`, `model_version`, `current_spend`, `projected_final`, `risk_status` | `fallback`, `currency` | `trip:{trip_id}` |
+| `itinerary_candidate_generated` | trip-service itinerary generation | `trip_id`, `itinerary_id`, `ranker_version`, `days`, `places` | `template_version`, `route_signature`, `variant_index`, `regenerated` | `itinerary:{itinerary_id}` |
+| `validation_result_served` | ML validation API | `destination_id`, `travel_month`, `warnings_count`, `warning_types` | `warning_severities`, `visa_state`, `season_score`, `safety_score`, `language_comfort_score` | `destination:{destination_id}` |
+
+Recommendation quality is stored in `recommendation_logs`: each logged response
+keeps `recommendation_id`, `model_version`, candidate generator metadata, optional
+experiment assignment, and top-N candidates with rank, score, reason tags, factor
+breakdown, and route fare source.
+
 ## Funnel Reconstruction
 
 Minimum path from recommendation to trip:

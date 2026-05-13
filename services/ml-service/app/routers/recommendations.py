@@ -1,7 +1,7 @@
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -37,7 +37,7 @@ CONTENT_SCORER_WEIGHTS = {
 _content_scorer = ContentScorer()
 
 
-def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -> tuple[BaseScorer, str]:
+def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -> tuple[BaseScorer, str, str | None]:
     """Return (scorer, model_version_str).
 
     Priority:
@@ -46,23 +46,23 @@ def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -
     3. Active LTR model from registry, fallback to content.
     """
     if request.model_version == "content-v1":
-        return _content_scorer, "content-v1"
+        return _content_scorer, "content-v1", None
     if request.model_version:
         scorer = get_scorer_by_version(db, request.model_version)
         if scorer is not None:
-            return scorer, scorer.version
+            return scorer, scorer.version, None
 
     if request.model_version is None:
         try:
             variant = get_variant(db, user_id, "scorer_ab")
             if variant == "content-v1":
-                return _content_scorer, "content-v1"
+                return _content_scorer, "content-v1", variant
         except Exception:
             pass
 
     scorer = get_active_scorer(db)
     version = scorer.version if isinstance(scorer, LTRScorer) else "content-v1"
-    return scorer, version
+    return scorer, version, None
 
 
 def _with_display_currency(item: ScoredDestination, display_currency: str) -> ScoredDestination:
@@ -83,6 +83,7 @@ def _with_display_currency(item: ScoredDestination, display_currency: str) -> Sc
 @router.post("/recommend", response_model=RecommendResponse)
 def get_recommendations(
     request: RecommendRequest,
+    authorization: str | None = Header(default=None),
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> RecommendResponse:
@@ -102,7 +103,7 @@ def get_recommendations(
         "region": request.region,
     }
 
-    scorer, model_version = _select_scorer(request, db, user_id)
+    scorer, model_version, variant = _select_scorer(request, db, user_id)
     scored = scorer.score(
         user_profile=profile,
         destinations=destinations,
@@ -122,6 +123,8 @@ def get_recommendations(
         user_id=user_id,
         request=request,
         model_version=model_version,
+        experiment_id="scorer_ab" if variant else None,
+        variant=variant,
         results=top_results,
         latency_ms=latency_ms,
     )
@@ -164,7 +167,7 @@ def get_destination_recommendation_score(
         citizenship_code=citizenship,
         model_version=request.model_version,
     )
-    scorer, _model_version = _select_scorer(scorer_request, db, user_id)
+    scorer, _model_version, _variant = _select_scorer(scorer_request, db, user_id)
     scored = scorer.score(
         user_profile=profile,
         destinations=destinations,
@@ -197,6 +200,8 @@ def _log_recommendation(
     user_id: uuid.UUID,
     request: RecommendRequest,
     model_version: str,
+    experiment_id: str | None,
+    variant: str | None,
     results: list,
     latency_ms: int,
 ) -> None:
@@ -210,6 +215,8 @@ def _log_recommendation(
                 "metric": "ndcg",
                 "candidate_generator": "content-scorer",
                 "candidate_top_n": 200,
+                "experiment_id": experiment_id,
+                "variant": variant,
             }
         )
         log = RecommendationLog(
@@ -228,10 +235,13 @@ def _log_recommendation(
                 {
                     "destination_id": str(r.destination_id),
                     "name": r.name,
+                    "rank": index,
                     "score": r.score,
-                    "score_breakdown": r.score_breakdown,
+                    "reason_tags": r.explanation_tags,
+                    "factor_breakdown": r.score_breakdown,
+                    "route_cost_source": r.route_cost_source,
                 }
-                for r in results
+                for index, r in enumerate(results, start=1)
             ],
             latency_ms=latency_ms,
         )

@@ -69,6 +69,10 @@ EventType = Literal[
     "service_worker_error",
     "network_status_changed",
     "external_api_call_completed",
+    "budget_prediction_served",
+    "budget_monitor_served",
+    "itinerary_candidate_generated",
+    "validation_result_served",
 ]
 
 CANONICAL_EVENT_TYPES = set(get_args(EventType))
@@ -131,6 +135,10 @@ EVENT_REQUIRED_CONTEXT: dict[str, set[str]] = {
     "frontend_error": {"message"},
     "network_status_changed": {"status"},
     "external_api_call_completed": {"provider", "duration_ms", "ok"},
+    "budget_prediction_served": {"destination_id", "model_version", "p10", "p50", "p90", "currency"},
+    "budget_monitor_served": {"trip_id", "model_version", "current_spend", "projected_final", "risk_status"},
+    "itinerary_candidate_generated": {"trip_id", "itinerary_id", "ranker_version", "days", "places"},
+    "validation_result_served": {"destination_id", "travel_month", "warnings_count", "warning_types"},
     "onboarding_step_completed": {"step"},
 }
 
