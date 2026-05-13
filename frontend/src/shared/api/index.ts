@@ -1,2 +1,14 @@
 export * from './client';
-export { sendEvent } from './analytics';
+export {
+  sendAppOpened,
+  sendBudgetEvent,
+  sendEvent,
+  sendFeedbackEvent,
+  sendItineraryEvent,
+  sendPageViewed,
+  sendRecommendationEvent,
+  sendSessionEnded,
+  sendSessionStarted,
+  sendTripEvent,
+  setAnalyticsCollectionEnabled,
+} from './analytics';

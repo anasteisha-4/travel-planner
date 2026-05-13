@@ -9,6 +9,7 @@ import { ResetPasswordPage } from '@/pages/reset-password';
 import { TripCreatePage } from '@/pages/trip-create';
 import { TripAnalyticsTab, TripDetailPage, TripDiaryTab, TripExpensesTab, TripInfoTab, TripItineraryTab } from '@/pages/trip-detail';
 import { TripsPage } from '@/pages/trips';
+import { sendAppOpened, sendPageViewed, sendSessionEnded, sendSessionStarted } from '@/shared/api';
 import { queryClient } from '@/shared/lib';
 import { ThemeProvider } from '@/shared/ui';
 import { BottomNav } from '@/widgets/bottom-nav';
@@ -16,7 +17,7 @@ import { Layout } from '@/widgets/layout';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useEffect } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('access_token');
@@ -30,10 +31,16 @@ const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppEffects = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleLogout = () => navigate('/login', { replace: true });
+    const handlePageHide = () => sendSessionEnded();
     window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('pagehide', handlePageHide);
+
+    sendAppOpened();
+    sendSessionStarted();
 
     if (
       window.matchMedia('(display-mode: standalone)').matches ||
@@ -42,8 +49,15 @@ const AppEffects = () => {
       document.body.classList.add('pwa-standalone');
     }
 
-    return () => window.removeEventListener('auth:logout', handleLogout);
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
   }, [navigate]);
+
+  useEffect(() => {
+    sendPageViewed(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
 
   return null;
 };

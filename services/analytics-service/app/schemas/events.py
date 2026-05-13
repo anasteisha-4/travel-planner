@@ -1,56 +1,26 @@
 import uuid
 from datetime import datetime
-from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-EventType = Literal[
-    "recommendation_shown",
-    "recommendation_impression",
-    "recommendation_clicked",
-    "destination_detail_opened",
-    "budget_predicted",
-    "budget_prediction_viewed",
-    "budget_prediction_changed",
-    "validation_viewed",
-    "trip_created",
-    "trip_opened",
-    "trip_status_changed",
-    "itinerary_generated",
-    "itinerary_viewed",
-    "itinerary_edited",
-    "itinerary_variant_generated",
-    "itinerary_approved",
-    "itinerary_regenerated",
-    "itinerary_poi_removed",
-    "itinerary_poi_added",
-    "itinerary_poi_pinned",
-    "itinerary_poi_reordered",
-    "itinerary_poi_visited",
-    "itinerary_day_regenerated",
-    "expense_added",
-    "expense_updated",
-    "post_trip_feedback_submitted",
-    "post_trip_feedback_updated",
-    "profile_viewed",
-    "profile_updated",
-    "profile_origin_changed",
-    "profile_budget_changed",
-    "profile_preferences_changed",
-    "recommendation_filter_changed",
-    "onboarding_step_completed",
-    "onboarding_completed",
-]
+from app.services.event_contract import EventType as EventType
 
 
 class EventPayload(BaseModel):
+    event_id: uuid.UUID | None = None
     session_id: uuid.UUID
-    event_type: EventType
+    event_type: str = Field(..., min_length=1, max_length=80)
+    event_version: int | None = Field(None, ge=1)
     entity_type: str | None = Field(None, max_length=30)
     entity_id: str | None = Field(None, max_length=50)
-    context: dict | None = None
-    client_meta: dict | None = None
+    context: dict | None = Field(default=None)
+    client_meta: dict | None = Field(default=None)
     occurred_at: datetime | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def normalize_event_type(cls, value: str) -> str:
+        return value.strip()
 
 
 class EventsBatchRequest(BaseModel):
@@ -59,3 +29,5 @@ class EventsBatchRequest(BaseModel):
 
 class EventsBatchResponse(BaseModel):
     accepted: int
+    warning_count: int = 0
+    warnings: list[str] = Field(default_factory=list)

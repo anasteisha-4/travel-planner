@@ -59,6 +59,60 @@ def test_ingest_event_with_context(client: TestClient, db: Session):
     assert row.context == ctx
 
 
+def test_ingest_unknown_event_type_soft_warning(client: TestClient, db: Session):
+    resp = client.post(
+        "/api/v1/events",
+        json={"events": [{"session_id": str(uuid.uuid4()), "event_type": "future_event"}]},
+    )
+    assert resp.status_code == 202
+    assert resp.json()["accepted"] == 1
+    assert resp.json()["warning_count"] == 1
+    row = db.query(UserEvent).first()
+    assert row is not None
+    assert row.event_type == "future_event"
+    assert row.client_meta is not None
+    assert row.client_meta["contract_warnings"] == ["unknown_event_type:future_event"]
+
+
+def test_ingest_strips_forbidden_context_keys(client: TestClient, db: Session):
+    resp = client.post(
+        "/api/v1/events",
+        json={
+            "events": [
+                {
+                    "session_id": str(uuid.uuid4()),
+                    "event_type": "profile_updated",
+                    "context": {
+                        "changed_fields": ["origin"],
+                        "email": "user@example.com",
+                        "nested": {"access_token": "x"},
+                    },
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 202
+    row = db.query(UserEvent).first()
+    assert row is not None
+    assert row.context == {"changed_fields": ["origin"], "nested": {}}
+    assert row.client_meta is not None
+    assert any("removed_forbidden_context_keys" in warning for warning in row.client_meta["contract_warnings"])
+
+
+def test_ingest_duplicate_event_id_is_skipped(client: TestClient, db: Session):
+    event_id = str(uuid.uuid4())
+    event = {"event_id": event_id, "session_id": str(uuid.uuid4()), "event_type": "onboarding_completed"}
+    first_resp = client.post("/api/v1/events", json={"events": [event]})
+    second_resp = client.post("/api/v1/events", json={"events": [event]})
+
+    assert first_resp.status_code == 202
+    assert first_resp.json()["accepted"] == 1
+    assert second_resp.status_code == 202
+    assert second_resp.json()["accepted"] == 0
+    assert second_resp.json()["warnings"] == [f"duplicate_event_id:{event_id}"]
+    assert db.query(UserEvent).count() == 1
+
+
 def test_ingest_all_event_types(client: TestClient, db: Session):
     valid_types = get_args(EventType)
     events = [{"session_id": str(uuid.uuid4()), "event_type": t} for t in valid_types]
