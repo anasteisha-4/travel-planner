@@ -20,7 +20,17 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-ANALYTICS_OWNED_TABLES = {"user_events", "user_features", "analytics_alembic_version"}
+ANALYTICS_OWNED_TABLES = {
+    "admin_audit_logs",
+    "analytics_alembic_version",
+    "analytics_experiment_assignments",
+    "experiments",
+    "feature_flags",
+    "ml_dataset_snapshots",
+    "post_trip_feedback",
+    "user_events",
+    "user_features",
+}
 
 
 def include_object(object, name, type_, reflected, compare_to):
