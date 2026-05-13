@@ -16,7 +16,7 @@ import type { ScoredDestination } from '@/features/recommendations';
 import { sendEvent } from '@/shared/api';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const SkeletonCard = () => (
   <div className="trip-info-card">
@@ -74,6 +74,7 @@ export const RecommendationsPage = () => {
   const [selectedCheckResult, setSelectedCheckResult] = useState<DestinationSearchResult | null>(null);
   const [sheetMode, setSheetMode] = useState<'recommendation' | 'check'>('recommendation');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const trackedEmptyStates = useRef<Set<string>>(new Set());
 
   const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
   const { data: checkedDestinationDetail } = useQuery({
@@ -136,6 +137,18 @@ export const RecommendationsPage = () => {
           'destination',
           dest.destination_id
         );
+      });
+    }
+    if (data?.results && data.results.length === 0) {
+      const key = `${data.recommendation_id}:${data.model_version}:${month}:${region ?? 'all'}`;
+      if (trackedEmptyStates.current.has(key)) return;
+      trackedEmptyStates.current.add(key);
+      sendEvent('recommendation_empty_state_shown', {
+        recommendation_id: data.recommendation_id,
+        model_version: data.model_version,
+        month,
+        region: region ?? null,
+        reason: 'no_results',
       });
     }
   }, [data?.model_version, data?.recommendation_id, data?.results, month, region]);

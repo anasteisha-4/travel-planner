@@ -7,6 +7,7 @@ import {
   PageLayout,
   StepIndicator,
 } from '@/shared/ui';
+import { sendEvent } from '@/shared/api';
 import { HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 
 import { useOnboardingV2 } from '../model/useOnboardingV2';
@@ -126,7 +127,16 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
               restLevel={restLevel}
               onCurrencyChange={handleCurrencyChange}
               onBudgetChange={(min, max) => update({ budgetMin: min, budgetMax: max })}
-              onRestLevelChange={(v) => update({ restLevel: v as RestLevel })}
+              onRestLevelChange={(v) => {
+                if (restLevel !== v) {
+                  sendEvent('rest_level_changed', {
+                    rest_level: v,
+                    previous_rest_level: restLevel,
+                    source: 'onboarding',
+                  });
+                }
+                update({ restLevel: v as RestLevel });
+              }}
             />
           )}
           {currentStep === 3 && (

@@ -1225,6 +1225,13 @@ export const TripItineraryTab = () => {
   const drafts = stateQuery.data?.drafts ?? [];
   const current = approved ?? drafts[0] ?? null;
   const [dropTargetDayId, setDropTargetDayId] = useState<string | null>(null);
+  const trackedViewedKeys = useRef<Set<string>>(new Set());
+  const durationDays = useMemo(() => {
+    const start = new Date(`${trip.start_date}T00:00:00`);
+    const end = new Date(`${trip.end_date}T00:00:00`);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return 1;
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  }, [trip.end_date, trip.start_date]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } })
@@ -1252,14 +1259,46 @@ export const TripItineraryTab = () => {
     [current]
   );
 
+  useEffect(() => {
+    const key = `${trip.id}:${current?.id ?? 'empty'}:${current ? getPlacesCount(current) : 0}`;
+    if (trackedViewedKeys.current.has(key)) return;
+    trackedViewedKeys.current.add(key);
+    sendEvent(
+      'itinerary_viewed',
+      {
+        trip_id: trip.id,
+        destination_id: trip.destination_id,
+        duration_days: durationDays,
+        has_generated_itinerary: Boolean(current),
+      },
+      'trip',
+      trip.id
+    );
+  }, [current, durationDays, trip.destination_id, trip.id]);
+
   const handleGenerate = () => {
     generateMutation.mutate(
       { variant_count: 3, pace: 'standard' },
       {
         onSuccess: (items) => {
+          const first = items[0];
           sendEvent(
             'itinerary_variant_generated',
             { trip_id: trip.id, variants_count: items.length },
+            'trip',
+            trip.id
+          );
+          sendEvent(
+            'itinerary_generated',
+            {
+              trip_id: trip.id,
+              destination_id: trip.destination_id,
+              duration_days: durationDays,
+              days_count: first?.days.length ?? 0,
+              places_count: first ? getPlacesCount(first) : 0,
+              has_template: true,
+              variants_count: items.length,
+            },
             'trip',
             trip.id
           );
@@ -1273,9 +1312,17 @@ export const TripItineraryTab = () => {
       { variant_count: 3, pace: 'standard', exclude_signature: current?.route_signature },
       {
         onSuccess: (items) => {
+          const first = items[0];
           sendEvent(
             'itinerary_regenerated',
-            { trip_id: trip.id, variants_count: items.length },
+            {
+              trip_id: trip.id,
+              destination_id: trip.destination_id,
+              duration_days: durationDays,
+              days_count: first?.days.length ?? 0,
+              places_count: first ? getPlacesCount(first) : 0,
+              variants_count: items.length,
+            },
             'trip',
             trip.id
           );
@@ -1289,7 +1336,13 @@ export const TripItineraryTab = () => {
       onSuccess: (itinerary) => {
         sendEvent(
           'itinerary_approved',
-          { trip_id: trip.id, itinerary_id: itinerary.id },
+          {
+            trip_id: trip.id,
+            destination_id: trip.destination_id,
+            itinerary_id: itinerary.id,
+            days_count: itinerary.days.length,
+            places_count: getPlacesCount(itinerary),
+          },
           'trip',
           trip.id
         );
@@ -1360,6 +1413,20 @@ export const TripItineraryTab = () => {
             'trip',
             trip.id
           );
+          if (sourceDay.id !== target.dayId) {
+            sendEvent(
+              'itinerary_poi_moved',
+              {
+                trip_id: trip.id,
+                item_id: activeId,
+                from_day: sourceDay.id,
+                to_day: target.dayId,
+                to_order: target.order,
+              },
+              'trip',
+              trip.id
+            );
+          }
         },
       }
     );
@@ -1387,8 +1454,20 @@ export const TripItineraryTab = () => {
 
   const handleVisit = (item: ItineraryItem) => {
     visitMutation.mutate(item.id, {
-      onSuccess: () => {
+      onSuccess: (updatedItem) => {
         sendEvent('itinerary_poi_visited', { trip_id: trip.id, item_id: item.id }, 'trip', trip.id);
+        if (updatedItem.visited_place_id) {
+          sendEvent(
+            'place_visit_marked_visited',
+            {
+              trip_id: trip.id,
+              place_id: updatedItem.visited_place_id,
+              source: 'itinerary',
+            },
+            'trip',
+            trip.id
+          );
+        }
       },
     });
   };

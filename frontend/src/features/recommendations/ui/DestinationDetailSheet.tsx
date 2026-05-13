@@ -315,18 +315,21 @@ const ValidationBlock = ({
       key: 'visa',
       label: 'Виза',
       status: statusFromWarning(warningByType.get('visa')),
+      warning: warningByType.get('visa'),
       value: formatVisa(data.info.visa_type),
     },
     {
       key: 'season',
       label: 'Сезон',
       status: statusFromWarning(warningByType.get('season')),
+      warning: warningByType.get('season'),
       value: formatPercent(data.info.season_score),
     },
     {
       key: 'budget',
       label: 'Бюджет',
       status: statusFromWarning(warningByType.get('budget')),
+      warning: warningByType.get('budget'),
       value:
         typeof dailyCost === 'number'
           ? `${formatDailyCost(dailyCost, dailyCostCurrency)}/день`
@@ -336,12 +339,14 @@ const ValidationBlock = ({
       key: 'safety',
       label: 'Риск',
       status: statusFromWarning(warningByType.get('safety')),
+      warning: warningByType.get('safety'),
       value: formatPercent(data.info.safety_score),
     },
     {
       key: 'language',
       label: 'Язык',
       status: languageStatus,
+      warning: undefined,
       value: formatPercent(destination.score_breakdown.language_match),
     },
   ];
@@ -372,7 +377,25 @@ const ValidationBlock = ({
           const meta = STATUS_META[row.status];
           const StatusIcon = meta.icon;
           return (
-            <div key={row.key} className="flex items-center justify-between gap-3 py-3">
+            <button
+              key={row.key}
+              type="button"
+              onClick={() => {
+                if (!row.warning) return;
+                sendEvent(
+                  'validation_warning_expanded',
+                  {
+                    destination_id: destination.destination_id,
+                    warning_type: row.warning.type,
+                    severity: row.warning.severity,
+                    source: 'destination_detail',
+                  },
+                  'destination',
+                  destination.destination_id
+                );
+              }}
+              className="flex w-full items-center justify-between gap-3 py-3 text-left"
+            >
               <div className="min-w-0">
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">
                   {row.label}
@@ -390,7 +413,7 @@ const ValidationBlock = ({
                 <StatusIcon className="h-3.5 w-3.5" />
                 <span className="text-[11px] font-extrabold">{meta.label}</span>
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

@@ -187,6 +187,13 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
     const config = BUDGET_LIMITS[newCurrency] ?? BUDGET_LIMITS.RUB;
     const prevCurrency = state.preferredCurrency;
     const hasBudget = state.budgetMin !== null || state.budgetMax !== null;
+    if (prevCurrency !== newCurrency) {
+      sendEvent('currency_changed', {
+        preferred_currency: newCurrency,
+        previous_currency: prevCurrency,
+        source: 'onboarding',
+      });
+    }
 
     if (!hasBudget || prevCurrency === newCurrency) {
       setState((prev) => ({
@@ -245,6 +252,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
 
   const handleSaveAndExit = async () => {
     await saveMutation.mutateAsync({ step: state.currentStep, data: stateToStepPayload(state.currentStep, state) });
+    sendEvent('onboarding_abandoned', { step: state.currentStep, source: 'save_and_exit' });
     play(HAPTIC_SINGLE_CONFIRM);
     onComplete();
   };

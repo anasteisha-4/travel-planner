@@ -1,4 +1,5 @@
 import { queryClient } from '@/shared/lib/query-client';
+import { sendEvent } from '@/shared/api';
 import { useToast } from '@/shared/ui';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -36,6 +37,7 @@ export const useLogin = ({
 
         if (code) {
           try {
+            sendEvent('login_started', { provider: 'yandex', flow: 'oauth_callback' });
             const res = await authApi.yandexCallback({
               code,
               redirect_uri: `${window.location.origin}/auth/yandex/callback`,
@@ -43,6 +45,7 @@ export const useLogin = ({
             localStorage.setItem('access_token', res.access_token);
             localStorage.setItem('refresh_token', res.refresh_token);
             queryClient.clear();
+            sendEvent('login_succeeded', { provider: 'yandex', flow: 'oauth_callback' });
             onSuccess();
           } catch (e: unknown) {
             let message = 'Не удалось авторизоваться через Яндекс';
@@ -54,6 +57,7 @@ export const useLogin = ({
               title: 'Ошибка авторизации',
               description: message,
             });
+            sendEvent('login_failed', { provider: 'yandex', flow: 'oauth_callback', reason_code: 'oauth_callback_failed' });
             if (onError) onError();
           }
         } else {
@@ -62,6 +66,7 @@ export const useLogin = ({
             title: 'Ошибка',
             description: 'Яндекс не вернул код авторизации',
           });
+          sendEvent('login_failed', { provider: 'yandex', flow: 'oauth_callback', reason_code: 'missing_oauth_code' });
           if (onError) onError();
         }
         setIsLoading(false);
@@ -87,6 +92,7 @@ export const useLogin = ({
     e.preventDefault();
     setFieldErrors({});
     setIsLoading(true);
+    sendEvent('login_started', { provider: 'password', flow: 'login' });
 
     try {
       const parsedData = AuthCredentialsSchema.parse({ identifier, password });
@@ -94,6 +100,7 @@ export const useLogin = ({
       localStorage.setItem('access_token', res.access_token);
       localStorage.setItem('refresh_token', res.refresh_token);
       queryClient.clear();
+      sendEvent('login_succeeded', { provider: 'password', flow: 'login' });
       onSuccess();
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -105,12 +112,16 @@ export const useLogin = ({
           }
         });
         setFieldErrors(errors);
+        sendEvent('login_failed', { provider: 'password', flow: 'login', reason_code: 'validation_error' });
       } else if (axios.isAxiosError(err)) {
         toast({
           variant: 'destructive',
           title: 'Ошибка',
           description: err.response?.data?.detail || 'Неверный логин/пароль',
         });
+        sendEvent('login_failed', { provider: 'password', flow: 'login', reason_code: `http_${err.response?.status ?? 'network'}` });
+      } else {
+        sendEvent('login_failed', { provider: 'password', flow: 'login', reason_code: 'unknown_error' });
       }
     } finally {
       setIsLoading(false);
@@ -119,6 +130,7 @@ export const useLogin = ({
 
   const handleYandexLogin = () => {
     const origin = window.location.origin;
+    sendEvent('login_started', { provider: 'yandex', flow: 'oauth_redirect' });
     window.location.href = authApi.getYandexAuthUrl(origin);
   };
 

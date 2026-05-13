@@ -9,8 +9,9 @@ import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { Button } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
+import { sendEvent } from '@/shared/api';
 
 const formatDateFull = (dateStr: string) => {
   if (!dateStr) return '';
@@ -84,6 +85,8 @@ const isManualForecastExpense = (expense: { category: string; description?: stri
 export const TripInfoTab = () => {
   const { play } = useHapticFeedback();
   const navigate = useNavigate();
+  const trackedBudgetMonitorKeys = useRef<Set<string>>(new Set());
+  const trackedBudgetRiskKeys = useRef<Set<string>>(new Set());
   const { trip, isStatusChanging, onStatusChange, onEditOpen, onCancelOpen, onDeleteOpen } =
     useOutletContext<TripDetailOutletContext>();
 
@@ -264,6 +267,46 @@ export const TripInfoTab = () => {
         (isBudgetMonitorPending || (!budgetMonitor && isBudgetMonitorFetching))));
   const isBudgetForecastRetrying =
     hasBudgetForecastError && (isBudgetPredictionFetching || isBudgetMonitorFetching);
+
+  useEffect(() => {
+    if (!budgetMonitor) return;
+    const key = `${trip.id}:${budgetMonitor.model_version}:${budgetMonitor.projected_final_mid}:${budgetMonitor.risk_status}`;
+    if (trackedBudgetMonitorKeys.current.has(key)) return;
+    trackedBudgetMonitorKeys.current.add(key);
+    sendEvent(
+      'budget_monitor_viewed',
+      {
+        trip_id: trip.id,
+        status: trip.status,
+        projected_final: budgetMonitor.projected_final_mid,
+        currency: budgetMonitor.currency,
+        model_version: budgetMonitor.model_version,
+        risk_status: budgetMonitor.risk_status,
+        used_ml_model: budgetMonitor.used_ml_model,
+      },
+      'trip',
+      trip.id
+    );
+  }, [budgetMonitor, trip.id, trip.status]);
+
+  useEffect(() => {
+    if (!budgetMonitor || !['risk', 'over_budget'].includes(budgetMonitor.risk_status)) return;
+    const key = `${trip.id}:${budgetMonitor.risk_status}:${budgetMonitor.projected_final_mid}`;
+    if (trackedBudgetRiskKeys.current.has(key)) return;
+    trackedBudgetRiskKeys.current.add(key);
+    sendEvent(
+      'budget_risk_shown',
+      {
+        trip_id: trip.id,
+        risk_status: budgetMonitor.risk_status,
+        projected_final: budgetMonitor.projected_final_mid,
+        budget: trip.budget,
+        currency: budgetMonitor.currency,
+      },
+      'trip',
+      trip.id
+    );
+  }, [budgetMonitor, trip.budget, trip.id]);
 
   const handleBudgetForecastRetry = () => {
     if (Boolean(budgetPredictionParams) && (!budgetPrediction || isBudgetPredictionError)) {

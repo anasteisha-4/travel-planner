@@ -43,7 +43,14 @@ export const useExpenses = (tripId: string, budgetCurrency: string) => {
   }, [queryClient, tripId]);
 
   const removeExpense = useCallback(
-    (expenseId: string) => removeMutation.mutateAsync(expenseId).catch(() => {}),
+    async (expenseId: string) => {
+      try {
+        await removeMutation.mutateAsync(expenseId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     [removeMutation],
   );
 

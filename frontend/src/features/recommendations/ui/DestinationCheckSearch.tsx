@@ -1,9 +1,10 @@
 import { destinationApi, type DestinationSearchResult } from '@/entities/destination';
+import { sendEvent } from '@/shared/api';
 import { getCountryFlag, localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { AppInput } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, Search } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type DestinationCheckSearchProps = {
   onSelect: (destination: DestinationSearchResult) => void;
@@ -19,6 +20,7 @@ export const DestinationCheckSearch = ({ onSelect }: DestinationCheckSearchProps
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const trackedSearches = useRef<Set<string>>(new Set());
   const debouncedQuery = useDebouncedValue(query, 400);
 
   const { data: results = [], isFetching } = useQuery({
@@ -28,7 +30,29 @@ export const DestinationCheckSearch = ({ onSelect }: DestinationCheckSearchProps
     staleTime: 1000 * 60 * 10,
   });
 
+  useEffect(() => {
+    const normalizedQuery = debouncedQuery.trim().toLowerCase();
+    if (!open || normalizedQuery.length < 2 || trackedSearches.current.has(normalizedQuery)) return;
+    trackedSearches.current.add(normalizedQuery);
+    sendEvent('recommendation_search_started', {
+      query_length: normalizedQuery.length,
+      source: 'recommendation_check_search',
+    });
+  }, [debouncedQuery, open]);
+
   const handleSelect = (destination: DestinationSearchResult) => {
+    const rank = results.findIndex((result) => result.id === destination.id) + 1;
+    sendEvent(
+      'recommendation_search_result_opened',
+      {
+        destination_id: destination.id,
+        query_length: query.trim().length,
+        rank: rank > 0 ? rank : null,
+        source: 'recommendation_check_search',
+      },
+      'destination',
+      destination.id
+    );
     setQuery(getDestinationName(destination));
     setOpen(false);
     onSelect(destination);

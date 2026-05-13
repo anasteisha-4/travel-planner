@@ -205,6 +205,13 @@ export const useTripForm = (
     const prevCurrency = prevCurrencyRef.current;
     setCurrency(newCurrency);
     prevCurrencyRef.current = newCurrency;
+    if (prevCurrency !== newCurrency) {
+      sendEvent('currency_changed', {
+        preferred_currency: newCurrency,
+        previous_currency: prevCurrency,
+        source: 'trip_form',
+      });
+    }
 
     if (budget > 0 && prevCurrency !== newCurrency) {
       setIsConverting(true);

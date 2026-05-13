@@ -1,4 +1,5 @@
 import { queryClient } from '@/shared/lib/query-client';
+import { sendEvent } from '@/shared/api';
 import { useToast } from '@/shared/ui';
 import axios from 'axios';
 import { useState } from 'react';
@@ -36,6 +37,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
     setFieldErrors({});
 
     setIsLoading(true);
+    sendEvent('login_started', { provider: 'password', flow: 'register' });
     try {
       const parsedData = RegisterFormSchema.parse(formData);
 
@@ -46,6 +48,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
       localStorage.setItem('access_token', res.access_token);
       localStorage.setItem('refresh_token', res.refresh_token);
       queryClient.clear();
+      sendEvent('login_succeeded', { provider: 'password', flow: 'register' });
       onSuccess();
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -58,6 +61,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
           }
         });
         setFieldErrors(errors);
+        sendEvent('login_failed', { provider: 'password', flow: 'register', reason_code: 'validation_error' });
       } else if (axios.isAxiosError(err)) {
         const detail = err.response?.data?.detail;
         let message = 'Произошла ошибка при регистрации';
@@ -71,6 +75,9 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
           title: 'Ошибка регистрации',
           description: message,
         });
+        sendEvent('login_failed', { provider: 'password', flow: 'register', reason_code: `http_${err.response?.status ?? 'network'}` });
+      } else {
+        sendEvent('login_failed', { provider: 'password', flow: 'register', reason_code: 'unknown_error' });
       }
     } finally {
       setIsLoading(false);
@@ -79,6 +86,7 @@ export const useRegister = ({ onSuccess }: { onSuccess: () => void }) => {
 
   const handleYandexLogin = () => {
     const origin = window.location.origin;
+    sendEvent('login_started', { provider: 'yandex', flow: 'register_oauth_redirect' });
     window.location.href = authApi.getYandexAuthUrl(origin);
   };
 

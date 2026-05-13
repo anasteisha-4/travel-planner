@@ -1,6 +1,7 @@
 import type { Expense } from '@/entities/expense';
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { DeleteExpenseSheet, ExpenseForm, ExpenseList, ExpenseSummary, useExpenses } from '@/features/expenses';
+import { sendEvent } from '@/shared/api';
 import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -34,10 +35,25 @@ export const TripExpensesTab = () => {
 
   const handleDeleteExpense = async () => {
     if (!deletingExpenseId) return;
+    const deletingExpense = expenses.find((expense) => expense.id === deletingExpenseId);
     setIsDeletingExpense(true);
     try {
-      await removeExpense(deletingExpenseId);
-      setDeletingExpenseId(null);
+      const deleted = await removeExpense(deletingExpenseId);
+      if (deleted) {
+        sendEvent(
+          'expense_deleted',
+          {
+            trip_id: trip.id,
+            expense_id: deletingExpenseId,
+            currency: deletingExpense?.currency ?? trip.currency,
+            category: deletingExpense?.category ?? 'unknown',
+            expense_date: deletingExpense?.expense_date ?? null,
+          },
+          'trip',
+          trip.id
+        );
+        setDeletingExpenseId(null);
+      }
     } finally {
       setIsDeletingExpense(false);
     }

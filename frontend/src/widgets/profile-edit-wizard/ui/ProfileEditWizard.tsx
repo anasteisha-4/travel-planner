@@ -180,6 +180,20 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           rest_level: updated.rest_level,
         });
       }
+      if (changedFields.includes('preferred_currency')) {
+        sendEvent('currency_changed', {
+          preferred_currency: updated.preferred_currency,
+          previous_currency: initial.preferredCurrency,
+          source: 'profile_edit',
+        });
+      }
+      if (changedFields.includes('rest_level')) {
+        sendEvent('rest_level_changed', {
+          rest_level: updated.rest_level,
+          previous_rest_level: initial.restLevel,
+          source: 'profile_edit',
+        });
+      }
       if (
         changedFields.some((field) =>
           [

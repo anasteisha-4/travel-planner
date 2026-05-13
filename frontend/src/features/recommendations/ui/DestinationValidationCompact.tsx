@@ -258,10 +258,11 @@ export const DestinationValidationCompact = ({
 
       <div className="mt-3 grid grid-cols-4 gap-1.5">
         {FACTORS.map((factor) => {
+          const warning = warningsByType.get(factor.key);
           const status =
             factor.key === 'budget' && missingBudget
               ? 'caution'
-              : statusFromWarning(warningsByType.get(factor.key));
+              : statusFromWarning(warning);
           const meta = STATUS_META[status];
           const title =
             factor.key === 'budget' && budgetUnlimited
@@ -270,13 +271,28 @@ export const DestinationValidationCompact = ({
                 ? 'Бюджет не проверен: нужен лимит поездки'
                 : (warningsByType.get(factor.key)?.message ?? meta.label);
           return (
-            <div
+            <button
               key={factor.key}
+              type="button"
+              onClick={() => {
+                if (!warning || !destinationId) return;
+                sendEvent(
+                  'validation_warning_expanded',
+                  {
+                    destination_id: destinationId,
+                    warning_type: warning.type,
+                    severity: warning.severity,
+                    source: 'trip_form',
+                  },
+                  'destination',
+                  destinationId
+                );
+              }}
               className={`truncate rounded-xl border px-2 py-1.5 text-center text-[11px] font-bold ${meta.classes}`}
               title={title}
             >
               {factor.label}
-            </div>
+            </button>
           );
         })}
       </div>
