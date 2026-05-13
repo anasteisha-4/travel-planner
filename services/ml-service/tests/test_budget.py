@@ -100,6 +100,8 @@ def test_budget_predict_basic(client: TestClient):
     assert data["currency"] == "USD"
     assert data["total_mid"] > 0
     assert data["total_min"] < data["total_mid"] < data["total_max"]
+    assert data["one_time_costs"] == 0
+    assert data["daily_recurring_mid"] == pytest.approx(data["total_mid"] / data["duration_days"], rel=0.01)
     assert "meals" in data["breakdown"]
     assert "transport" in data["breakdown"]
     assert "accommodation" in data["breakdown"]
@@ -168,5 +170,7 @@ def test_budget_predict_uses_request_origin(client: TestClient):
     assert near_data["assumptions"]["origin_source"] == "request"
     assert near_data["assumptions"]["origin_city_name"] == "Near Origin"
     assert near_data["breakdown"]["travel_to_destination"] == 0
-    assert far_data["breakdown"]["travel_to_destination"] > near_data["breakdown"]["travel_to_destination"]
-    assert far_data["total_mid"] > near_data["total_mid"]
+    assert far_data["breakdown"]["travel_to_destination"] == 0
+    assert far_data["one_time_costs"] == 0
+    assert far_data["assumptions"]["travel_cost_source"] == "distance_fallback"
+    assert far_data["total_mid"] == pytest.approx(near_data["total_mid"], rel=0.01)

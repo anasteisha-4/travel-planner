@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated
@@ -22,6 +22,7 @@ class TripCreate(BaseModel):
     budget: float | None = None
     currency: str = "RUB"
     people_count: int = 1
+    rest_days_count: Annotated[int, Field(ge=0, le=30)] = 0
     trip_type: str | None = None
     season: str | None = None
     departure_city: str | None = None
@@ -43,6 +44,7 @@ class TripUpdate(BaseModel):
     budget: float | None = None
     currency: str | None = None
     people_count: int | None = None
+    rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
     status: TripStatus | None = None
     trip_type: str | None = None
     season: str | None = None
@@ -67,6 +69,7 @@ class TripResponse(BaseModel):
     budget: float | None
     currency: str
     people_count: int
+    rest_days_count: int = 0
     status: TripStatus
     trip_type: str | None = None
     season: str | None = None
@@ -184,6 +187,112 @@ class PlaceVisitReorder(BaseModel):
 class PlaceVisitsByDate(BaseModel):
     date: date
     places: list[PlaceVisitResponse]
+
+
+class ItineraryGenerateRequest(BaseModel):
+    variant_count: Annotated[int, Field(ge=1, le=3)] = 3
+    pace: str = "standard"
+    day_start_time: time = time(9, 30)
+    day_end_time: time = time(19, 0)
+    preferred_activities: list[str] | None = None
+    rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+
+
+class ItineraryRegenerateRequest(BaseModel):
+    exclude_signature: str | None = None
+    variant_count: Annotated[int, Field(ge=1, le=3)] = 1
+    pace: str = "standard"
+    day_start_time: time = time(9, 30)
+    day_end_time: time = time(19, 0)
+    preferred_activities: list[str] | None = None
+    rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+
+
+class ItineraryItemUpdate(BaseModel):
+    day_id: UUID | None = None
+    arrival_time: time | None = None
+    departure_time: time | None = None
+    duration_minutes: Annotated[int, Field(ge=15, le=600)] | None = None
+    order: Annotated[int, Field(ge=0)] | None = None
+    is_pinned: bool | None = None
+    is_removed: bool | None = None
+
+
+class ItineraryItemSwapRequest(BaseModel):
+    target_item_id: UUID
+
+
+class ItineraryItemMoveRequest(BaseModel):
+    target_day_id: UUID
+    target_order: Annotated[int, Field(ge=0)] = 0
+
+
+class ItineraryManualItemCreate(BaseModel):
+    day_id: UUID
+    poi_id: UUID | None = None
+    name: str
+    category: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    arrival_time: time | None = None
+    departure_time: time | None = None
+    duration_minutes: Annotated[int, Field(ge=15, le=600)] = 90
+
+
+class ItineraryItemResponse(BaseModel):
+    id: UUID
+    day_id: UUID
+    poi_id: UUID | None
+    name: str
+    category: str | None
+    latitude: Decimal | None
+    longitude: Decimal | None
+    arrival_time: time | None
+    departure_time: time | None
+    duration_minutes: int | None
+    travel_from_previous_minutes: int
+    source: str
+    opening_status: str | None
+    price_tier: str | None
+    entrance_fee_usd: float | None
+    relevance_score: float | None
+    order: int
+    is_pinned: bool
+    is_removed: bool
+    visited_place_id: UUID | None
+    created_at: str
+    updated_at: str | None
+
+
+class ItineraryDayResponse(BaseModel):
+    id: UUID
+    date: date
+    day_number: int
+    theme: str | None
+    start_time: time | None
+    end_time: time | None
+    items: list[ItineraryItemResponse]
+
+
+class ItineraryResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    user_id: UUID
+    status: str
+    variant_index: int
+    generation_seed: int | None
+    model_version: str
+    route_signature: str | None
+    constraints: dict | None
+    score_summary: dict | None
+    days: list[ItineraryDayResponse]
+    created_at: str
+    updated_at: str | None
+
+
+class ItineraryStateResponse(BaseModel):
+    approved: ItineraryResponse | None = None
+    drafts: list[ItineraryResponse] = Field(default_factory=list)
 
 
 class UserProfileCreate(BaseModel):

@@ -241,10 +241,10 @@ def predict_budget(
     fare_expires_at = None
     fare_strategy = None
     fare_trip_class = None
-    fare_delta_usd = 0.0
+    travel_adjustment_usd = -fallback_travel_usd if fallback_travel_usd > 0 else 0.0
     if fare is not None and fare.price_usd > 0:
-        fare_delta_usd = fare.price_usd - fallback_travel_usd
         breakdown_usd["travel_to_destination"] = fare.price_usd
+        travel_adjustment_usd = fare.price_usd - fallback_travel_usd
         travel_cost_source = fare.source
         origin_iata = fare.origin_iata
         destination_iata = fare.destination_iata
@@ -252,16 +252,26 @@ def predict_budget(
         fare_expires_at = fare.expires_at
         fare_strategy = fare.fare_strategy
         fare_trip_class = fare.trip_class
+    elif fallback_travel_usd > 0:
+        breakdown_usd["travel_to_destination"] = 0.0
+
+    total_min_usd = max(1.0, float(result["total_min"]) + travel_adjustment_usd)
+    total_mid_usd = max(1.0, float(result["total_mid"]) + travel_adjustment_usd)
+    total_max_usd = max(1.0, float(result["total_max"]) + travel_adjustment_usd)
+    one_time_costs_usd = max(0.0, breakdown_usd["travel_to_destination"])
+    daily_recurring_mid_usd = max(0.0, total_mid_usd - one_time_costs_usd) / max(request.duration_days, 1)
 
     return BudgetPredictResponse(
         destination_id=dest_id,
         duration_days=request.duration_days,
         people_count=request.people_count,
         currency=currency,
-        total_min=round(max(1.0, float(result["total_min"]) + fare_delta_usd) * fx, 2),
-        total_mid=round(max(1.0, float(result["total_mid"]) + fare_delta_usd) * fx, 2),
-        total_max=round(max(1.0, float(result["total_max"]) + fare_delta_usd) * fx, 2),
+        total_min=round(total_min_usd * fx, 2),
+        total_mid=round(total_mid_usd * fx, 2),
+        total_max=round(total_max_usd * fx, 2),
         daily_cost_usd=round(float(costs.get("avg_daily_cost_usd") or 80.0), 2),
+        daily_recurring_mid=round(daily_recurring_mid_usd * fx, 2),
+        one_time_costs=round(one_time_costs_usd * fx, 2),
         breakdown={k: round(v * fx, 2) for k, v in breakdown_usd.items()},
         assumptions=BudgetAssumptions(
             duration_days=request.duration_days,

@@ -41,17 +41,29 @@ def _activity_preferences(profile: dict, request: ItineraryGenerateRequest) -> l
     return []
 
 
-def _params(request: ItineraryGenerateRequest, activities: list[str]) -> list[tuple[str, str | int]]:
-    params: list[tuple[str, str | int]] = [
+def _params(request: ItineraryGenerateRequest, activities: list[str]) -> list[tuple[str, str | int | float]]:
+    params: list[tuple[str, str | int | float]] = [
         ("destination_id", str(request.destination_id)),
         ("duration_days", request.duration_days),
         ("start_date", request.start_date.isoformat()),
+        ("variant_count", request.variant_count),
+        ("pace", request.pace),
+        ("day_start_time", request.day_start_time),
+        ("day_end_time", request.day_end_time),
+        ("rest_days_count", request.rest_days_count),
+        ("people_count", request.people_count),
     ]
+    if request.variant_seed is not None:
+        params.append(("variant_seed", request.variant_seed))
+    if request.exclude_signature:
+        params.append(("exclude_signature", request.exclude_signature))
+    if request.trip_budget is not None:
+        params.append(("trip_budget", request.trip_budget))
     params.extend(("preferred_activities", activity) for activity in activities)
     return params
 
 
-def _normalize_response(request: ItineraryGenerateRequest, payload: dict) -> ItineraryGenerateResponse:
+def _normalize_variant(request: ItineraryGenerateRequest, payload: dict) -> ItineraryGenerateResponse:
     error = payload.get("error")
     if error:
         return ItineraryGenerateResponse(
@@ -66,10 +78,13 @@ def _normalize_response(request: ItineraryGenerateRequest, payload: dict) -> Iti
     days = [
         ItineraryDay(
             day=int(day.get("day") or index + 1),
+            day_number=int(day.get("day_number") or day.get("day") or index + 1),
             theme=str(day.get("theme") or "urban"),
+            start_time=day.get("start_time"),
+            end_time=day.get("end_time"),
             places=[
                 ItineraryPlace(
-                    id=uuid.UUID(str(place["id"])),
+                    id=uuid.UUID(str(place.get("id") or place.get("poi_id"))),
                     name=str(place.get("name") or "Untitled place"),
                     name_original=place.get("name_original"),
                     name_ru=place.get("name_ru"),
@@ -80,21 +95,45 @@ def _normalize_response(request: ItineraryGenerateRequest, payload: dict) -> Iti
                     address=place.get("address"),
                     opening_hours=place.get("opening_hours"),
                     is_open_at_midday=place.get("is_open_at_midday"),
+                    opening_status=place.get("opening_status"),
+                    arrival_time=place.get("arrival_time"),
+                    departure_time=place.get("departure_time"),
+                    travel_from_previous_minutes=int(place.get("travel_from_previous_minutes") or 0),
                     visit_duration_minutes=place.get("visit_duration_minutes"),
+                    duration_minutes=place.get("duration_minutes"),
+                    price_tier=place.get("price_tier"),
+                    entrance_fee_usd=place.get("entrance_fee_usd"),
+                    score=place.get("score"),
                 )
-                for place in day.get("places", [])
-                if place.get("id")
+                for place in day.get("items", day.get("places", []))
+                if place.get("id") or place.get("poi_id")
             ],
+            items=[],
+            total_score=day.get("total_score"),
         )
         for index, day in enumerate(payload.get("days", []))
     ]
+    for day in days:
+        day.items = day.places
 
     return ItineraryGenerateResponse(
         destination_id=uuid.UUID(str(payload.get("destination_id") or request.destination_id)),
         duration_days=int(payload.get("duration_days") or request.duration_days),
+        variant_index=int(payload.get("variant_index") or 0),
+        variant_seed=payload.get("variant_seed"),
+        route_signature=payload.get("route_signature"),
+        model_version=str(payload.get("model_version") or "itinerary-poi-ranker-v1"),
         days=days,
         activity_tags=[str(tag) for tag in payload.get("activity_tags", [])],
+        source=str(payload.get("source") or "optimized-heuristic"),
+        score_summary=payload.get("score_summary") or {},
     )
+
+
+def _normalize_response(request: ItineraryGenerateRequest, payload: dict) -> ItineraryGenerateResponse:
+    normalized = _normalize_variant(request, payload)
+    normalized.variants = [_normalize_variant(request, item) for item in payload.get("variants", [])]
+    return normalized
 
 
 @router.post("/itinerary", response_model=ItineraryGenerateResponse)

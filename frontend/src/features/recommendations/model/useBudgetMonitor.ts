@@ -21,6 +21,9 @@ export const useBudgetMonitor = (params: BudgetMonitorRequest | null) => {
         )
         .join('|') ?? '',
       params?.pre_trip_prediction?.total_mid ?? null,
+      params?.pre_trip_prediction?.total_min ?? null,
+      params?.pre_trip_prediction?.total_max ?? null,
+      params?.pre_trip_prediction?.breakdown.travel_to_destination ?? null,
     ],
     queryFn: () => recommendationsApi.getBudgetMonitor(params!),
     enabled: params !== null,

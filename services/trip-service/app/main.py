@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import AppException
-from app.routers import expenses, places, profile, trips
+from app.routers import expenses, itinerary, places, profile, trips
 
 app = FastAPI(
     title="Travel Planner Trip Service",
@@ -20,11 +20,12 @@ app.add_middleware(
     allow_origins=cors_origins,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 app.include_router(trips.router, prefix="/api/trips", tags=["Trips"])
+app.include_router(itinerary.router, prefix="/api/trips", tags=["Itinerary"])
 app.include_router(expenses.router, prefix="/api", tags=["Expenses"])
 app.include_router(places.router, prefix="/api", tags=["Places"])
 app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])

@@ -16,6 +16,7 @@ export const TripSchema = z.object({
   budget: z.number().nullable(),
   currency: z.string(),
   people_count: z.number(),
+  rest_days_count: z.number().default(0),
   status: TripStatusEnum,
   departure_city: z.string().nullable().optional(),
   trip_type: z.string().nullable().optional(),
@@ -36,6 +37,7 @@ export const TripCreateSchema = z.object({
   budget: z.number().nullable().optional(),
   currency: z.string().optional(),
   people_count: z.number().min(1).optional(),
+  rest_days_count: z.number().min(0).max(30).optional(),
   departure_city: z.string().min(1),
   notes: z.string().nullable().optional(),
 });

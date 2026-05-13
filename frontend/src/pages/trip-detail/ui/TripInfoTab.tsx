@@ -1,5 +1,6 @@
 import type { TripDetailOutletContext } from './TripDetailPage';
 import { useFeedback } from '@/features/feedback';
+import { useItineraryState } from '@/features/itinerary';
 import { profileApi } from '@/features/profile';
 import { useBudgetMonitor, useBudgetPrediction } from '@/features/recommendations';
 import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
@@ -113,6 +114,27 @@ export const TripInfoTab = () => {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+  const todayParam = new Date().toISOString().slice(0, 10);
+  const { data: itineraryState } = useItineraryState(trip.id);
+  const itinerarySummary = useMemo(() => {
+    const itinerary = itineraryState?.approved;
+    if (!itinerary) return null;
+    const today = todayParam;
+    const remainingDays = itinerary.days.filter((day) => day.date >= today);
+    const remainingItems = remainingDays.flatMap((day) => day.items.filter((item) => !item.is_removed && !item.visited_place_id));
+    const durations = remainingItems
+      .map((item) => item.duration_minutes)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    return {
+      generated_days_count: itinerary.days.length,
+      remaining_days_count: remainingDays.length,
+      remaining_poi_count: remainingItems.length,
+      remaining_food_poi_count: remainingItems.filter((item) => item.category === 'food').length,
+      remaining_paid_poi_count: remainingItems.filter((item) => item.entrance_fee_usd !== null).length,
+      remaining_estimated_entrance_fees: remainingItems.reduce((sum, item) => sum + (item.entrance_fee_usd ?? 0), 0),
+      avg_visit_duration_minutes: durations.length > 0 ? durations.reduce((sum, value) => sum + value, 0) / durations.length : null,
+    };
+  }, [itineraryState?.approved, todayParam]);
   const budgetPredictionParams = useMemo(
     () =>
       trip.destination_id
@@ -149,10 +171,34 @@ export const TripInfoTab = () => {
     isPending: isBudgetPredictionPending,
     refetch: refetchBudgetPrediction,
   } = useBudgetPrediction(budgetPredictionParams);
-  const plannedDailyBudget = budgetPrediction
-    ? budgetPrediction.total_mid / Math.max(budgetPrediction.duration_days, 1)
-    : null;
-  const todayParam = new Date().toISOString().slice(0, 10);
+  const monitorPreTripPrediction = useMemo(() => {
+    if (!budgetPrediction) return null;
+
+    const travelCost = budgetPrediction.breakdown.travel_to_destination ?? 0;
+    const hasRealTravelFare =
+      budgetPrediction.assumptions.travel_cost_source?.startsWith('travelpayouts') ?? false;
+    const unsupportedTravelFallback = hasRealTravelFare ? 0 : travelCost;
+
+    return {
+      total_min: Math.max(0, budgetPrediction.total_min - unsupportedTravelFallback),
+      total_mid: Math.max(0, budgetPrediction.total_mid - unsupportedTravelFallback),
+      total_max: Math.max(0, budgetPrediction.total_max - unsupportedTravelFallback),
+      breakdown: {
+        ...budgetPrediction.breakdown,
+        travel_to_destination: hasRealTravelFare ? travelCost : 0,
+      },
+      model_version: budgetPrediction.model_version,
+    };
+  }, [budgetPrediction]);
+  const plannedDailyBudget =
+    budgetPrediction && monitorPreTripPrediction
+      ? budgetPrediction.daily_recurring_mid ??
+        Math.max(
+          0,
+          monitorPreTripPrediction.total_mid -
+            (monitorPreTripPrediction.breakdown.travel_to_destination ?? 0)
+        ) / Math.max(budgetPrediction.duration_days, 1)
+      : null;
   const manualForecastExpenseCount = expenses.filter((expense) =>
     isManualForecastExpense(expense, trip.start_date, trip.end_date)
   ).length;
@@ -179,22 +225,16 @@ export const TripInfoTab = () => {
               description: expense.description,
               is_one_time: expense.is_one_time,
             })),
-            pre_trip_prediction: budgetPrediction
-              ? {
-                  total_min: budgetPrediction.total_min,
-                  total_mid: budgetPrediction.total_mid,
-                  total_max: budgetPrediction.total_max,
-                  breakdown: budgetPrediction.breakdown,
-                  model_version: budgetPrediction.model_version,
-                }
-              : null,
-            itinerary_summary: null,
+            pre_trip_prediction: monitorPreTripPrediction,
+            itinerary_summary: itinerarySummary,
           },
     [
       budgetPrediction,
       budgetPredictionParams?.accommodation_tier,
       expenses,
       hasBudgetForecastInput,
+      itinerarySummary,
+      monitorPreTripPrediction,
       todayParam,
       trip.budget,
       trip.currency,

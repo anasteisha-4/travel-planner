@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import StrEnum
 
@@ -16,8 +16,9 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    Time,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.base_model import BaseModel
@@ -33,6 +34,7 @@ class Trip(BaseModel):
     budget: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str] = mapped_column(String, nullable=False, default="RUB")
     people_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    rest_days_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, server_default="0")
     status: Mapped[str] = mapped_column(String, nullable=False, default="planned")
     trip_type: Mapped[str | None] = mapped_column(String, nullable=True)
     season: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -108,3 +110,59 @@ class PlaceVisit(BaseModel):
     longitude: Mapped[Decimal] = mapped_column(Numeric(10, 7), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class TripItinerary(BaseModel):
+    __tablename__ = "trip_itineraries"
+    trip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
+    variant_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generation_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_version: Mapped[str] = mapped_column(String(80), nullable=False, default="heuristic-itinerary-v2")
+    route_signature: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+    constraints: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    score_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class TripItineraryDay(BaseModel):
+    __tablename__ = "trip_itinerary_days"
+    itinerary_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trip_itineraries.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    day_number: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    theme: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+
+
+class TripItineraryItem(BaseModel):
+    __tablename__ = "trip_itinerary_items"
+    day_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trip_itinerary_days.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    poi_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    arrival_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    departure_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    travel_from_previous_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
+    opening_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    price_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    entrance_fee_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    is_removed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    visited_place_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)

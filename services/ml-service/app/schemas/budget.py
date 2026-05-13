@@ -46,6 +46,8 @@ class BudgetPredictResponse(BaseModel):
     total_mid: float
     total_max: float
     daily_cost_usd: float
+    daily_recurring_mid: float
+    one_time_costs: float
     breakdown: dict[str, float]
     assumptions: BudgetAssumptions
     model_version: str

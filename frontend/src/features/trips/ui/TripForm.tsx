@@ -29,7 +29,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Loader2, MapPin, Minus, Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
-import { type TripCreateAnalyticsContext, type TripFormInitialValues, type TripFormSnapshot, useTripForm } from '../model/useTripForm';
+import {
+  type TripCreateAnalyticsContext,
+  type TripFormInitialValues,
+  type TripFormSnapshot,
+  useTripForm,
+} from '../model/useTripForm';
 
 type DestinationSearchInputProps = {
   label: string;
@@ -77,7 +82,10 @@ const DestinationSearchInput = ({
   };
 
   const showDropdown =
-    open && value.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
+    open &&
+    value.trim().length >= 2 &&
+    debouncedQuery.trim().length >= 2 &&
+    (results.length > 0 || isFetching);
 
   return (
     <div className="relative z-10 focus-within:z-40">
@@ -186,6 +194,10 @@ export const TripForm = ({
     peopleCount,
     incrementPeople,
     decrementPeople,
+    restDaysCount,
+    incrementRestDays,
+    decrementRestDays,
+    durationDays,
     notes,
     setNotes,
     isLoading,
@@ -198,9 +210,8 @@ export const TripForm = ({
   } = useTripForm(existingTrip, initialValues, onSnapshotChange, analyticsContext);
 
   const budgetConfig = BUDGET_LIMITS[currency] ?? BUDGET_LIMITS['USD'];
-  const budgetSliderValue = budget >= 0
-    ? budgetAmountToSliderValue(budget, budgetConfig)
-    : UNLIMITED_BUDGET_SLIDER_VALUE;
+  const budgetSliderValue =
+    budget >= 0 ? budgetAmountToSliderValue(budget, budgetConfig) : UNLIMITED_BUDGET_SLIDER_VALUE;
 
   const handleSubmit = async () => {
     const trip = existingTrip ? await handleUpdate(existingTrip.id) : await handleCreate();
@@ -212,7 +223,8 @@ export const TripForm = ({
     }
   };
 
-  const inputError = 'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-[hsl(var(--surface-border))]';
+  const inputError =
+    'bg-red-50 border-stone-200 dark:bg-red-900/20 dark:border-[hsl(var(--surface-border))]';
 
   return (
     <div className="flex flex-col gap-2">
@@ -230,7 +242,7 @@ export const TripForm = ({
 
         <div>
           <FieldLabel>Люди</FieldLabel>
-          <div className="flex h-[52px] items-center gap-2 rounded-2xl app-field px-2.5">
+          <div className="app-field flex h-[52px] items-center gap-2 rounded-2xl px-2.5">
             <button
               type="button"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface-muted))] text-foreground disabled:opacity-40"
@@ -283,10 +295,7 @@ export const TripForm = ({
               handleStartDateChange(e.target.value);
               clearError('start_date');
             }}
-            className={cn(
-              'h-[52px] rounded-[14px] app-field',
-              errors.start_date && inputError
-            )}
+            className={cn('app-field h-[52px] rounded-[14px]', errors.start_date && inputError)}
           />
           <FormError message={errors.start_date} />
         </div>
@@ -300,13 +309,52 @@ export const TripForm = ({
               setEndDate(e.target.value);
               clearError('end_date');
             }}
-            className={cn(
-              'h-[52px] rounded-[14px] app-field',
-              errors.end_date && inputError
-            )}
+            className={cn('app-field h-[52px] rounded-[14px]', errors.end_date && inputError)}
           />
           <FormError message={errors.end_date} />
         </div>
+      </div>
+
+      {/* Rest days */}
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <FieldLabel className="mb-0">Дни без активностей</FieldLabel>
+            <p className="mt-1 text-[12px] font-medium leading-snug text-muted-foreground">
+              Для отдыха и свободного планирования
+            </p>
+          </div>
+          <div className="app-field flex h-[44px] items-center gap-2 rounded-2xl px-2.5">
+            <button
+              type="button"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface-muted))] text-foreground disabled:opacity-40"
+              onClick={() => {
+                play('nudge');
+                decrementRestDays();
+                clearError('rest_days_count');
+              }}
+              disabled={restDaysCount <= 0}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-6 text-center text-lg font-extrabold tabular-nums text-stone-900 dark:text-white">
+              {restDaysCount}
+            </span>
+            <button
+              type="button"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
+              onClick={() => {
+                play('nudge');
+                incrementRestDays();
+                clearError('rest_days_count');
+              }}
+              disabled={restDaysCount >= durationDays}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        <FormError message={errors.rest_days_count} />
       </div>
 
       {validationSlot}
@@ -322,7 +370,7 @@ export const TripForm = ({
         </div>
         <div className="flex items-center gap-3">
           <Select value={currency} onValueChange={handleCurrencyChange}>
-            <SelectTrigger className="h-[52px] w-[120px] shrink-0 rounded-2xl app-field text-[13px] font-semibold text-foreground">
+            <SelectTrigger className="app-field h-[52px] w-[120px] shrink-0 rounded-2xl text-[13px] font-semibold text-foreground">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -360,7 +408,7 @@ export const TripForm = ({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Аллергии, особые пожелания"
-          className="mb-4 min-h-[112px] resize-none rounded-2xl app-field text-[15px] placeholder:text-muted-foreground"
+          className="app-field mb-4 min-h-[112px] resize-none rounded-2xl text-[15px] placeholder:text-muted-foreground"
         />
       </div>
 

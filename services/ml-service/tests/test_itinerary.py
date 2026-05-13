@@ -93,6 +93,10 @@ def test_generate_itinerary_success(client: TestClient, monkeypatch: pytest.Monk
                         "address": "Main street",
                         "opening_hours": "Mo-Su 10:00-18:00",
                         "is_open_at_midday": True,
+                        "opening_status": "open",
+                        "arrival_time": "09:30",
+                        "departure_time": "11:30",
+                        "travel_from_previous_minutes": 0,
                         "visit_duration_minutes": 120,
                     }
                 ],
@@ -109,11 +113,13 @@ def test_generate_itinerary_success(client: TestClient, monkeypatch: pytest.Monk
     assert resp.status_code == 200
     data = resp.json()
     assert data["destination_id"] == str(DEST_ID)
-    assert data["source"] == "template-based"
+    assert data["source"] == "optimized-heuristic"
     assert data["has_template"] is True
     assert data["days"][0]["places"][0]["name"] == "Museum"
+    assert data["days"][0]["places"][0]["arrival_time"] == "09:30"
     params = post_mock.call_args.kwargs["params"]
     assert ("preferred_activities", "culture") in params
+    assert ("variant_count", 1) in params
 
 
 def test_generate_itinerary_validates_request(client: TestClient):

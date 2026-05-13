@@ -1,5 +1,5 @@
-import cn from 'classnames';
 import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import cn from 'classnames';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -201,11 +201,11 @@ export const BudgetMonitoringCard = ({
 
   if (
     !hasForecastInput ||
-    !monitor &&
-    (budget === null ||
-      budget <= 0 ||
-      budgetMonitoringStatus === null ||
-      projectedBudgetPct === null)
+    (!monitor &&
+      (budget === null ||
+        budget <= 0 ||
+        budgetMonitoringStatus === null ||
+        projectedBudgetPct === null))
   ) {
     return (
       <div className="trip-info-card">
@@ -247,7 +247,7 @@ export const BudgetMonitoringCard = ({
   const effectiveBudgetGap = monitor?.budget_gap_mid ?? projectedBudgetDiff;
   const effectiveSpent = monitor?.current_spent ?? totalSpent;
   const effectiveBurnRate = monitor
-    ? Math.max(0, monitor.current_spent - monitor.planning_spent) / Math.max(elapsedDays, 1)
+    ? monitor.recurring_spent / Math.max(elapsedDays, 1)
     : burnRatePerDay;
   const isActuallyOverBudget = budget !== null && budget > 0 && effectiveSpent > budget;
   const progressPct = Math.min(Math.max(effectiveProjectedPct ?? 0, 0), 1);
@@ -362,13 +362,6 @@ export const BudgetMonitoringCard = ({
                 до поездки {daysUntilStart} {formatDays(daysUntilStart)}
               </>
             ) : (
-              //  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
-              //   return 'дней';
-              // }
-
-              // if (lastDigit === 1) {
-              //   return 'день';
-              // }
               <>
                 {elapsedDays} {formatDays(elapsedDays)}{' '}
                 {elapsedDays % 100 !== 11 && elapsedDays % 10 === 1 ? 'прошел' : 'прошло'} <br />{' '}

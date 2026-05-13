@@ -11,6 +11,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const getTodayStr = () => new Date().toISOString().slice(0, 10);
 const hasCyrillic = (value: string) => /[А-Яа-яЁё]/.test(value);
+const getDurationDays = (startDate: string, endDate: string) => {
+  if (!startDate || !endDate || endDate < startDate) return 1;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const diffMs = end.getTime() - start.getTime();
+  return Number.isFinite(diffMs) ? Math.max(1, Math.floor(diffMs / 86_400_000) + 1) : 1;
+};
 
 const getDestinationLabel = (dest: DestinationSearchResult, fallback?: string) => {
   const displayName = dest.display_name ?? dest.name_ru ?? localizeDestinationName(dest.name);
@@ -37,7 +44,15 @@ const normalizeOptionalId = (value?: string | null) => {
 export type TripFormInitialValues = Partial<
   Pick<
     TripCreate,
-    'destination' | 'start_date' | 'end_date' | 'budget' | 'currency' | 'people_count' | 'departure_city' | 'notes'
+    | 'destination'
+    | 'start_date'
+    | 'end_date'
+    | 'budget'
+    | 'currency'
+    | 'people_count'
+    | 'rest_days_count'
+    | 'departure_city'
+    | 'notes'
   >
 > & {
   destination_id?: string | null;
@@ -55,6 +70,7 @@ export type TripFormSnapshot = {
   budget: number;
   currency: string;
   people_count: number;
+  rest_days_count: number;
   departure_city: string;
   notes: string;
   destination_id: string | null;
@@ -101,6 +117,9 @@ export const useTripForm = (
   const [peopleCount, setPeopleCount] = useState(
     existingTrip?.people_count ?? initialValues?.people_count ?? 1
   );
+  const [restDaysCount, setRestDaysCount] = useState(
+    existingTrip?.rest_days_count ?? initialValues?.rest_days_count ?? 0
+  );
   const [notes, setNotes] = useState(existingTrip?.notes ?? initialValues?.notes ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
@@ -109,9 +128,14 @@ export const useTripForm = (
   const { toast } = useToast();
 
   const todayStr = useMemo(getTodayStr, []);
+  const durationDays = useMemo(() => getDurationDays(startDate, endDate), [endDate, startDate]);
 
   const currencySymbol =
     CURRENCIES.find((c) => c.value === currency)?.label.split(' ')[0] ?? currency;
+
+  useEffect(() => {
+    setRestDaysCount((value) => Math.min(value, durationDays));
+  }, [durationDays]);
 
   useEffect(() => {
     onSnapshotChange?.({
@@ -121,6 +145,7 @@ export const useTripForm = (
       budget,
       currency,
       people_count: peopleCount,
+      rest_days_count: restDaysCount,
       departure_city: departureCity,
       notes,
       destination_id: selectedDestination.id,
@@ -139,6 +164,7 @@ export const useTripForm = (
     notes,
     onSnapshotChange,
     peopleCount,
+    restDaysCount,
     selectedDepartureCity.id,
     selectedDepartureCity.lat,
     selectedDepartureCity.lng,
@@ -202,6 +228,8 @@ export const useTripForm = (
 
   const incrementPeople = () => setPeopleCount((p) => Math.min(p + 1, 20));
   const decrementPeople = () => setPeopleCount((p) => Math.max(p - 1, 1));
+  const incrementRestDays = () => setRestDaysCount((value) => Math.min(value + 1, durationDays));
+  const decrementRestDays = () => setRestDaysCount((value) => Math.max(value - 1, 0));
 
   const validate = (): TripCreate | null => {
     const fieldErrors: Record<string, string> = {};
@@ -226,6 +254,11 @@ export const useTripForm = (
       setErrors(fieldErrors);
       return null;
     }
+    if (restDaysCount > durationDays) {
+      fieldErrors.rest_days_count = 'Дней отдыха не может быть больше длительности поездки';
+      setErrors(fieldErrors);
+      return null;
+    }
 
     const raw = {
       destination: trimmedDestination,
@@ -235,6 +268,7 @@ export const useTripForm = (
       budget: budget > 0 ? budget : null,
       currency,
       people_count: peopleCount,
+      rest_days_count: restDaysCount,
       departure_city: departureCity.trim() || null,
       notes: notes.trim() || null,
     };
@@ -270,6 +304,7 @@ export const useTripForm = (
           destination_id: data.destination_id,
           currency: data.currency,
           people_count: data.people_count,
+          rest_days_count: data.rest_days_count,
           budget: data.budget,
           departure_city: data.departure_city,
           source: analyticsContext?.source ?? 'manual',
@@ -299,6 +334,7 @@ export const useTripForm = (
       const trip = await tripApi.updateTrip(id, updateData);
       queryClient.invalidateQueries({ queryKey: ['trips'] });
       queryClient.invalidateQueries({ queryKey: ['trip', id] });
+      queryClient.invalidateQueries({ queryKey: ['trip-itinerary', id] });
       return trip;
     } catch {
       toast({
@@ -331,6 +367,10 @@ export const useTripForm = (
     peopleCount,
     incrementPeople,
     decrementPeople,
+    restDaysCount,
+    incrementRestDays,
+    decrementRestDays,
+    durationDays,
     notes,
     setNotes,
     isLoading,

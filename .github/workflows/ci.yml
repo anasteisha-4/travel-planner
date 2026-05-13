@@ -266,5 +266,17 @@ jobs:
               echo ">>> No ranker retrain needed."
             fi
 
+            # --- Itinerary model registry ---
+            # Trigger: route optimizer, itinerary schema/proxy, or bootstrap training script changed.
+            if changed '^services/ml-service/scripts/train_itinerary_poi_ranker\.py|^services/ml-service/app/routers/itinerary\.py|^services/ml-service/app/schemas/itinerary\.py|^services/data-service/app/services/itinerary_service\.py'; then
+              echo ">>> Itinerary model metadata changed — registering active itinerary ranker..."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm ml-service \
+                python scripts/train_itinerary_poi_ranker.py
+              echo ">>> Itinerary model registration done."
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d ml-service data-service
+            else
+              echo ">>> No itinerary model registration needed."
+            fi
+
             echo "=== Deploy complete ==="
             docker compose -f docker-compose.prod.yml ps

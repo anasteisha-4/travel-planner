@@ -102,6 +102,8 @@ export type BudgetPredictResponse = {
   total_mid: number;
   total_max: number;
   daily_cost_usd: number;
+  daily_recurring_mid: number;
+  one_time_costs: number;
   breakdown: Record<string, number>;
   assumptions: BudgetAssumptions;
   model_version: string;

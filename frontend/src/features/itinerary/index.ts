@@ -1,8 +1,27 @@
 export { itineraryApi } from './api/itinerary.api';
-export { itineraryQueryKey, useGenerateItinerary } from './model/useGenerateItinerary';
+export {
+  itineraryQueryKey,
+  useAddItineraryItem,
+  useApproveItinerary,
+  useGenerateItinerary,
+  useItineraryState,
+  useMoveItineraryItem,
+  useRegenerateItinerary,
+  useRemoveItineraryItem,
+  useSwapItineraryItems,
+  useUnvisitItineraryItem,
+  useUpdateItineraryItem,
+  useVisitItineraryItem,
+} from './model/useGenerateItinerary';
 export type {
+  Itinerary,
   ItineraryDay,
   ItineraryGenerateRequest,
-  ItineraryGenerateResponse,
-  ItineraryPlace,
+  ItineraryItem,
+  ItineraryItemMoveRequest,
+  ItineraryItemSwapRequest,
+  ItineraryItemUpdate,
+  ItineraryManualItemCreate,
+  ItineraryRegenerateRequest,
+  ItineraryState,
 } from './model/types';

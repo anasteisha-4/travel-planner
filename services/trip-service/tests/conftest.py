@@ -11,11 +11,6 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app import deps
-from app.config import settings
-from app.database import Base, get_db
-from app.main import app
-
 
 def ensure_test_database_exists():
     db_host = os.environ.get("POSTGRES_HOST", "postgres")
@@ -34,10 +29,15 @@ def ensure_test_database_exists():
 ensure_test_database_exists()
 
 db_host = os.environ.get("POSTGRES_HOST", "postgres")
-os.environ.setdefault("DATABASE_URL", f"postgresql://postgres:postgres@{db_host}:5432/travel_planner_trips_test")
+os.environ["DATABASE_URL"] = f"postgresql://postgres:postgres@{db_host}:5432/travel_planner_trips_test"
 os.environ.setdefault("REDIS_URL", f"redis://{os.environ.get('REDIS_HOST', 'redis')}:6379/0")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
+
+from app import deps  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app.main import app  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 test_engine = create_engine(TEST_DATABASE_URL)

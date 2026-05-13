@@ -120,10 +120,20 @@ def generate_itinerary(
     duration_days: int,
     preferred_activities: list[str] = Query(default_factory=list),
     start_date: str | None = None,
+    variant_count: int = 1,
+    variant_seed: int | None = None,
+    pace: str = "standard",
+    day_start_time: str = "09:30",
+    day_end_time: str = "19:00",
+    rest_days_count: int = 0,
+    exclude_signature: str | None = None,
+    trip_budget: float | None = None,
+    people_count: int = 1,
     db: Session = Depends(get_internal_db),
 ):
     import contextlib
     from datetime import datetime as dt_class
+    from datetime import time as time_class
 
     from app.services.itinerary_service import generate_itinerary
 
@@ -131,6 +141,8 @@ def generate_itinerary(
     if start_date:
         with contextlib.suppress(ValueError):
             parsed_start_date = dt_class.fromisoformat(start_date)
+    parsed_start_time = time_class.fromisoformat(day_start_time)
+    parsed_end_time = time_class.fromisoformat(day_end_time)
 
     return generate_itinerary(
         db=db,
@@ -138,4 +150,13 @@ def generate_itinerary(
         duration_days=duration_days,
         preferred_activities=preferred_activities,
         start_date=parsed_start_date,
+        variant_count=variant_count,
+        variant_seed=variant_seed,
+        pace=pace,
+        day_start_time=parsed_start_time,
+        day_end_time=parsed_end_time,
+        rest_days_count=rest_days_count,
+        exclude_signature=exclude_signature,
+        trip_budget=trip_budget,
+        people_count=people_count,
     )

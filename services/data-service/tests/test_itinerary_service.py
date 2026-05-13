@@ -1,7 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from app.services.itinerary_service import dedupe_poi_ids, select_best_template
+from app.services.itinerary_service import build_variant, dedupe_poi_ids, rest_day_numbers, select_best_template
 
 
 def _trajectory(duration_days: int, tags: list[str], poi_ids: list[str]) -> SimpleNamespace:
@@ -25,6 +25,7 @@ def _poi(
     return SimpleNamespace(
         id=poi_id,
         name=name,
+        category="culture",
         lat=lat,
         lng=lng,
         visit_duration_minutes=visit_duration_minutes,
@@ -35,6 +36,12 @@ def _poi(
 
 def test_dedupe_poi_ids_skips_existing_and_day_duplicates():
     assert dedupe_poi_ids(["a", "b", "a", "c"], {"b"}) == ["a", "c"]
+
+
+def test_rest_day_numbers_are_evenly_distributed_and_exact():
+    assert rest_day_numbers(7, 2) == {3, 5}
+    assert rest_day_numbers(5, 0) == set()
+    assert rest_day_numbers(3, 3) == {1, 2, 3}
 
 
 def test_select_best_template_prefers_activity_match_with_available_poi():
@@ -69,3 +76,53 @@ def test_select_best_template_penalizes_unusable_poi():
     )
 
     assert selected is usable
+
+
+def test_build_variant_returns_requested_day_count_when_template_is_shorter():
+    template = _trajectory(1, ["culture"], [])
+
+    variant = build_variant(
+        template=template,
+        poi_map={},
+        translations={},
+        destination_id="11111111-1111-1111-1111-111111111111",
+        duration_days=4,
+        preferred_activities=["culture"],
+        start_date=datetime(2026, 6, 10),
+        variant_seed=42,
+        variant_index=0,
+        pace="standard",
+        day_start_time=datetime.strptime("09:30", "%H:%M").time(),
+        day_end_time=datetime.strptime("19:00", "%H:%M").time(),
+        rest_days_count=4,
+        trip_budget=None,
+        people_count=1,
+    )
+
+    assert variant["duration_days"] == 4
+    assert [day["day_number"] for day in variant["days"]] == [1, 2, 3, 4]
+    assert [day["theme"] for day in variant["days"]] == ["rest", "rest", "rest", "rest"]
+
+
+def test_build_variant_rejects_empty_active_days():
+    template = _trajectory(1, ["culture"], [])
+
+    variant = build_variant(
+        template=template,
+        poi_map={},
+        translations={},
+        destination_id="11111111-1111-1111-1111-111111111111",
+        duration_days=1,
+        preferred_activities=["culture"],
+        start_date=datetime(2026, 6, 10),
+        variant_seed=42,
+        variant_index=0,
+        pace="standard",
+        day_start_time=datetime.strptime("09:30", "%H:%M").time(),
+        day_end_time=datetime.strptime("19:00", "%H:%M").time(),
+        rest_days_count=0,
+        trip_budget=None,
+        people_count=1,
+    )
+
+    assert variant is None

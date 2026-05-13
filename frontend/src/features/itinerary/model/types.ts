@@ -1,37 +1,99 @@
 export type ItineraryGenerateRequest = {
-  destination_id: string;
-  duration_days: number;
-  start_date: string;
+  variant_count?: number;
+  pace?: 'relaxed' | 'standard' | 'intense';
+  day_start_time?: string;
+  day_end_time?: string;
+  rest_days_count?: number;
   preferred_activities?: string[];
 };
 
-export type ItineraryPlace = {
-  id: string;
+export type ItineraryRegenerateRequest = ItineraryGenerateRequest & {
+  exclude_signature?: string | null;
+};
+
+export type ItineraryItemUpdate = {
+  day_id?: string;
+  arrival_time?: string;
+  departure_time?: string;
+  duration_minutes?: number;
+  order?: number;
+  is_pinned?: boolean;
+  is_removed?: boolean;
+};
+
+export type ItineraryItemSwapRequest = {
+  target_item_id: string;
+};
+
+export type ItineraryItemMoveRequest = {
+  target_day_id: string;
+  target_order: number;
+};
+
+export type ItineraryManualItemCreate = {
+  day_id: string;
+  poi_id?: string | null;
   name: string;
-  name_original?: string | null;
-  name_ru?: string | null;
-  display_name?: string | null;
-  category: string;
-  lat: number | null;
-  lng: number | null;
-  address: string | null;
-  opening_hours: string | null;
-  is_open_at_midday: boolean | null;
-  visit_duration_minutes: number | null;
+  category?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  arrival_time?: string | null;
+  departure_time?: string | null;
+  duration_minutes: number;
+};
+
+export type ItineraryItem = {
+  id: string;
+  day_id: string;
+  poi_id: string | null;
+  name: string;
+  category: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  arrival_time: string | null;
+  departure_time: string | null;
+  duration_minutes: number | null;
+  travel_from_previous_minutes: number;
+  source: 'generated' | 'manual' | string;
+  opening_status: 'open' | 'closed' | 'unknown' | string | null;
+  price_tier: string | null;
+  entrance_fee_usd: number | null;
+  relevance_score: number | null;
+  order: number;
+  is_pinned: boolean;
+  is_removed: boolean;
+  visited_place_id: string | null;
+  created_at: string;
+  updated_at: string | null;
 };
 
 export type ItineraryDay = {
-  day: number;
-  theme: string;
-  places: ItineraryPlace[];
+  id: string;
+  date: string;
+  day_number: number;
+  theme: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  items: ItineraryItem[];
 };
 
-export type ItineraryGenerateResponse = {
-  destination_id: string;
-  duration_days: number;
+export type Itinerary = {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  status: 'draft' | 'approved' | 'archived' | string;
+  variant_index: number;
+  generation_seed: number | null;
+  model_version: string;
+  route_signature: string | null;
+  constraints: Record<string, unknown> | null;
+  score_summary: Record<string, unknown> | null;
   days: ItineraryDay[];
-  activity_tags: string[];
-  source: string;
-  has_template: boolean;
-  message: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type ItineraryState = {
+  approved: Itinerary | null;
+  drafts: Itinerary[];
 };

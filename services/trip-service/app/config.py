@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str
     FXR_API_KEY: str = ""
     ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
+    ML_SERVICE_URL: str = "http://ml-service:8000"
 
     class Config:
         env_file = find_env_file()
