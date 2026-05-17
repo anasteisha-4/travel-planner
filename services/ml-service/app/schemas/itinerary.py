@@ -3,9 +3,13 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.schemas.llm_quality import LLMCandidatePOI, LLMQualityReview
+
 
 class ItineraryGenerateRequest(BaseModel):
-    destination_id: uuid.UUID
+    trip_id: uuid.UUID | None = None
+    destination_id: uuid.UUID | None = None
+    destination_text: str | None = Field(default=None, max_length=200)
     duration_days: int = Field(..., ge=1, le=30)
     start_date: date
     preferred_activities: list[str] | None = None
@@ -19,6 +23,9 @@ class ItineraryGenerateRequest(BaseModel):
     trip_budget: float | None = Field(default=None, ge=0)
     currency: str = "USD"
     people_count: int = Field(default=1, ge=1, le=20)
+    trip_notes: str | None = None
+    origin_city_name: str | None = Field(default=None, max_length=120)
+    allow_external_route: bool = False
 
 
 class ItineraryPlace(BaseModel):
@@ -42,6 +49,8 @@ class ItineraryPlace(BaseModel):
     price_tier: str | None = None
     entrance_fee_usd: float | None = None
     score: float | None = None
+    quality_review: LLMQualityReview | None = None
+    external_candidate_source: str | None = None
 
 
 class ItineraryDay(BaseModel):
@@ -53,6 +62,7 @@ class ItineraryDay(BaseModel):
     places: list[ItineraryPlace]
     items: list[ItineraryPlace] = Field(default_factory=list)
     total_score: float | None = None
+    quality_review: LLMQualityReview | None = None
 
 
 class ItineraryGenerateResponse(BaseModel):
@@ -68,4 +78,7 @@ class ItineraryGenerateResponse(BaseModel):
     has_template: bool = True
     message: str | None = None
     score_summary: dict = Field(default_factory=dict)
+    quality_model_version: str | None = None
+    quality_review: LLMQualityReview | None = None
+    candidate_poi: list[LLMCandidatePOI] = Field(default_factory=list)
     variants: list["ItineraryGenerateResponse"] = Field(default_factory=list)

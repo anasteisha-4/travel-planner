@@ -2,6 +2,8 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+from app.schemas.llm_quality import LLMQualityReview
+
 
 class RecommendRequest(BaseModel):
     travel_month: int = Field(..., ge=1, le=12)
@@ -40,9 +42,12 @@ class ScoredDestination(BaseModel):
     route_cost_source: str | None = None
     season_score: float | None
     safety_score: float | None
+    quality_review: LLMQualityReview | None = None
 
 
 class RecommendResponse(BaseModel):
     recommendation_id: uuid.UUID
     model_version: str
+    quality_model_version: str | None = None
+    quality_review: LLMQualityReview | None = None
     results: list[ScoredDestination]

@@ -26,6 +26,24 @@ class Settings(BaseSettings):
     TRAVELPAYOUTS_API_TOKEN: str = ""
     TRAVELPAYOUTS_CACHE_TTL_SECONDS: int = 60 * 60 * 24 * 7
     TRAVELPAYOUTS_TIMEOUT_SECONDS: float = 4.0
+    LLM_QUALITY_ENABLED: bool = False
+    LLM_PROVIDER: str = "yandex"
+    LLM_MODEL: str = "qwen3.6-35b-a3b/latest"
+    LLM_API_KEY: str = ""
+    LLM_FOLDER_ID: str = ""
+    LLM_BASE_URL: str = "https://ai.api.cloud.yandex.net/v1"
+    LLM_DATA_LOGGING_ENABLED: bool = False
+    LLM_TIMEOUT_SECONDS: float = 4.0
+    LLM_MAX_RETRIES: int = 1
+    LLM_CACHE_TTL_SECONDS: int = 60 * 60 * 24
+    LLM_RECOMMENDATION_REVIEW_LIMIT: int = 10
+    LLM_ITINERARY_REVIEW_VARIANTS: int = 1
+    LLM_NOTES_MAX_CHARS: int = 1200
+    LLM_EXTERNAL_ROUTE_MAX_TOKENS: int = 8000
+    LLM_CANDIDATE_POI_ENABLED: bool = False
+    LLM_EXTERNAL_ROUTE_ENABLED: bool = False
+    LLM_FAIL_OPEN: bool = True
+    LLM_LOG_RAW_PROMPTS: bool = False
 
     class Config:
         env_file = find_env_file()
