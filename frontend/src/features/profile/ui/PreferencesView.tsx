@@ -284,7 +284,10 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
           <Divider />
           <div className="rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              💬 Заметки
+              Заметки для маршрутов
+            </p>
+            <p className="mb-2 text-[12px] font-semibold leading-snug text-muted-foreground">
+              Эти детали помогают точнее подбирать темп, активности и проверки поездки.
             </p>
             <p className="text-[13px] text-muted-foreground">{preferences.free_text_notes}</p>
           </div>

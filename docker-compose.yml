@@ -116,6 +116,28 @@ services:
       redis:
         condition: service_healthy
 
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: travel-planner-grafana
+    env_file:
+      - .env.docker
+    environment:
+      GF_SERVER_ROOT_URL: http://localhost/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ALLOW_EMBEDDING: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_USERS_DEFAULT_THEME: light
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
@@ -125,6 +147,7 @@ services:
         - VITE_YANDEX_MAPS_API_TOKEN
         - VITE_GEOAPIFY_API_KEY
         - VITE_YANDEX_GEOSUGGEST_API_KEY
+        - VITE_GRAFANA_DASHBOARD_URL
     container_name: travel-planner-frontend
     env_file:
       - .env.docker
@@ -136,7 +159,9 @@ services:
       - data-service
       - ml-service
       - analytics-service
+      - grafana
 
 volumes:
   postgres_data:
   redis_data:
+  grafana_data:

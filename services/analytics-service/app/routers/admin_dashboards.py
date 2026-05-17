@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import case, func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -29,6 +29,9 @@ ML_EVENTS = [
     "budget_monitor_served",
     "itinerary_candidate_generated",
     "validation_result_served",
+    "llm_quality_review_completed",
+    "llm_quality_adjustment_applied",
+    "llm_quality_skipped",
 ]
 
 OPERATIONAL_EVENTS = [
@@ -65,6 +68,31 @@ def dashboard_summary(
         },
         "operational": {
             "counts": {key: int(event_counts.get(key, 0)) for key in OPERATIONAL_EVENTS},
+        },
+        "charts": {
+            "daily_events": _daily_event_series(db),
+            "top_events": _top_events(db),
+            "recommendation_funnel": _funnel(
+                event_counts,
+                [
+                    "recommendation_shown",
+                    "recommendation_impression",
+                    "recommendation_clicked",
+                    "destination_detail_opened",
+                    "trip_created",
+                ],
+            ),
+            "itinerary_funnel": _funnel(
+                event_counts,
+                [
+                    "itinerary_viewed",
+                    "itinerary_generated",
+                    "itinerary_approved",
+                    "itinerary_poi_moved",
+                    "place_visit_marked_visited",
+                ],
+            ),
+            "operational_daily": _operational_series(db),
         },
         "recent_events": [_event_to_dict(event) for event in recent_events],
     }
@@ -121,3 +149,79 @@ def _mask_context(value):
     if isinstance(value, list):
         return [_mask_context(item) for item in value]
     return value
+
+
+def _daily_event_series(db: Session) -> list[dict]:
+    rows = db.execute(
+        text(
+            "SELECT date_trunc('day', created_at)::date AS day, "
+            "COUNT(*) AS total, "
+            "COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS users, "
+            "COUNT(DISTINCT session_id) AS sessions "
+            "FROM user_events "
+            "WHERE created_at >= now() - interval '13 days' "
+            "GROUP BY day "
+            "ORDER BY day"
+        )
+    ).mappings()
+    return [
+        {
+            "date": str(row["day"]),
+            "events": int(row["total"] or 0),
+            "users": int(row["users"] or 0),
+            "sessions": int(row["sessions"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def _operational_series(db: Session) -> list[dict]:
+    rows = (
+        db.query(
+            func.date_trunc("day", UserEvent.created_at).label("day"),
+            func.count(UserEvent.id).label("total"),
+            func.sum(case((UserEvent.event_type == "failed_api_request", 1), else_=0)).label("failed"),
+            func.sum(case((UserEvent.event_type == "slow_api_request", 1), else_=0)).label("slow"),
+            func.sum(case((UserEvent.event_type == "frontend_error", 1), else_=0)).label("frontend_errors"),
+        )
+        .filter(
+            UserEvent.event_type.in_(OPERATIONAL_EVENTS),
+            UserEvent.created_at >= func.now() - text("interval '13 days'"),
+        )
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    return [
+        {
+            "date": row.day.date().isoformat() if row.day else None,
+            "total": int(row.total or 0),
+            "failed": int(row.failed or 0),
+            "slow": int(row.slow or 0),
+            "frontend_errors": int(row.frontend_errors or 0),
+        }
+        for row in rows
+    ]
+
+
+def _top_events(db: Session) -> list[dict]:
+    rows = (
+        db.query(UserEvent.event_type, func.count(UserEvent.id).label("count"))
+        .group_by(UserEvent.event_type)
+        .order_by(func.count(UserEvent.id).desc())
+        .limit(12)
+        .all()
+    )
+    return [{"event_type": row.event_type, "count": int(row.count or 0)} for row in rows]
+
+
+def _funnel(event_counts: dict, event_names: list[str]) -> list[dict]:
+    first_count = int(event_counts.get(event_names[0], 0) or 0) if event_names else 0
+    return [
+        {
+            "event_type": event_name,
+            "count": int(event_counts.get(event_name, 0) or 0),
+            "conversion": round((int(event_counts.get(event_name, 0) or 0) / first_count), 4) if first_count else None,
+        }
+        for event_name in event_names
+    ]

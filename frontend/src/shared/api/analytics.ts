@@ -1,6 +1,4 @@
 import { apiClient } from './client';
-import { getCachedExperimentContext } from './experiments';
-import { getCachedFeatureFlag } from './feature-flags';
 
 type EventType =
   | 'app_opened'
@@ -144,7 +142,6 @@ const sanitizeContext = (context?: Record<string, unknown>): Record<string, unkn
 };
 
 const isAnalyticsEnabled = (): boolean => {
-  if (!getCachedFeatureFlag('analytics_collection_enabled', true)) return false;
   return localStorage.getItem(COLLECTION_KEY) !== 'false';
 };
 
@@ -218,11 +215,6 @@ export const sendEvent = (
       path: window.location.pathname,
       referrer: document.referrer,
     },
-  });
-  const last = queue[queue.length - 1];
-  last.context = sanitizeContext({
-    ...(last.context ?? {}),
-    ...getCachedExperimentContext(),
   });
   writeQueue(queue);
   scheduleFlush();

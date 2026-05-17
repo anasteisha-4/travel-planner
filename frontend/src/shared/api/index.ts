@@ -1,6 +1,4 @@
 export * from './client';
-export * from './experiments';
-export * from './feature-flags';
 export {
   sendAppOpened,
   sendBudgetEvent,

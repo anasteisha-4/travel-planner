@@ -195,6 +195,23 @@ jobs:
               echo ">>> No destination duplicate merge update needed."
             fi
 
+            # --- Approved LLM POI candidate seed ---
+            # Optional portable transfer path for admin-approved local candidates.
+            # Production admin approval writes directly to POI and does not need this.
+            if changed '^services/data-service/data/seed/approved_llm_poi_candidates\.json|^services/data-service/scripts/apply_approved_llm_poi_candidates\.py'; then
+              if [ -f services/data-service/data/seed/approved_llm_poi_candidates.json ]; then
+                echo ">>> Approved LLM POI seed changed — applying..."
+                docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm data-service \
+                  python scripts/apply_approved_llm_poi_candidates.py
+                docker compose -f docker-compose.prod.yml --env-file .env.prod up -d data-service ml-service
+                echo ">>> Approved LLM POI seed applied."
+              else
+                echo ">>> Approved LLM POI seed script changed, but no seed file exists."
+              fi
+            else
+              echo ">>> No approved LLM POI seed update needed."
+            fi
+
             # --- Synthetic budget data regeneration ---
             # Trigger: generator script changed, OR budget_formula.py changed
             # (formula constants are duplicated in generate_synthetic_data.py — must stay in sync)

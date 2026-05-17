@@ -6,7 +6,6 @@ Create Date: 2026-05-13
 
 """
 
-import uuid
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -17,17 +16,6 @@ revision: str = "0004"
 down_revision: Union[str, Sequence[str], None] = "0003"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-SUGGESTED_FLAGS = [
-    "analytics_collection_enabled",
-    "hybrid_ranker_v2_enabled",
-    "behavioral_ltr_augmentation_enabled",
-    "budget_monitor_ml_enabled",
-    "itinerary_ranker_enabled",
-    "itinerary_dnd_enabled",
-    "travel_fare_enrichment_enabled",
-    "destination_validation_block_enabled",
-]
 
 
 def upgrade() -> None:
@@ -62,32 +50,6 @@ def upgrade() -> None:
     op.create_index("ix_admin_audit_logs_actor_user_id", "admin_audit_logs", ["actor_user_id"])
     op.create_index("ix_admin_audit_logs_entity_id", "admin_audit_logs", ["entity_id"])
     op.create_index("ix_admin_audit_logs_entity_type", "admin_audit_logs", ["entity_type"])
-
-    flags_table = sa.table(
-        "feature_flags",
-        sa.column("id", postgresql.UUID(as_uuid=True)),
-        sa.column("key", sa.String),
-        sa.column("description", sa.Text),
-        sa.column("enabled", sa.Boolean),
-        sa.column("rollout_percentage", sa.Float),
-        sa.column("environment", sa.String),
-        sa.column("payload_json", postgresql.JSONB),
-    )
-    op.bulk_insert(
-        flags_table,
-        [
-            {
-                "id": uuid.uuid4(),
-                "key": key,
-                "description": "Seeded analytics platform flag",
-                "enabled": key == "analytics_collection_enabled",
-                "rollout_percentage": 100.0 if key == "analytics_collection_enabled" else 0.0,
-                "environment": "all",
-                "payload_json": {},
-            }
-            for key in SUGGESTED_FLAGS
-        ],
-    )
 
 
 def downgrade() -> None:
