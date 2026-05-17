@@ -41,6 +41,7 @@ import { CSS } from '@dnd-kit/utilities';
 import cn from 'classnames';
 import {
   Check,
+  AlertTriangle,
   Eye,
   GripVertical,
   Info,
@@ -60,6 +61,7 @@ import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { TripDetailOutletContext } from './TripDetailPage';
+import type { LLMQualityReview } from '@/shared/model';
 
 const formatDays = (count: number): string => {
   const lastDigit = Math.abs(count) % 10;
@@ -238,6 +240,56 @@ const scoreNumber = (summary: Record<string, unknown> | null, key: string) => {
   return typeof value === 'number' ? value : 0;
 };
 
+const scoreMaybeNumber = (summary: Record<string, unknown> | null, key: string) => {
+  const value = summary?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+const scoreBoolean = (summary: Record<string, unknown> | null, key: string) => summary?.[key] === true;
+
+const formatUsd = (amount: number) =>
+  new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+const qualityMeta = (review?: LLMQualityReview | null) => {
+  if (!review) return null;
+  if (review.status === 'ok') {
+    return {
+      label: 'Проверено',
+      className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    };
+  }
+  if (review.status === 'caution') {
+    return {
+      label: 'Есть нюансы',
+      className: 'border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+    };
+  }
+  if (review.status === 'reject' || review.status === 'failed') {
+    return {
+      label: 'Лучше перепроверить',
+      className: 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300',
+    };
+  }
+  return {
+    label: 'Базовая проверка',
+    className: 'border-stone-300 bg-stone-100 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300',
+  };
+};
+
+const warningIssues = (review?: LLMQualityReview | null) =>
+  review?.issues.filter((issue) => issue.severity !== 'info').slice(0, 3) ?? [];
+
+const routeNeedsRegeneration = (review?: LLMQualityReview | null) =>
+  review?.status === 'reject' &&
+  review.suggested_adjustments.some(
+    (adjustment) =>
+      adjustment.action === 'regenerate' || adjustment.action === 'generate_external_route'
+  );
+
 const itineraryErrorMessage = (error: unknown) => {
   const maybeAxios = error as { response?: { data?: { error?: string; message?: string } } };
   if (maybeAxios.response?.data?.error === 'ITINERARY_NO_FEASIBLE_ROUTE') {
@@ -290,6 +342,11 @@ const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
           {openingLabel(item.opening_status)}
         </span>
+        {(item.source === 'external_candidate' || item.external_candidate_source) && (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            Предложено ИИ
+          </span>
+        )}
       </div>
     </div>
   </div>
@@ -301,6 +358,7 @@ const DraftDayPreview = ({ day, isExpanded }: { day: ItineraryDay; isExpanded: b
   const timeRange = getDayTimeRange(day);
   const visibleItems = isExpanded ? items : items.slice(0, 3);
   const hiddenCount = items.length - visibleItems.length;
+  const dayIssues = warningIssues(day.quality_review);
 
   return (
     <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 py-3">
@@ -325,6 +383,11 @@ const DraftDayPreview = ({ day, isExpanded }: { day: ItineraryDay; isExpanded: b
             Для свободного планирования
           </p>
         )}
+        {dayIssues.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            {dayIssues[0].message}
+          </div>
+        )}
         {visibleItems.map((item) => (
           <DraftPreviewItem key={item.id} item={item} />
         ))}
@@ -348,6 +411,8 @@ const VariantCard = ({
   isLoading: boolean;
 }) => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const meta = qualityMeta(itinerary.quality_review);
+  const needsRegeneration = routeNeedsRegeneration(itinerary.quality_review);
   const approveAndClose = () => {
     onApprove(itinerary.id);
     setIsPreviewOpen(false);
@@ -356,14 +421,31 @@ const VariantCard = ({
   return (
     <div className="trip-info-card flex flex-col gap-3">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-          Вариант {itinerary.variant_index + 1}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            Вариант {itinerary.variant_index + 1}
+          </p>
+          {meta && (
+            <span
+              className={cn(
+                'rounded-full border px-2 py-0.5 text-[10px] font-extrabold',
+                meta.className
+              )}
+            >
+              {meta.label}
+            </span>
+          )}
+        </div>
         <h2 className="mt-1 text-[18px] font-extrabold text-stone-900 dark:text-white">
           {getPlacesCount(itinerary)} {formatPlaces(getPlacesCount(itinerary))},{' '}
           {itinerary.days.length} {formatDays(itinerary.days.length)}
         </h2>
       </div>
+      {needsRegeneration && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+          Этот вариант лучше пересобрать: проверка нашла критичные проблемы.
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {itinerary.days.map((day) => (
           <span
@@ -947,6 +1029,9 @@ const ItemRow = ({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const isExternalCandidate = item.source === 'external_candidate' || Boolean(item.external_candidate_source);
+  const sourceUrl =
+    item.external_candidate_source?.startsWith('http') ? item.external_candidate_source : null;
 
   return (
     <div
@@ -990,6 +1075,16 @@ const ItemRow = ({
                   Посещено
                 </span>
               )}
+              {isExternalCandidate && (
+                <>
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    Предложено ИИ
+                  </span>
+                  <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-200">
+                    Требует проверки
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
@@ -1016,6 +1111,28 @@ const ItemRow = ({
             </Button>
           </div>
         </div>
+
+        {isExternalCandidate && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            <div>Не добавлено в каталог. Проверьте место перед посещением.</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {item.entrance_fee_usd !== null && (
+                <span>Оценка входа: {formatUsd(item.entrance_fee_usd)}</span>
+              )}
+              {sourceUrl && (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  Источник
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-[1fr_30px_1fr] items-center">
           <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-stone-200 bg-stone-50 px-2 shadow-inner dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))]/70">
@@ -1046,7 +1163,7 @@ const ItemRow = ({
           </div>
         </div>
 
-        {isActiveTrip && (
+        {isActiveTrip && !isExternalCandidate && (
           <Button
             className="mt-2 h-10 w-full rounded-xl text-[13px] font-bold disabled:opacity-100"
             variant={item.visited_place_id ? 'outline' : 'default'}
@@ -1129,8 +1246,34 @@ const ApprovedItinerary = ({
   isRegenerating: boolean;
   dropTargetDayId: string | null;
   children: (day: ItineraryDay) => React.ReactNode;
-}) => (
+}) => {
+  const estimatedPaidTotal = scoreMaybeNumber(itinerary.score_summary, 'estimated_paid_poi_total');
+  const evidenceBackedCount = scoreNumber(itinerary.score_summary, 'evidence_backed_paid_poi_count');
+  const candidatePriceCount = scoreNumber(itinerary.score_summary, 'candidate_poi_price_count');
+  const priceEstimationUsed = scoreBoolean(itinerary.score_summary, 'price_estimation_used');
+  const meta = qualityMeta(itinerary.quality_review);
+  const needsRegeneration = routeNeedsRegeneration(itinerary.quality_review);
+
+  return (
   <div className="flex flex-col gap-3">
+    {meta && (
+      <div
+        className={cn(
+          'trip-info-card flex items-start gap-3 border px-3.5 py-3',
+          meta.className
+        )}
+      >
+        <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+        <div className="min-w-0">
+          <p className="text-[13px] font-extrabold">{meta.label}</p>
+          {itinerary.quality_review?.user_summary_ru && (
+            <p className="mt-1 text-[12px] font-semibold leading-snug">
+              {itinerary.quality_review.user_summary_ru}
+            </p>
+          )}
+        </div>
+      </div>
+    )}
     <div className="grid grid-cols-3 gap-2.5">
       <div className="trip-info-card px-3 py-3">
         <Map className="mb-2 h-4 w-4 text-[#2563EB]" />
@@ -1160,9 +1303,28 @@ const ApprovedItinerary = ({
         </p>
       </div>
     </div>
+    {priceEstimationUsed && estimatedPaidTotal !== null && estimatedPaidTotal > 0 && (
+      <div className="trip-info-card flex items-start gap-3 px-3.5 py-3">
+        <Info className="mt-0.5 h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
+        <div className="min-w-0">
+          <p className="text-[13px] font-extrabold text-stone-900 dark:text-white">
+            Платные входы примерно {formatUsd(estimatedPaidTotal)}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold leading-snug text-stone-500 dark:text-stone-400">
+            {evidenceBackedCount > 0
+              ? `Есть подтверждение источниками: ${evidenceBackedCount}`
+              : 'Использованы цены из каталога'}
+            {candidatePriceCount > 0 ? `, включая кандидатов ИИ: ${candidatePriceCount}` : ''}
+          </p>
+        </div>
+      </div>
+    )}
     <Button
       variant="outline"
-      className="h-[48px] rounded-2xl border-stone-200 bg-stone-100 text-[14px] font-bold text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200"
+      className={cn(
+        'h-[48px] rounded-2xl border-stone-200 bg-stone-100 text-[14px] font-bold text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200',
+        needsRegeneration && 'border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
+      )}
       onClick={onRegenerate}
       disabled={isRegenerating}
     >
@@ -1171,7 +1333,7 @@ const ApprovedItinerary = ({
       ) : (
         <RefreshCw className="h-4 w-4" />
       )}
-      Собрать другой вариант
+      {needsRegeneration ? 'Пересобрать маршрут' : 'Собрать другой вариант'}
     </Button>
     {itinerary.days.map((day) => {
       const restDay = isRestDay(day);
@@ -1202,12 +1364,18 @@ const ApprovedItinerary = ({
               {restDay ? 'Без активностей' : `${placesCount} ${formatPlaces(placesCount)}`}
             </span>
           </div>
+          {warningIssues(day.quality_review).length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              {warningIssues(day.quality_review)[0].message}
+            </div>
+          )}
           {children(day)}
         </section>
       );
     })}
   </div>
-);
+  );
+};
 
 export const TripItineraryTab = () => {
   const { trip } = useOutletContext<TripDetailOutletContext>();
@@ -1278,7 +1446,7 @@ export const TripItineraryTab = () => {
 
   const handleGenerate = () => {
     generateMutation.mutate(
-      { variant_count: 3, pace: 'standard' },
+      { variant_count: 3, pace: 'standard', allow_external_route: true },
       {
         onSuccess: (items) => {
           const first = items[0];
@@ -1309,7 +1477,12 @@ export const TripItineraryTab = () => {
 
   const handleRegenerate = () => {
     regenerateMutation.mutate(
-      { variant_count: 3, pace: 'standard', exclude_signature: current?.route_signature },
+      {
+        variant_count: 3,
+        pace: 'standard',
+        exclude_signature: current?.route_signature,
+        allow_external_route: true,
+      },
       {
         onSuccess: (items) => {
           const first = items[0];
@@ -1495,19 +1668,6 @@ export const TripItineraryTab = () => {
       }
     );
   };
-
-  if (!trip.destination_id) {
-    return (
-      <div className="flex-1 overflow-y-auto px-5 pb-24 pt-4">
-        <div className="trip-info-card-muted flex flex-col items-center px-5 py-8 text-center">
-          <Map className="h-8 w-8 text-stone-400 dark:text-stone-500" />
-          <p className="mt-3 text-[14px] font-medium leading-relaxed text-stone-400 dark:text-stone-500">
-            Маршрут доступен для поездок, созданных из направления в каталоге
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 overflow-y-auto px-5 pb-24 pt-4">

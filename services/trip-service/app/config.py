@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     FXR_API_KEY: str = ""
     ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
     ML_SERVICE_URL: str = "http://ml-service:8000"
+    ML_SERVICE_TIMEOUT_SECONDS: float = 35.0
 
     class Config:
         env_file = find_env_file()

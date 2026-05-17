@@ -165,12 +165,12 @@ def generate_itineraries(
     authorization: str | None,
 ) -> list[models.TripItinerary]:
     trip = _verify_trip_ownership(db, trip_id, user_id)
-    if not trip.destination_id:
-        raise AppException(status_code=400, code="DESTINATION_REQUIRED", message="Trip must have catalog destination")
 
     seed_base = random.randint(10_000, 9_999_999)
     payload = {
-        "destination_id": str(trip.destination_id),
+        "trip_id": str(trip.id),
+        "destination_id": str(trip.destination_id) if trip.destination_id else None,
+        "destination_text": trip.destination if not trip.destination_id else None,
         "duration_days": _duration_days(trip),
         "rest_days_count": _rest_days_count(trip, data.rest_days_count),
         "start_date": trip.start_date.isoformat(),
@@ -183,6 +183,9 @@ def generate_itineraries(
         "trip_budget": trip.budget,
         "currency": trip.currency,
         "people_count": trip.people_count,
+        "trip_notes": trip.notes,
+        "origin_city_name": trip.departure_city,
+        "allow_external_route": data.allow_external_route or not trip.destination_id,
     }
     if isinstance(data, schemas.ItineraryRegenerateRequest):
         payload["exclude_signature"] = data.exclude_signature
@@ -190,9 +193,21 @@ def generate_itineraries(
     headers = {"Authorization": authorization} if authorization else {}
     try:
         response = httpx.post(
-            f"{settings.ML_SERVICE_URL}/api/v1/itinerary", json=payload, headers=headers, timeout=12.0
+            f"{settings.ML_SERVICE_URL}/api/v1/itinerary",
+            json=payload,
+            headers=headers,
+            timeout=settings.ML_SERVICE_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        try:
+            error_payload = exc.response.json()
+        except ValueError:
+            error_payload = {}
+        code = str(error_payload.get("error") or "ITINERARY_UNAVAILABLE")
+        message = str(error_payload.get("message") or "Itinerary generation failed")
+        raise AppException(status_code=status_code, code=code, message=message) from exc
     except httpx.HTTPError as exc:
         raise AppException(
             status_code=503, code="ITINERARY_UNAVAILABLE", message="Itinerary generation failed"
@@ -282,12 +297,15 @@ def _persist_variant(
         db.flush()
         items = day_payload.get("items", day_payload.get("places", []))
         for order, item_payload in enumerate(items):
+            is_external_candidate = bool(item_payload.get("external_candidate_source"))
             db.add(
                 models.TripItineraryItem(
                     day_id=day.id,
                     user_id=user_id,
                     trip_id=trip.id,
-                    poi_id=UUID(str(item_payload.get("poi_id") or item_payload.get("id"))),
+                    poi_id=None
+                    if is_external_candidate
+                    else UUID(str(item_payload.get("poi_id") or item_payload.get("id"))),
                     name=str(item_payload.get("name") or item_payload.get("display_name") or "Place"),
                     category=item_payload.get("category"),
                     latitude=_decimal(item_payload.get("lat")),
@@ -296,7 +314,7 @@ def _persist_variant(
                     departure_time=_time_from_iso(item_payload.get("departure_time")),
                     duration_minutes=item_payload.get("visit_duration_minutes") or item_payload.get("duration_minutes"),
                     travel_from_previous_minutes=int(item_payload.get("travel_from_previous_minutes") or 0),
-                    source="generated",
+                    source="external_candidate" if is_external_candidate else "generated",
                     opening_status=item_payload.get("opening_status"),
                     price_tier=item_payload.get("price_tier"),
                     entrance_fee_usd=item_payload.get("entrance_fee_usd"),
@@ -652,6 +670,12 @@ def mark_item_visited(db: Session, user_id: UUID, trip_id: UUID, item_id: UUID) 
     item = _verify_item_ownership(db, item_id, user_id)
     if item.trip_id != trip_id:
         raise AppException(status_code=404, code="NOT_FOUND", message="Itinerary item not found")
+    if item.source == "external_candidate":
+        raise AppException(
+            status_code=400,
+            code="CANDIDATE_POI_NOT_APPROVED",
+            message="Candidate POI must be approved before marking it visited",
+        )
     if item.visited_place_id:
         return item
     if item.latitude is None or item.longitude is None:
@@ -716,6 +740,9 @@ def to_response(db: Session, itinerary: models.TripItinerary) -> schemas.Itinera
     items_by_day: dict[UUID, list[models.TripItineraryItem]] = {}
     for item in item_rows:
         items_by_day.setdefault(item.day_id, []).append(item)
+    score_summary = itinerary.score_summary or {}
+    day_reviews = score_summary.get("llm_quality_day_reviews") or {}
+    item_reviews = score_summary.get("llm_quality_item_reviews") or {}
     return schemas.ItineraryResponse(
         id=itinerary.id,
         trip_id=itinerary.trip_id,
@@ -727,13 +754,21 @@ def to_response(db: Session, itinerary: models.TripItinerary) -> schemas.Itinera
         route_signature=itinerary.route_signature,
         constraints=itinerary.constraints,
         score_summary=itinerary.score_summary,
-        days=[_day_response(day, items_by_day.get(day.id, [])) for day in days],
+        quality_model_version=score_summary.get("llm_quality_model_version"),
+        quality_review=score_summary.get("llm_quality_review"),
+        candidate_poi=score_summary.get("llm_candidate_poi") or [],
+        days=[_day_response(day, items_by_day.get(day.id, []), day_reviews, item_reviews) for day in days],
         created_at=itinerary.created_at.isoformat() if itinerary.created_at else "",
         updated_at=itinerary.updated_at.isoformat() if itinerary.updated_at else None,
     )
 
 
-def _day_response(day: models.TripItineraryDay, items: list[models.TripItineraryItem]) -> schemas.ItineraryDayResponse:
+def _day_response(
+    day: models.TripItineraryDay,
+    items: list[models.TripItineraryItem],
+    day_reviews: dict,
+    item_reviews: dict,
+) -> schemas.ItineraryDayResponse:
     return schemas.ItineraryDayResponse(
         id=day.id,
         date=day.date,
@@ -741,11 +776,12 @@ def _day_response(day: models.TripItineraryDay, items: list[models.TripItinerary
         theme=day.theme,
         start_time=day.start_time,
         end_time=day.end_time,
-        items=[_item_response(item) for item in items],
+        quality_review=day_reviews.get(str(day.day_number)),
+        items=[_item_response(item, item_reviews) for item in items],
     )
 
 
-def _item_response(item: models.TripItineraryItem) -> schemas.ItineraryItemResponse:
+def _item_response(item: models.TripItineraryItem, item_reviews: dict | None = None) -> schemas.ItineraryItemResponse:
     return schemas.ItineraryItemResponse(
         id=item.id,
         day_id=item.day_id,
@@ -767,6 +803,8 @@ def _item_response(item: models.TripItineraryItem) -> schemas.ItineraryItemRespo
         is_pinned=item.is_pinned,
         is_removed=item.is_removed,
         visited_place_id=item.visited_place_id,
+        quality_review=(item_reviews or {}).get(str(item.poi_id)) if item.poi_id else None,
+        external_candidate_source="llm_candidate_poi" if item.source == "external_candidate" else None,
         created_at=item.created_at.isoformat() if item.created_at else "",
         updated_at=item.updated_at.isoformat() if item.updated_at else None,
     )

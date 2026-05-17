@@ -4,22 +4,28 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.lib.russian_names import translate_destination_name
 from app.models.recommendation_log import RecommendationLog
+from app.schemas.llm_quality import LLMReviewIssue, LLMReviewSeverity, LLMReviewStatus
 from app.schemas.recommendation import (
     RecommendDestinationRequest,
     RecommendRequest,
     RecommendResponse,
     ScoredDestination,
 )
+from app.services.analytics_events import emit_ml_quality_event
 from app.services.content_scorer import BaseScorer, ContentScorer
 from app.services.currency import convert_usd, normalize_currency
 from app.services.data_loader import get_all_destinations, get_destination_features
-from app.services.experiment import get_variant
+from app.services.llm.quality_gate import LLMQualityGate
+from app.services.llm.recommendation_adjustment_policy import apply_recommendation_quality_review
+from app.services.llm.recommendation_context import build_recommendation_context
 from app.services.profile_client import _get_profile_sync
 from app.services.ranker_scorer import LTRScorer, get_active_scorer, get_scorer_by_version
+from app.services.travel_advisory import filter_destinations_by_travel_advisory
 
 router = APIRouter()
 
@@ -37,32 +43,23 @@ CONTENT_SCORER_WEIGHTS = {
 _content_scorer = ContentScorer()
 
 
-def _select_scorer(request: RecommendRequest, db: Session, user_id: uuid.UUID) -> tuple[BaseScorer, str, str | None]:
+def _select_scorer(request: RecommendRequest, db: Session) -> tuple[BaseScorer, str]:
     """Return (scorer, model_version_str).
 
     Priority:
     1. Explicit model_version in request body (for manual testing).
-    2. A/B experiment assignment (scorer_ab).
-    3. Active LTR model from registry, fallback to content.
+    2. Active LTR model from registry, fallback to content.
     """
     if request.model_version == "content-v1":
-        return _content_scorer, "content-v1", None
+        return _content_scorer, "content-v1"
     if request.model_version:
         scorer = get_scorer_by_version(db, request.model_version)
         if scorer is not None:
-            return scorer, scorer.version, None
-
-    if request.model_version is None:
-        try:
-            variant = get_variant(db, user_id, "scorer_ab")
-            if variant == "content-v1":
-                return _content_scorer, "content-v1", variant
-        except Exception:
-            pass
+            return scorer, scorer.version
 
     scorer = get_active_scorer(db)
     version = scorer.version if isinstance(scorer, LTRScorer) else "content-v1"
-    return scorer, version, None
+    return scorer, version
 
 
 def _with_display_currency(item: ScoredDestination, display_currency: str) -> ScoredDestination:
@@ -93,8 +90,12 @@ def get_recommendations(
     display_currency = normalize_currency(profile.get("preferred_currency"))
 
     destinations = get_all_destinations(db)
-    dest_ids = [uuid.UUID(str(d["id"])) for d in destinations]
     citizenship = request.citizenship_code.upper()
+    destinations, advisory_blocked = filter_destinations_by_travel_advisory(
+        destinations=destinations,
+        citizenship_code=citizenship,
+    )
+    dest_ids = [uuid.UUID(str(d["id"])) for d in destinations]
     dest_features = get_destination_features(db, dest_ids, citizenship_code=citizenship)
 
     filters = {
@@ -103,7 +104,7 @@ def get_recommendations(
         "region": request.region,
     }
 
-    scorer, model_version, variant = _select_scorer(request, db, user_id)
+    scorer, model_version = _select_scorer(request, db)
     scored = scorer.score(
         user_profile=profile,
         destinations=destinations,
@@ -112,10 +113,53 @@ def get_recommendations(
         filters=filters,
     )
 
-    top_results = scored[: request.limit]
-    top_results = [_with_display_currency(item, display_currency) for item in top_results]
-    latency_ms = int((time.monotonic() - t_start) * 1000)
+    candidate_pool_size = min(len(scored), max(request.limit * 3, request.limit + 10))
+    candidate_pool = [_with_display_currency(item, display_currency) for item in scored[:candidate_pool_size]]
+    top_results = candidate_pool[: request.limit]
     recommendation_id = uuid.uuid4()
+    quality_review = None
+    applied_adjustments: list[dict] = []
+    ignored_adjustments: list[dict] = []
+
+    if settings.LLM_QUALITY_ENABLED:
+        context = build_recommendation_context(
+            profile=profile,
+            request=request,
+            citizenship_code=citizenship,
+            results=candidate_pool[
+                : min(len(candidate_pool), max(request.limit, settings.LLM_RECOMMENDATION_REVIEW_LIMIT))
+            ],
+        )
+        quality_review = LLMQualityGate().review_recommendations(
+            db=db,
+            user_id=user_id,
+            recommendation_id=recommendation_id,
+            context=context,
+        )
+        quality_review = _enforce_recommendation_review_sanity(quality_review, request, profile, top_results)
+        adjustment_result = apply_recommendation_quality_review(
+            top_results,
+            quality_review,
+            replacement_pool=candidate_pool[request.limit :],
+        )
+        top_results = adjustment_result.results
+        applied_adjustments = adjustment_result.applied_adjustments
+        ignored_adjustments = adjustment_result.ignored_adjustments
+        final_quality_review = _review_after_adjustments(
+            quality_review,
+            applied_adjustments,
+            ignored_adjustments,
+        )
+        quality_review = final_quality_review
+        _emit_llm_review_events(
+            quality_review=quality_review,
+            recommendation_id=recommendation_id,
+            applied_adjustments=applied_adjustments,
+            ignored_adjustments=ignored_adjustments,
+            authorization=authorization,
+        )
+
+    latency_ms = int((time.monotonic() - t_start) * 1000)
 
     _log_recommendation(
         db=db,
@@ -123,16 +167,22 @@ def get_recommendations(
         user_id=user_id,
         request=request,
         model_version=model_version,
-        experiment_id="scorer_ab" if variant else None,
-        variant=variant,
         results=top_results,
         latency_ms=latency_ms,
+        quality_review=quality_review,
+        applied_adjustments=applied_adjustments,
+        ignored_adjustments=ignored_adjustments,
+        advisory_blocked=advisory_blocked,
     )
+
+    public_results = [item.model_copy(update={"quality_review": None}) for item in top_results]
 
     return RecommendResponse(
         recommendation_id=recommendation_id,
         model_version=model_version,
-        results=top_results,
+        quality_model_version=_public_quality_model_version(quality_review),
+        quality_review=None,
+        results=public_results,
     )
 
 
@@ -167,7 +217,7 @@ def get_destination_recommendation_score(
         citizenship_code=citizenship,
         model_version=request.model_version,
     )
-    scorer, _model_version, _variant = _select_scorer(scorer_request, db, user_id)
+    scorer, _model_version = _select_scorer(scorer_request, db)
     scored = scorer.score(
         user_profile=profile,
         destinations=destinations,
@@ -200,10 +250,12 @@ def _log_recommendation(
     user_id: uuid.UUID,
     request: RecommendRequest,
     model_version: str,
-    experiment_id: str | None,
-    variant: str | None,
     results: list,
     latency_ms: int,
+    quality_review,
+    applied_adjustments: list[dict],
+    ignored_adjustments: list[dict],
+    advisory_blocked: list[dict] | None = None,
 ) -> None:
     try:
         scorer_weights = (
@@ -215,8 +267,6 @@ def _log_recommendation(
                 "metric": "ndcg",
                 "candidate_generator": "content-scorer",
                 "candidate_top_n": 200,
-                "experiment_id": experiment_id,
-                "variant": variant,
             }
         )
         log = RecommendationLog(
@@ -228,6 +278,10 @@ def _log_recommendation(
                 "region": request.region,
                 "citizenship_code": request.citizenship_code,
                 "exclude_destination_ids": [str(x) for x in request.exclude_destination_ids],
+                "travel_advisory": {
+                    "blocked_count": len(advisory_blocked or []),
+                    "blocked_sample": (advisory_blocked or [])[:20],
+                },
             },
             model_version=model_version,
             scorer_weights=scorer_weights,
@@ -240,6 +294,20 @@ def _log_recommendation(
                     "reason_tags": r.explanation_tags,
                     "factor_breakdown": r.score_breakdown,
                     "route_cost_source": r.route_cost_source,
+                    "llm_status": (r.quality_review or quality_review).status.value
+                    if (r.quality_review or quality_review)
+                    else None,
+                    "llm_issue_codes": [issue.code for issue in (r.quality_review or quality_review).issues]
+                    if (r.quality_review or quality_review)
+                    else [],
+                    "llm_adjustment": [
+                        adjustment.model_dump(mode="json") for adjustment in r.quality_review.suggested_adjustments
+                    ]
+                    if r.quality_review
+                    else [],
+                    "llm_review_id": str((r.quality_review or quality_review).review_id)
+                    if (r.quality_review or quality_review) and (r.quality_review or quality_review).review_id
+                    else None,
                 }
                 for index, r in enumerate(results, start=1)
             ],
@@ -249,3 +317,119 @@ def _log_recommendation(
         db.commit()
     except Exception:
         db.rollback()
+
+
+def _emit_llm_review_events(
+    *,
+    quality_review,
+    recommendation_id: uuid.UUID,
+    applied_adjustments: list[dict],
+    ignored_adjustments: list[dict],
+    authorization: str | None,
+) -> None:
+    issue_codes = [issue.code for issue in quality_review.issues] if quality_review else []
+    context = {
+        "provider": quality_review.provider,
+        "model": quality_review.model,
+        "prompt_version": quality_review.prompt_version,
+        "status": quality_review.status.value,
+        "issue_codes": issue_codes,
+        "critical_count": sum(1 for issue in quality_review.issues if issue.severity.value == "critical"),
+        "warning_count": sum(1 for issue in quality_review.issues if issue.severity.value == "warning"),
+        "review_id": str(quality_review.review_id) if quality_review.review_id else None,
+        "applied_adjustments": applied_adjustments,
+        "ignored_adjustments": ignored_adjustments,
+    }
+    event_type = "llm_quality_skipped" if quality_review.status.value == "skipped" else "llm_quality_review_completed"
+    emit_ml_quality_event(
+        event_type,
+        context,
+        entity_type="recommendation_set",
+        entity_id=recommendation_id,
+        authorization=authorization,
+    )
+    if applied_adjustments:
+        emit_ml_quality_event(
+            "llm_quality_adjustment_applied",
+            context,
+            entity_type="recommendation_set",
+            entity_id=recommendation_id,
+            authorization=authorization,
+        )
+
+
+def _review_after_adjustments(quality_review, applied: list[dict], ignored: list[dict]):
+    if quality_review is None:
+        return None
+    if quality_review.status.value in {"caution", "reject"} and applied and not ignored:
+        return quality_review.model_copy(
+            update={
+                "status": LLMReviewStatus.ok,
+                "issues": [],
+                "suggested_adjustments": [],
+                "user_summary_ru": "Рекомендации скорректированы по результатам проверки.",
+                "defense_trace": f"{quality_review.defense_trace or ''} Applied all LLM recommendation adjustments.".strip(),
+            }
+        )
+    return quality_review
+
+
+def _public_quality_model_version(quality_review) -> str | None:
+    if quality_review is None or quality_review.status == LLMReviewStatus.skipped:
+        return None
+    return quality_review.model or settings.LLM_MODEL
+
+
+def _enforce_recommendation_review_sanity(
+    quality_review,
+    request: RecommendRequest,
+    profile: dict,
+    top_results: list[ScoredDestination],
+):
+    if quality_review is None or quality_review.status in {LLMReviewStatus.skipped, LLMReviewStatus.failed}:
+        return quality_review
+    if quality_review.issues:
+        return quality_review
+    if not _is_beach_sensitive_request(request, profile):
+        return quality_review
+
+    issues = []
+    for item in top_results[:5]:
+        if "beach" in item.explanation_tags:
+            continue
+        if item.region not in {"Europe", "Americas", "Oceania"} and item.country_code not in {
+            "RU",
+            "SE",
+            "FI",
+            "NO",
+            "US",
+            "CA",
+        }:
+            continue
+        issues.append(
+            LLMReviewIssue(
+                code="beach_fit_guardrail",
+                severity=LLMReviewSeverity.warning,
+                message="Top destination lacks a current-season beach scenario for a beach-focused request.",
+                destination_id=item.destination_id,
+            )
+        )
+    if not issues:
+        return quality_review
+    return quality_review.model_copy(
+        update={
+            "status": LLMReviewStatus.caution,
+            "issues": issues,
+            "defense_trace": f"{quality_review.defense_trace or ''} Backend contract guardrail added beach-fit issues.".strip(),
+        }
+    )
+
+
+def _is_beach_sensitive_request(request: RecommendRequest, profile: dict) -> bool:
+    preferences = [
+        str(item.get("value") if isinstance(item, dict) else item).lower()
+        for item in (profile.get("vacation_preferences_ranked") or [])
+    ]
+    climate = [str(item).lower() for item in (profile.get("climate_preferences") or [])]
+    wants_warm = not climate or any(item in {"mediterranean", "tropical_warm", "any"} for item in climate)
+    return "beach" in preferences[:3] and wants_warm and request.travel_month in {4, 5, 6, 7, 8, 9}

@@ -36,6 +36,19 @@ class ObservabilityStore:
         self._external: dict[str, dict[str, Any]] = defaultdict(
             lambda: {"calls": 0, "errors": 0, "no_coverage": 0, "latencies_ms": deque(maxlen=500)}
         )
+        self._llm_quality: dict[str, Any] = {
+            "requests": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "latencies_ms": deque(maxlen=500),
+            "statuses": defaultdict(int),
+            "issue_codes": defaultdict(int),
+            "candidate_poi": defaultdict(int),
+            "price_evidence_found": 0,
+            "external_routes_generated": 0,
+        }
 
     def record_request(self, route: str, status_code: int, duration_ms: float, exception: bool = False) -> None:
         with self._lock:
@@ -75,6 +88,43 @@ class ObservabilityStore:
             if no_coverage:
                 metrics["no_coverage"] += 1
 
+    def record_llm_review(
+        self,
+        *,
+        status: str,
+        latency_ms: int | None,
+        cache_hit: bool,
+        error_code: str | None,
+        issue_codes: list[str] | None = None,
+    ) -> None:
+        with self._lock:
+            self._llm_quality["requests"] += 1
+            self._llm_quality["statuses"][status] += 1
+            if latency_ms is not None:
+                self._llm_quality["latencies_ms"].append(latency_ms)
+            if cache_hit:
+                self._llm_quality["cache_hits"] += 1
+            else:
+                self._llm_quality["cache_misses"] += 1
+            if error_code:
+                self._llm_quality["errors"] += 1
+                if error_code == "provider_timeout":
+                    self._llm_quality["timeouts"] += 1
+            for code in issue_codes or []:
+                self._llm_quality["issue_codes"][code] += 1
+
+    def record_llm_candidate_poi(self, status: str) -> None:
+        with self._lock:
+            self._llm_quality["candidate_poi"][status] += 1
+
+    def record_llm_price_evidence(self) -> None:
+        with self._lock:
+            self._llm_quality["price_evidence_found"] += 1
+
+    def record_llm_external_route(self) -> None:
+        with self._lock:
+            self._llm_quality["external_routes_generated"] += 1
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             routes = {}
@@ -91,6 +141,9 @@ class ObservabilityStore:
                         "p99": _percentile(latencies, 99),
                     },
                 }
+            llm_latencies = list(self._llm_quality["latencies_ms"])
+            llm_requests = int(self._llm_quality["requests"])
+            llm_cache_hits = int(self._llm_quality["cache_hits"])
             return {
                 "service": self.service_name,
                 "started_at": self.started_at,
@@ -111,6 +164,24 @@ class ObservabilityStore:
                     }
                     for name, values in self._external.items()
                 },
+                "llm_quality": {
+                    "requests": llm_requests,
+                    "errors": self._llm_quality["errors"],
+                    "timeouts": self._llm_quality["timeouts"],
+                    "cache_hits": llm_cache_hits,
+                    "cache_misses": self._llm_quality["cache_misses"],
+                    "cache_hit_rate": round(llm_cache_hits / llm_requests, 4) if llm_requests else 0,
+                    "latency_ms": {
+                        "p50": _percentile(llm_latencies, 50),
+                        "p95": _percentile(llm_latencies, 95),
+                        "p99": _percentile(llm_latencies, 99),
+                    },
+                    "statuses": dict(self._llm_quality["statuses"]),
+                    "issue_codes": dict(self._llm_quality["issue_codes"]),
+                    "candidate_poi": dict(self._llm_quality["candidate_poi"]),
+                    "price_evidence_found": self._llm_quality["price_evidence_found"],
+                    "external_routes_generated": self._llm_quality["external_routes_generated"],
+                },
             }
 
 
@@ -120,6 +191,35 @@ def record_cache(cache_name: str, result: str) -> None:
 
 def record_external_api(provider: str, duration_ms: float, *, ok: bool, no_coverage: bool = False) -> None:
     store.record_external_api(provider, duration_ms, ok=ok, no_coverage=no_coverage)
+
+
+def record_llm_review(
+    *,
+    status: str,
+    latency_ms: int | None,
+    cache_hit: bool,
+    error_code: str | None,
+    issue_codes: list[str] | None = None,
+) -> None:
+    store.record_llm_review(
+        status=status,
+        latency_ms=latency_ms,
+        cache_hit=cache_hit,
+        error_code=error_code,
+        issue_codes=issue_codes,
+    )
+
+
+def record_llm_candidate_poi(status: str) -> None:
+    store.record_llm_candidate_poi(status)
+
+
+def record_llm_price_evidence() -> None:
+    store.record_llm_price_evidence()
+
+
+def record_llm_external_route() -> None:
+    store.record_llm_external_route()
 
 
 def _percentile(values: list[float], percentile: int) -> float | None:

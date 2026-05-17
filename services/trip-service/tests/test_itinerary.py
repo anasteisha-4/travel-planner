@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 
+import httpx
+
 DEST_ID = "11111111-1111-1111-1111-111111111111"
 POI_ID = "22222222-2222-2222-2222-222222222222"
 
@@ -46,7 +48,56 @@ def _ml_response():
                 "variant_seed": 101,
                 "route_signature": "sig-a",
                 "model_version": "itinerary-poi-ranker-v1",
-                "score_summary": {"total_pois": 1, "travel_overhead_minutes": 0, "avg_relevance": 1.4},
+                "score_summary": {
+                    "total_pois": 1,
+                    "travel_overhead_minutes": 0,
+                    "avg_relevance": 1.4,
+                    "llm_quality_model_version": "qwen3.6-35b-a3b/latest",
+                    "llm_quality_review": {
+                        "status": "caution",
+                        "confidence": 0.8,
+                        "provider": "yandex",
+                        "model": "qwen3.6-35b-a3b/latest",
+                        "prompt_version": "itinerary_quality_v1",
+                        "issues": [
+                            {
+                                "code": "overloaded_day",
+                                "severity": "warning",
+                                "message": "Day is dense.",
+                                "evidence": [],
+                            }
+                        ],
+                        "suggested_adjustments": [],
+                        "user_summary_ru": "Маршрут плотный.",
+                        "defense_trace": None,
+                    },
+                    "llm_quality_day_reviews": {
+                        "1": {
+                            "status": "caution",
+                            "confidence": 0.8,
+                            "provider": "yandex",
+                            "model": "qwen3.6-35b-a3b/latest",
+                            "prompt_version": "itinerary_quality_v1",
+                            "issues": [],
+                            "suggested_adjustments": [],
+                            "user_summary_ru": None,
+                            "defense_trace": None,
+                        }
+                    },
+                    "llm_quality_item_reviews": {
+                        POI_ID: {
+                            "status": "caution",
+                            "confidence": 0.8,
+                            "provider": "yandex",
+                            "model": "qwen3.6-35b-a3b/latest",
+                            "prompt_version": "itinerary_quality_v1",
+                            "issues": [],
+                            "suggested_adjustments": [],
+                            "user_summary_ru": None,
+                            "defense_trace": None,
+                        }
+                    },
+                },
                 "days": days,
             }
         ]
@@ -103,6 +154,46 @@ def _ml_response_with_day_timeline():
     return body
 
 
+def _ml_response_with_external_candidate():
+    body = _ml_response()
+    body["variants"][0]["days"][0]["items"].append(
+        {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "name": "Quiet tea house",
+            "category": "food",
+            "lat": 55.751,
+            "lng": 37.621,
+            "arrival_time": "12:00",
+            "departure_time": "13:00",
+            "visit_duration_minutes": 60,
+            "travel_from_previous_minutes": 20,
+            "opening_status": "unknown",
+            "score": 0.82,
+            "external_candidate_source": "llm_candidate_poi",
+        }
+    )
+    body["variants"][0]["score_summary"]["llm_candidate_poi"] = [
+        {
+            "candidate_id": "33333333-3333-3333-3333-333333333333",
+            "name": "Quiet tea house",
+            "category": "food",
+            "lat": 55.751,
+            "lng": 37.621,
+            "source_url": "https://example.com/tea-house",
+            "confidence": 0.82,
+            "requires_admin_review": True,
+            "missing_fields": [],
+            "reason": "User asked for quiet food places.",
+            "status": "external_candidate",
+        }
+    ]
+    return body
+
+
+def _ml_itinerary_call(post_mock):
+    return next(call for call in post_mock.call_args_list if "/api/v1/itinerary" in call.args[0])
+
+
 def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeypatch):
     trip_id = _create_trip(client, auth_headers, trip_data)
     response = Mock()
@@ -119,9 +210,14 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     assert generated.status_code == 201
     itinerary = generated.json()[0]
     assert itinerary["status"] == "draft"
-    assert post_mock.call_args.kwargs["json"]["duration_days"] == 14
+    assert _ml_itinerary_call(post_mock).kwargs["json"]["duration_days"] == 14
+    assert _ml_itinerary_call(post_mock).kwargs["json"]["trip_notes"] == trip_data["notes"]
+    assert _ml_itinerary_call(post_mock).kwargs["timeout"] == 35.0
     assert len(itinerary["days"]) == 14
     assert itinerary["days"][0]["items"][0]["arrival_time"] == "09:30:00"
+    assert itinerary["quality_review"]["status"] == "caution"
+    assert itinerary["days"][0]["quality_review"]["status"] == "caution"
+    assert itinerary["days"][0]["items"][0]["quality_review"]["status"] == "caution"
 
     approved = client.post(f"/api/trips/{trip_id}/itinerary/{itinerary['id']}/approve", headers=auth_headers)
     assert approved.status_code == 200
@@ -147,6 +243,97 @@ def test_generate_rejects_variants_with_empty_active_days(client, auth_headers, 
         ]
     }
     response.raise_for_status.return_value = None
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 1},
+        headers=auth_headers,
+    )
+
+    assert generated.status_code == 422
+    assert generated.json()["error"] == "ITINERARY_NO_FEASIBLE_ROUTE"
+
+
+def test_generate_manual_destination_can_persist_external_route(client, auth_headers, trip_data, monkeypatch):
+    trip_payload = {**trip_data, "destination": "Manual Coast", "destination_id": None}
+    trip = client.post("/api/trips/", json=trip_payload, headers=auth_headers)
+    assert trip.status_code == 201
+    trip_id = trip.json()["id"]
+    external_item_id = "33333333-3333-3333-3333-333333333333"
+    response = Mock()
+    response.json.return_value = {
+        "destination_id": "44444444-4444-4444-4444-444444444444",
+        "duration_days": 14,
+        "variant_index": 0,
+        "variant_seed": 101,
+        "route_signature": "llm-external:manual",
+        "model_version": "llm-external-route:qwen3.6-35b-a3b/latest",
+        "source": "llm-external-draft",
+        "score_summary": {
+            "external_route_used": True,
+            "catalog_mutation_allowed": False,
+            "candidate_destination": {"name": "Manual Coast", "source_urls": ["https://example.com/manual"]},
+        },
+        "days": [
+            {
+                "day": day,
+                "day_number": day,
+                "theme": "culture",
+                "items": [
+                    {
+                        "id": external_item_id,
+                        "name": "External Museum",
+                        "category": "museum",
+                        "lat": 55.75,
+                        "lng": 37.62,
+                        "arrival_time": "10:00",
+                        "departure_time": "11:30",
+                        "visit_duration_minutes": 90,
+                        "travel_from_previous_minutes": 0,
+                        "external_candidate_source": "llm_external_route",
+                        "score": 0.8,
+                    }
+                ],
+            }
+            for day in range(1, 15)
+        ],
+    }
+    response.raise_for_status.return_value = None
+    post_mock = Mock(return_value=response)
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", post_mock)
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 1},
+        headers=auth_headers,
+    )
+
+    assert generated.status_code == 201
+    itinerary = generated.json()[0]
+    assert itinerary["score_summary"]["external_route_used"] is True
+    item = itinerary["days"][0]["items"][0]
+    assert item["poi_id"] is None
+    assert item["source"] == "external_candidate"
+    payload = _ml_itinerary_call(post_mock).kwargs["json"]
+    assert payload["destination_id"] is None
+    assert payload["destination_text"] == "Manual Coast"
+    assert payload["allow_external_route"] is True
+
+
+def test_generate_preserves_ml_no_feasible_error(client, auth_headers, trip_data, monkeypatch):
+    trip_id = _create_trip(client, auth_headers, trip_data)
+    response = Mock()
+    response.status_code = 422
+    response.json.return_value = {
+        "error": "ITINERARY_NO_FEASIBLE_ROUTE",
+        "message": "Could not build a route for the selected trip parameters.",
+    }
+    response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "unprocessable entity",
+        request=httpx.Request("POST", "http://ml-service/api/v1/itinerary"),
+        response=response,
+    )
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
 
     generated = client.post(
@@ -199,6 +386,34 @@ def test_itinerary_item_edit_remove_and_visit(client, auth_headers, trip_data, m
     assert places_after_unvisit.json() == []
 
     removed = client.delete(f"/api/trips/{trip_id}/itinerary/items/{item_id}", headers=auth_headers)
+    assert removed.status_code == 204
+
+
+def test_external_candidate_poi_is_persisted_but_cannot_be_visited(client, auth_headers, trip_data, monkeypatch):
+    trip_id = _create_trip(client, auth_headers, trip_data)
+    response = Mock()
+    response.json.return_value = _ml_response_with_external_candidate()
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 1},
+        headers=auth_headers,
+    )
+
+    assert generated.status_code == 201
+    items = generated.json()[0]["days"][0]["items"]
+    external = next(item for item in items if item["name"] == "Quiet tea house")
+    assert external["poi_id"] is None
+    assert external["source"] == "external_candidate"
+    assert external["external_candidate_source"] == "llm_candidate_poi"
+
+    visited = client.post(f"/api/trips/{trip_id}/itinerary/items/{external['id']}/visit", headers=auth_headers)
+    assert visited.status_code == 400
+    assert visited.json()["error"] == "CANDIDATE_POI_NOT_APPROVED"
+
+    removed = client.delete(f"/api/trips/{trip_id}/itinerary/items/{external['id']}", headers=auth_headers)
     assert removed.status_code == 204
 
 

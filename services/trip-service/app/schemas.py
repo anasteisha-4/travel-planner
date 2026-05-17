@@ -196,6 +196,7 @@ class ItineraryGenerateRequest(BaseModel):
     day_end_time: time = time(19, 0)
     preferred_activities: list[str] | None = None
     rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+    allow_external_route: bool = False
 
 
 class ItineraryRegenerateRequest(BaseModel):
@@ -206,6 +207,7 @@ class ItineraryRegenerateRequest(BaseModel):
     day_end_time: time = time(19, 0)
     preferred_activities: list[str] | None = None
     rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+    allow_external_route: bool = False
 
 
 class ItineraryItemUpdate(BaseModel):
@@ -260,6 +262,8 @@ class ItineraryItemResponse(BaseModel):
     is_pinned: bool
     is_removed: bool
     visited_place_id: UUID | None
+    quality_review: dict | None = None
+    external_candidate_source: str | None = None
     created_at: str
     updated_at: str | None
 
@@ -271,6 +275,7 @@ class ItineraryDayResponse(BaseModel):
     theme: str | None
     start_time: time | None
     end_time: time | None
+    quality_review: dict | None = None
     items: list[ItineraryItemResponse]
 
 
@@ -285,6 +290,9 @@ class ItineraryResponse(BaseModel):
     route_signature: str | None
     constraints: dict | None
     score_summary: dict | None
+    quality_model_version: str | None = None
+    quality_review: dict | None = None
+    candidate_poi: list[dict] = Field(default_factory=list)
     days: list[ItineraryDayResponse]
     created_at: str
     updated_at: str | None

@@ -1,3 +1,5 @@
+import type { LLMQualityReview } from '@/shared/model';
+
 export type ScoreBreakdown = {
   activity_match?: number;
   budget_fit?: number;
@@ -37,11 +39,14 @@ export type ScoredDestination = {
   route_cost_source?: string | null;
   season_score: number | null;
   safety_score: number | null;
+  quality_review?: LLMQualityReview | null;
 };
 
 export type RecommendationsResponse = {
   recommendation_id: string;
   model_version: string;
+  quality_model_version?: string | null;
+  quality_review?: LLMQualityReview | null;
   results: ScoredDestination[];
 };
 
@@ -126,6 +131,10 @@ export type BudgetMonitorItinerarySummary = {
   remaining_food_poi_count: number;
   remaining_paid_poi_count: number;
   remaining_estimated_entrance_fees: number;
+  remaining_evidence_backed_entrance_fees?: number;
+  evidence_backed_price_count?: number;
+  candidate_poi_price_count?: number;
+  price_estimation_used?: boolean;
   avg_visit_duration_minutes?: number | null;
 };
 

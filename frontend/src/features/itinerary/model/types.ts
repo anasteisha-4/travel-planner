@@ -1,3 +1,5 @@
+import type { LLMCandidatePOI, LLMQualityReview } from '@/shared/model';
+
 export type ItineraryGenerateRequest = {
   variant_count?: number;
   pace?: 'relaxed' | 'standard' | 'intense';
@@ -5,6 +7,7 @@ export type ItineraryGenerateRequest = {
   day_end_time?: string;
   rest_days_count?: number;
   preferred_activities?: string[];
+  allow_external_route?: boolean;
 };
 
 export type ItineraryRegenerateRequest = ItineraryGenerateRequest & {
@@ -54,7 +57,7 @@ export type ItineraryItem = {
   departure_time: string | null;
   duration_minutes: number | null;
   travel_from_previous_minutes: number;
-  source: 'generated' | 'manual' | string;
+  source: 'generated' | 'manual' | 'external_candidate' | string;
   opening_status: 'open' | 'closed' | 'unknown' | string | null;
   price_tier: string | null;
   entrance_fee_usd: number | null;
@@ -63,6 +66,8 @@ export type ItineraryItem = {
   is_pinned: boolean;
   is_removed: boolean;
   visited_place_id: string | null;
+  quality_review?: LLMQualityReview | null;
+  external_candidate_source?: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -74,6 +79,7 @@ export type ItineraryDay = {
   theme: string | null;
   start_time: string | null;
   end_time: string | null;
+  quality_review?: LLMQualityReview | null;
   items: ItineraryItem[];
 };
 
@@ -88,6 +94,9 @@ export type Itinerary = {
   route_signature: string | null;
   constraints: Record<string, unknown> | null;
   score_summary: Record<string, unknown> | null;
+  quality_model_version?: string | null;
+  quality_review?: LLMQualityReview | null;
+  candidate_poi?: LLMCandidatePOI[];
   days: ItineraryDay[];
   created_at: string;
   updated_at: string | null;
