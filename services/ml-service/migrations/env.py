@@ -20,7 +20,14 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-ML_OWNED_TABLES = {"recommendation_logs", "model_registry", "ml_alembic_version"}
+ML_OWNED_TABLES = {
+    "llm_candidate_poi",
+    "llm_candidate_destinations",
+    "llm_review_logs",
+    "recommendation_logs",
+    "model_registry",
+    "ml_alembic_version",
+}
 
 
 def include_object(object, name, type_, reflected, compare_to):

@@ -20,6 +20,7 @@ class POISource(enum.StrEnum):
     opentripmap = "opentripmap"
     overpass_osm = "overpass_osm"
     heritage = "heritage"  # UNESCO World Heritage Sites + OSM protected areas
+    llm_admin_approved = "llm_admin_approved"
 
 
 class POI(BaseModel):

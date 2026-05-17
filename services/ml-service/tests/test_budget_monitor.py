@@ -62,6 +62,10 @@ def _payload(**overrides) -> dict:
             "remaining_food_poi_count": 4,
             "remaining_paid_poi_count": 3,
             "remaining_estimated_entrance_fees": 60,
+            "remaining_evidence_backed_entrance_fees": 40,
+            "evidence_backed_price_count": 2,
+            "candidate_poi_price_count": 1,
+            "price_estimation_used": True,
             "avg_visit_duration_minutes": 95,
         },
     }
@@ -83,6 +87,10 @@ def test_budget_monitor_formula_fallback(client: TestClient):
     assert data["used_ml_model"] is False
     categories = {item["category"] for item in data["category_contributions"]}
     assert {"housing", "food", "entertainment"}.issubset(categories)
+    assert data["assumptions"]["itinerary_evidence_fee_remaining_usd"] == 40
+    assert data["assumptions"]["itinerary_evidence_backed_price_count"] == 2
+    assert data["assumptions"]["itinerary_candidate_poi_price_count"] == 1
+    assert data["assumptions"]["itinerary_price_estimation_used"] is True
 
 
 def test_budget_monitor_uses_active_in_trip_model(client: TestClient, db):

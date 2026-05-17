@@ -302,6 +302,10 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
         float(itinerary.remaining_estimated_entrance_fees if itinerary else 0.0),
         request.currency,
     )
+    evidence_fee_remaining = convert_to_usd(
+        float(itinerary.remaining_evidence_backed_entrance_fees if itinerary else 0.0),
+        request.currency,
+    )
     activity_remaining = max(
         itinerary_fee_remaining,
         (pretrip_activities / max(duration, 1)) * remaining * 0.65,
@@ -335,6 +339,10 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
         "daily_recurring_expected_usd": round(daily_recurring_expected, 2),
         "observed_daily_recurring_usd": round(observed_daily_recurring, 2),
         "itinerary_fee_remaining_usd": round(itinerary_fee_remaining, 2),
+        "itinerary_evidence_fee_remaining_usd": round(evidence_fee_remaining, 2),
+        "itinerary_evidence_backed_price_count": itinerary.evidence_backed_price_count if itinerary else 0,
+        "itinerary_candidate_poi_price_count": itinerary.candidate_poi_price_count if itinerary else 0,
+        "itinerary_price_estimation_used": itinerary.price_estimation_used if itinerary else False,
         "destination_transport_paid_usd": round(destination_transport_paid, 2),
     }
 

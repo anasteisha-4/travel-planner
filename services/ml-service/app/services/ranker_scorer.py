@@ -483,7 +483,7 @@ class LTRScorer:
                 "ltr_score": round(score, 4),
                 "candidate_ranker": 1.0,
             }
-            tags = _explanation_tags(breakdown, f, visa_score, safety)
+            tags = _explanation_tags(breakdown, f, visa_score, safety, travel_month)
 
             results.append(
                 ScoredDestination(

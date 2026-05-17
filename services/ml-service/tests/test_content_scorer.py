@@ -174,8 +174,78 @@ def test_explanation_tags_easy_visa():
 
 
 def test_explanation_tags_beach():
-    tags = _explanation_tags({}, {"is_coastal": True}, visa_score=1.0, safety_score=0.5)
+    tags = _explanation_tags(
+        {},
+        {
+            "is_coastal": True,
+            "activities": {"beach": 0.8},
+            "seasonality": {7: 0.8},
+            "season_weather": {7: {"avg_temp_c": 25.0}},
+            "lat": 36.0,
+        },
+        visa_score=1.0,
+        safety_score=0.5,
+        travel_month=7,
+    )
     assert "beach" in tags
+
+
+def test_explanation_tags_no_beach_for_cold_coast_month():
+    tags = _explanation_tags(
+        {},
+        {
+            "is_coastal": True,
+            "activities": {"beach": 0.85},
+            "seasonality": {5: 0.75},
+            "season_weather": {5: {"avg_temp_c": 10.0}},
+            "lat": 59.9,
+        },
+        visa_score=1.0,
+        safety_score=0.5,
+        travel_month=5,
+    )
+    assert "beach" not in tags
+
+
+def test_explanation_tags_skiing_is_seasonal():
+    winter = _explanation_tags(
+        {},
+        {"has_ski": True, "has_mountains": True, "season_weather": {1: {"avg_temp_c": -4.0}}, "lat": 46.0},
+        visa_score=0.2,
+        safety_score=0.5,
+        travel_month=1,
+    )
+    summer = _explanation_tags(
+        {},
+        {"has_ski": True, "has_mountains": True, "season_weather": {7: {"avg_temp_c": 18.0}}, "lat": 46.0},
+        visa_score=0.2,
+        safety_score=0.5,
+        travel_month=7,
+    )
+    assert "skiing" in winter
+    assert "skiing" not in summer
+
+
+def test_explanation_tags_no_skiing_without_mountains():
+    tags = _explanation_tags(
+        {},
+        {"has_ski": True, "has_mountains": False, "season_weather": {1: {"avg_temp_c": -4.0}}, "lat": 60.0},
+        visa_score=0.2,
+        safety_score=0.5,
+        travel_month=1,
+    )
+    assert "skiing" not in tags
+
+
+def test_explanation_tags_no_hot_springs_for_flat_coastal_city():
+    tags = _explanation_tags(
+        {},
+        {"has_thermal": True, "is_coastal": True, "has_mountains": False, "altitude_m": 2},
+        visa_score=0.2,
+        safety_score=0.5,
+        travel_month=1,
+    )
+    assert "hot_springs" not in tags
 
 
 def test_explanation_tags_safe():
@@ -191,9 +261,19 @@ def test_explanation_tags_affordable():
 def test_explanation_tags_max_5():
     tags = _explanation_tags(
         {"season_fit": 0.9, "activity_match": 0.9},
-        {"is_coastal": True, "has_ski": True, "has_thermal": True, "avg_daily_cost_usd": 30},
+        {
+            "is_coastal": True,
+            "activities": {"beach": 0.8},
+            "seasonality": {7: 0.9},
+            "season_weather": {7: {"avg_temp_c": 25.0}},
+            "lat": 36.0,
+            "has_ski": True,
+            "has_thermal": True,
+            "avg_daily_cost_usd": 30,
+        },
         visa_score=1.0,
         safety_score=0.9,
+        travel_month=7,
     )
     assert len(tags) <= 5
 
@@ -214,6 +294,7 @@ def _make_features(dest_id: uuid.UUID, **overrides) -> tuple[uuid.UUID, dict]:
         "connectivity_score": 0.5,
         "activities": {"beach": 0.8, "culture": 0.6},
         "seasonality": {7: 0.85},
+        "season_weather": {7: {"avg_temp_c": 25.0, "avg_precipitation_mm": 20.0, "avg_humidity_pct": 55.0}},
         "crowd_by_month": {7: 0.3},
         "russian_speaking_score": 0.5,
         "english_speaking_score": 0.7,

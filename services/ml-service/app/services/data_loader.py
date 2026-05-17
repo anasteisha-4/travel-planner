@@ -1,5 +1,7 @@
 import math
+import time
 import uuid
+from copy import deepcopy
 
 from psycopg2.extras import register_uuid
 from sqlalchemy import text
@@ -8,6 +10,10 @@ from sqlalchemy.orm import Session
 from app.lib.russian_names import resolve_destination_display_name
 
 register_uuid()
+
+DESTINATION_CACHE_TTL_SECONDS = 15 * 60
+_destinations_cache: tuple[float, list[dict]] | None = None
+_features_cache: dict[tuple[str, tuple[str, ...]], tuple[float, dict[uuid.UUID, dict]]] = {}
 
 
 def _destination_query(db: Session) -> str:
@@ -30,6 +36,11 @@ def _destination_query(db: Session) -> str:
 
 
 def get_all_destinations(db: Session) -> list[dict]:
+    global _destinations_cache
+    now = time.monotonic()
+    if _destinations_cache is not None and now - _destinations_cache[0] < DESTINATION_CACHE_TTL_SECONDS:
+        return deepcopy(_destinations_cache[1])
+
     result = db.execute(text(_destination_query(db)))
     destinations = [dict(row._mapping) for row in result]
     for destination in destinations:
@@ -42,6 +53,7 @@ def get_all_destinations(db: Session) -> list[dict]:
         destination["name_ru"] = display_name
         destination["display_name"] = display_name
         destination.pop("name_translation_provider", None)
+    _destinations_cache = (now, deepcopy(destinations))
     return destinations
 
 
@@ -50,6 +62,11 @@ def get_destination_features(
 ) -> dict[uuid.UUID, dict]:
     if not dest_ids:
         return {}
+    cache_key = (citizenship_code.upper(), tuple(sorted(str(item) for item in dest_ids)))
+    now = time.monotonic()
+    cached = _features_cache.get(cache_key)
+    if cached is not None and now - cached[0] < DESTINATION_CACHE_TTL_SECONDS:
+        return deepcopy(cached[1])
 
     id_param = dest_ids  # passed as uuid[] via psycopg2 after register_uuid()
 
@@ -70,7 +87,8 @@ def get_destination_features(
     )
     season_rows = db.execute(
         text(
-            "SELECT destination_id, month, season_score FROM destination_seasonality WHERE destination_id = ANY(:ids)"
+            "SELECT destination_id, month, season_score, avg_temp_c, avg_precipitation_mm, avg_humidity_pct "
+            "FROM destination_seasonality WHERE destination_id = ANY(:ids)"
         ),
         {"ids": id_param},
     )
@@ -157,12 +175,20 @@ def get_destination_features(
             )
 
     season_map: dict[uuid.UUID, dict[int, float]] = {}
+    season_weather_map: dict[uuid.UUID, dict[int, dict[str, float | None]]] = {}
     for row in season_rows:
         k = _key(row.destination_id)
         if k in features:
             season_map.setdefault(k, {})[int(row.month)] = float(row.season_score)
+            season_weather_map.setdefault(k, {})[int(row.month)] = {
+                "avg_temp_c": float(row.avg_temp_c),
+                "avg_precipitation_mm": float(row.avg_precipitation_mm),
+                "avg_humidity_pct": float(row.avg_humidity_pct) if row.avg_humidity_pct is not None else None,
+            }
     for k, months in season_map.items():
         features[k]["seasonality"] = months
+    for k, months in season_weather_map.items():
+        features[k]["season_weather"] = months
 
     activity_map: dict[uuid.UUID, dict[str, float]] = {}
     for row in activity_rows:
@@ -203,6 +229,7 @@ def get_destination_features(
             features[k]["has_ski"] = bool(row.has_ski)
             features[k]["has_thermal"] = bool(row.has_thermal)
             altitude = row.altitude_m
+            features[k]["altitude_m"] = int(altitude) if altitude is not None else None
             landscape = row.landscape or []
             features[k]["has_mountains"] = (altitude is not None and int(altitude) >= 800) or any(
                 lbl in ("mountain", "mountains", "highland", "alps")
@@ -251,6 +278,7 @@ def get_destination_features(
             }
         )
 
+    _features_cache[cache_key] = (now, deepcopy(features))
     return features
 
 

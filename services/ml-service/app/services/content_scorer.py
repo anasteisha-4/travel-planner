@@ -426,17 +426,18 @@ def _explanation_tags(
     features: dict[str, Any],
     visa_score: float,
     safety_score: float,
+    travel_month: int | None = None,
 ) -> list[str]:
     tags = []
     if visa_score >= 0.80:
         tags.append("visa_free")
     elif visa_score >= 0.55:
         tags.append("easy_visa")
-    if features.get("is_coastal"):
+    if _is_beach_label_active(features, travel_month):
         tags.append("beach")
-    if features.get("has_ski"):
+    if _is_ski_label_active(features, travel_month):
         tags.append("skiing")
-    if features.get("has_thermal"):
+    if _is_hot_springs_label_active(features):
         tags.append("hot_springs")
     if features.get("has_mountains"):
         tags.append("mountains")
@@ -453,6 +454,54 @@ def _explanation_tags(
     if breakdown.get("activity_match", 0) >= 0.75:
         tags.append("great_match")
     return tags[:5]
+
+
+def _is_beach_label_active(features: dict[str, Any], travel_month: int | None) -> bool:
+    if not features.get("is_coastal"):
+        return False
+    beach_score = float((features.get("activities") or {}).get("beach", 0.0))
+    if beach_score < 0.65:
+        return False
+    if travel_month is None:
+        return False
+    season_score = float((features.get("seasonality") or {}).get(travel_month, 0.0))
+    weather = (features.get("season_weather") or {}).get(travel_month) or {}
+    avg_temp = weather.get("avg_temp_c")
+    if avg_temp is None:
+        return season_score >= 0.75
+    min_temp = 22.0 if _is_cool_coast(features) else 18.0
+    return season_score >= 0.60 and float(avg_temp) >= min_temp
+
+
+def _is_cool_coast(features: dict[str, Any]) -> bool:
+    lat = features.get("lat")
+    if lat is None:
+        return False
+    return abs(float(lat)) >= 50.0
+
+
+def _is_ski_label_active(features: dict[str, Any], travel_month: int | None) -> bool:
+    if not features.get("has_ski"):
+        return False
+    if not features.get("has_mountains"):
+        return False
+    if travel_month is None:
+        return False
+    lat = features.get("lat")
+    northern = lat is None or float(lat) >= 0
+    ski_months = {12, 1, 2, 3} if northern else {6, 7, 8, 9}
+    return travel_month in ski_months
+
+
+def _is_hot_springs_label_active(features: dict[str, Any]) -> bool:
+    if not features.get("has_thermal"):
+        return False
+    if features.get("has_mountains"):
+        return True
+    altitude = features.get("altitude_m")
+    if altitude is not None and float(altitude) >= 100.0:
+        return True
+    return not features.get("is_coastal")
 
 
 class ContentScorer:
@@ -602,14 +651,14 @@ class ContentScorer:
 
             composite = max(0.0, min(1.0, composite + lang_penalty + visited_penalty))
 
-            tags = _explanation_tags(breakdown, f, visa_score, safety)
+            tags = _explanation_tags(breakdown, f, visa_score, safety, travel_month)
 
             results.append(
                 ScoredDestination(
                     destination_id=dest_id,
                     name=dest["name"],
                     country_code=dest["country_code"],
-                    region=dest.get("region", ""),
+                    region=dest.get("region") or "",
                     score=round(composite, 4),
                     score_breakdown=breakdown,
                     explanation_tags=tags,

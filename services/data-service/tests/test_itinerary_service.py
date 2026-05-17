@@ -1,7 +1,14 @@
+import random
 from datetime import datetime
 from types import SimpleNamespace
 
-from app.services.itinerary_service import build_variant, dedupe_poi_ids, rest_day_numbers, select_best_template
+from app.services.itinerary_service import (
+    _seeded_candidate_pool,
+    build_variant,
+    dedupe_poi_ids,
+    rest_day_numbers,
+    select_best_template,
+)
 
 
 def _trajectory(duration_days: int, tags: list[str], poi_ids: list[str]) -> SimpleNamespace:
@@ -126,3 +133,14 @@ def test_build_variant_rejects_empty_active_days():
     )
 
     assert variant is None
+
+
+def test_seeded_candidate_pool_varies_close_candidates_without_promoting_weak_items():
+    candidates = [(_score, 0.0, f"poi-{index}") for index, _score in enumerate([5.0, 4.8, 4.7, 4.6, 2.0])]
+
+    first = _seeded_candidate_pool(candidates, max_per_day=3, rng=random.Random(1))
+    second = _seeded_candidate_pool(candidates, max_per_day=3, rng=random.Random(2))
+
+    assert first != second
+    assert "poi-4" not in first[:3]
+    assert "poi-4" not in second[:3]

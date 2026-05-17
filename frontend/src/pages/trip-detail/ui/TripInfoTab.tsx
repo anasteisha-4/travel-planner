@@ -69,6 +69,24 @@ const getAccommodationTier = (
 const FIXED_EXPENSE_KEYWORDS =
   /авиа|самолет|самолёт|перелет|перелёт|рейс|поезд|жд|билет|брон|отель|гостиниц|виза|страхов|flight|airfare|airline|train|ticket|booking|hotel|visa|insurance/i;
 
+const getPriceSources = (summary: Record<string, unknown> | null | undefined) => {
+  const value = summary?.paid_poi_price_sources;
+  return Array.isArray(value) ? value : [];
+};
+
+const isEvidenceBackedSource = (source: unknown) =>
+  typeof source === 'object' &&
+  source !== null &&
+  'provider' in source &&
+  typeof source.provider === 'string' &&
+  !source.provider.startsWith('catalog');
+
+const isCandidatePriceSource = (source: unknown) =>
+  typeof source === 'object' &&
+  source !== null &&
+  'candidate_poi' in source &&
+  source.candidate_poi === true;
+
 const isManualForecastExpense = (expense: { category: string; description?: string | null; expense_date?: string | null; is_one_time?: boolean }, tripStart: string, tripEnd: string) => {
   if (expense.expense_date && (expense.expense_date < tripStart || expense.expense_date > tripEnd)) {
     return false;
@@ -125,16 +143,24 @@ export const TripInfoTab = () => {
     const today = todayParam;
     const remainingDays = itinerary.days.filter((day) => day.date >= today);
     const remainingItems = remainingDays.flatMap((day) => day.items.filter((item) => !item.is_removed && !item.visited_place_id));
+    const priceSources = getPriceSources(itinerary.score_summary);
+    const evidenceBackedSourceCount = priceSources.filter(isEvidenceBackedSource).length;
+    const hasPriceEvidence = evidenceBackedSourceCount > 0;
     const durations = remainingItems
       .map((item) => item.duration_minutes)
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const remainingEntranceFees = remainingItems.reduce((sum, item) => sum + (item.entrance_fee_usd ?? 0), 0);
     return {
       generated_days_count: itinerary.days.length,
       remaining_days_count: remainingDays.length,
       remaining_poi_count: remainingItems.length,
       remaining_food_poi_count: remainingItems.filter((item) => item.category === 'food').length,
       remaining_paid_poi_count: remainingItems.filter((item) => item.entrance_fee_usd !== null).length,
-      remaining_estimated_entrance_fees: remainingItems.reduce((sum, item) => sum + (item.entrance_fee_usd ?? 0), 0),
+      remaining_estimated_entrance_fees: remainingEntranceFees,
+      remaining_evidence_backed_entrance_fees: hasPriceEvidence ? remainingEntranceFees : 0,
+      evidence_backed_price_count: evidenceBackedSourceCount,
+      candidate_poi_price_count: priceSources.filter(isCandidatePriceSource).length,
+      price_estimation_used: Boolean(itinerary.score_summary?.price_estimation_used),
       avg_visit_duration_minutes: durations.length > 0 ? durations.reduce((sum, value) => sum + value, 0) / durations.length : null,
     };
   }, [itineraryState?.approved, todayParam]);

@@ -335,8 +335,8 @@ def build_variant(
             poi = poi_map.get(str(poi_id))
             if poi and is_usable_poi(poi):
                 candidates.append(poi)
-        candidates.sort(
-            key=lambda poi: (
+        scored_candidates = [
+            (
                 poi_relevance_score(
                     poi,
                     preferred_activities,
@@ -345,11 +345,14 @@ def build_variant(
                     people_count,
                 ),
                 rng.random(),
-            ),
-            reverse=True,
-        )
+                poi,
+            )
+            for poi in candidates
+        ]
+        scored_candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        candidate_pool = _seeded_candidate_pool(scored_candidates, max_per_day=max_per_day, rng=rng)
         day_items, day_score, day_travel, day_opening_warnings = schedule_day(
-            candidates=candidates[: max_per_day + 2],
+            candidates=candidate_pool,
             translations=translations,
             start_date=start_date,
             day_idx=day_idx,
@@ -402,6 +405,19 @@ def build_variant(
             "avg_relevance": round(total_score / max(total_poi, 1), 4),
         },
     }
+
+
+def _seeded_candidate_pool(scored_candidates: list[tuple[float, float, Any]], *, max_per_day: int, rng) -> list[Any]:
+    if not scored_candidates:
+        return []
+    pool_size = min(len(scored_candidates), max(max_per_day + 2, max_per_day * 2))
+    top = scored_candidates[:pool_size]
+    best_score = top[0][0]
+    flexible = [item for item in top if best_score - item[0] <= 1.25]
+    lower_quality = [item for item in top if best_score - item[0] > 1.25]
+    rng.shuffle(flexible)
+    ordered = sorted(flexible, key=lambda item: (round(item[0], 1), item[1]), reverse=True) + lower_quality
+    return [item[2] for item in ordered]
 
 
 def schedule_day(

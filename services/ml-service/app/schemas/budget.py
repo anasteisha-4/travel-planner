@@ -70,6 +70,10 @@ class BudgetMonitorItinerarySummary(BaseModel):
     remaining_food_poi_count: int = Field(default=0, ge=0)
     remaining_paid_poi_count: int = Field(default=0, ge=0)
     remaining_estimated_entrance_fees: float = Field(default=0, ge=0)
+    remaining_evidence_backed_entrance_fees: float = Field(default=0, ge=0)
+    evidence_backed_price_count: int = Field(default=0, ge=0)
+    candidate_poi_price_count: int = Field(default=0, ge=0)
+    price_estimation_used: bool = False
     avg_visit_duration_minutes: float | None = Field(default=None, ge=0)
 
 
