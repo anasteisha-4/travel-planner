@@ -172,7 +172,7 @@ def _not_reviewed() -> LLMQualityReview:
         issues=[],
         suggested_adjustments=[],
         user_summary_ru=None,
-        defense_trace="Variant was not reviewed because itinerary quality gate reviews only the first variant by default.",
+        defense_trace="Variant was not reviewed because it exceeded LLM_ITINERARY_REVIEW_VARIANTS.",
     )
 
 
@@ -192,10 +192,11 @@ def _review_response(
         return response
 
     variants = response.variants or [response]
+    review_limit = max(0, min(settings.LLM_ITINERARY_REVIEW_VARIANTS, len(variants), request.variant_count))
     reviewed_variants: list[ItineraryGenerateResponse] = []
 
     for index, variant in enumerate(variants):
-        if index > 0:
+        if index >= review_limit:
             summary = _not_reviewed()
             reviewed_variants.append(
                 variant.model_copy(
@@ -225,13 +226,13 @@ def _review_response(
                 db=db,
                 user_id=user_id,
                 trip_id=request.trip_id,
-                request=request,
+                request=_with_external_route_allowed(request),
                 profile=profile,
                 destination_info=destination_info,
                 trigger="llm_reject_regenerate",
             )
             if external is not None:
-                reviewed_variants.append(external)
+                reviewed_variants.extend(_response_variants(external))
                 continue
         adjusted = apply_itinerary_quality_review(variant, review, db=db)
         priced_itinerary = adjusted.itinerary
@@ -269,22 +270,30 @@ def _review_response(
     return first
 
 
+def _response_variants(response: ItineraryGenerateResponse) -> list[ItineraryGenerateResponse]:
+    return response.variants or [response]
+
+
+def _with_external_route_allowed(request: ItineraryGenerateRequest) -> ItineraryGenerateRequest:
+    return request if request.allow_external_route else request.model_copy(update={"allow_external_route": True})
+
+
 def _prefer_non_rejected_variants(variants: list[ItineraryGenerateResponse]) -> list[ItineraryGenerateResponse]:
     if len(variants) <= 1:
         return variants
-    rejected = [
-        variant
-        for variant in variants
-        if variant.quality_review is not None and variant.quality_review.status == LLMReviewStatus.reject
-    ]
-    if not rejected:
-        return variants
-    preferred = [
-        variant
-        for variant in variants
-        if variant.quality_review is None or variant.quality_review.status != LLMReviewStatus.reject
-    ]
-    return preferred + rejected
+    rank = {
+        LLMReviewStatus.ok: 0,
+        LLMReviewStatus.caution: 1,
+        LLMReviewStatus.skipped: 2,
+        LLMReviewStatus.failed: 3,
+        LLMReviewStatus.reject: 4,
+    }
+    return sorted(
+        variants,
+        key=lambda variant: rank.get(
+            variant.quality_review.status if variant.quality_review else LLMReviewStatus.skipped, 2
+        ),
+    )
 
 
 def _review_requests_external_route(review: LLMQualityReview) -> bool:
@@ -501,6 +510,7 @@ def generate_itinerary(
     activities = _activity_preferences(profile, request)
 
     if not request.destination_id:
+        request = _with_external_route_allowed(request)
         external = generate_external_route(
             db=db,
             user_id=user_id,
@@ -531,7 +541,7 @@ def generate_itinerary(
             db=db,
             user_id=user_id,
             trip_id=request.trip_id,
-            request=request,
+            request=_with_external_route_allowed(request),
             profile=profile,
             destination_info=_destination_info(request.destination_id),
             trigger="data_service_no_feasible",
@@ -554,7 +564,7 @@ def generate_itinerary(
             db=db,
             user_id=user_id,
             trip_id=request.trip_id,
-            request=request,
+            request=_with_external_route_allowed(request),
             profile=profile,
             destination_info=_destination_info(request.destination_id),
             trigger=trigger,

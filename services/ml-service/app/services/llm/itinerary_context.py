@@ -17,8 +17,14 @@ def build_itinerary_context(
         for day in itinerary.days
         for place in day.places
     )
+    destination = destination_info or {
+        "destination_id": str(itinerary.destination_id),
+        "name": request.destination_text,
+        "manual_destination_text": request.destination_text,
+        "source": "manual" if request.destination_id is None else "catalog",
+    }
     return {
-        "destination": destination_info or {"destination_id": str(itinerary.destination_id)},
+        "destination": destination,
         "trip": {
             "duration_days": request.duration_days,
             "start_date": request.start_date.isoformat(),

@@ -212,7 +212,7 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     assert itinerary["status"] == "draft"
     assert _ml_itinerary_call(post_mock).kwargs["json"]["duration_days"] == 14
     assert _ml_itinerary_call(post_mock).kwargs["json"]["trip_notes"] == trip_data["notes"]
-    assert _ml_itinerary_call(post_mock).kwargs["timeout"] == 35.0
+    assert _ml_itinerary_call(post_mock).kwargs["timeout"] == 180.0
     assert len(itinerary["days"]) == 14
     assert itinerary["days"][0]["items"][0]["arrival_time"] == "09:30:00"
     assert itinerary["quality_review"]["status"] == "caution"

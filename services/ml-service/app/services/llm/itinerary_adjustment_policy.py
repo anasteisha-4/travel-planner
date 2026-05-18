@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -27,11 +28,31 @@ def apply_itinerary_quality_review(
     applied: list[dict] = []
     ignored: list[dict] = []
     candidate_results: list[CandidatePOIValidationResult] = []
+    removed_targets: set[uuid.UUID] = set()
+
+    for issue in review.issues:
+        target_id = issue.item_id or issue.target_id
+        if issue.severity.value == "critical" and target_id:
+            adjusted, did_apply = _remove_item(adjusted, target_id)
+            _record(applied, ignored, did_apply, "remove", target_id, reason="critical_issue")
+            if did_apply:
+                removed_targets.add(target_id)
 
     for adjustment in review.suggested_adjustments:
+        if adjustment.target_id in removed_targets:
+            continue
         if adjustment.action == LLMReviewAction.remove and adjustment.target_id:
             adjusted, did_apply = _remove_item(adjusted, adjustment.target_id)
             _record(applied, ignored, did_apply, "remove", adjustment.target_id)
+            if did_apply:
+                removed_targets.add(adjustment.target_id)
+        elif (
+            adjustment.action == LLMReviewAction.replace_item and adjustment.target_id and not adjustment.candidate_poi
+        ):
+            adjusted, did_apply = _remove_item(adjusted, adjustment.target_id)
+            _record(applied, ignored, did_apply, "replace_item", adjustment.target_id)
+            if did_apply:
+                removed_targets.add(adjustment.target_id)
         elif adjustment.action == LLMReviewAction.swap and adjustment.target_id and adjustment.replacement_id:
             adjusted, did_apply = _swap_items(adjusted, adjustment.target_id, adjustment.replacement_id)
             _record(
@@ -157,11 +178,64 @@ def _add_candidate(
         places = list(day.places)
         if (day.day_number or day.day) == target_day:
             insert_at = len(places) if target_order is None else max(0, min(len(places), target_order))
+            place = _candidate_in_time_slot(day.places, insert_at, place)
             places.insert(insert_at, place)
+            places = _shift_places_after_insert(places, insert_at)
             did_apply = True
         days.append(day.model_copy(update={"places": places, "items": places}))
     candidate_poi = [*itinerary.candidate_poi, candidate] if did_apply else itinerary.candidate_poi
     return itinerary.model_copy(update={"days": days, "candidate_poi": candidate_poi}), did_apply
+
+
+def _candidate_in_time_slot(
+    places: list[ItineraryPlace],
+    insert_at: int,
+    candidate: ItineraryPlace,
+) -> ItineraryPlace:
+    duration = int(candidate.visit_duration_minutes or candidate.duration_minutes or 60)
+    previous = places[insert_at - 1] if insert_at > 0 and insert_at - 1 < len(places) else None
+    next_place = places[insert_at] if insert_at < len(places) else None
+    arrival = _add_minutes(previous.departure_time, 20) if previous and previous.departure_time else None
+    if arrival is None and next_place and next_place.arrival_time:
+        arrival = next_place.arrival_time
+    if arrival is None:
+        arrival = "09:30"
+    departure = _add_minutes(arrival, duration)
+    return candidate.model_copy(
+        update={
+            "arrival_time": arrival,
+            "departure_time": departure,
+            "travel_from_previous_minutes": 20 if previous else 0,
+            "visit_duration_minutes": duration,
+            "duration_minutes": duration,
+        }
+    )
+
+
+def _shift_places_after_insert(places: list[ItineraryPlace], inserted_at: int) -> list[ItineraryPlace]:
+    shifted = list(places)
+    previous = shifted[inserted_at]
+    for index in range(inserted_at + 1, len(shifted)):
+        current = shifted[index]
+        duration = int(current.visit_duration_minutes or current.duration_minutes or 60)
+        arrival = _add_minutes(previous.departure_time, current.travel_from_previous_minutes or 20)
+        if arrival is None:
+            previous = current
+            continue
+        departure = _add_minutes(arrival, duration)
+        shifted[index] = current.model_copy(update={"arrival_time": arrival, "departure_time": departure})
+        previous = shifted[index]
+    return shifted
+
+
+def _add_minutes(value: str | None, minutes: int) -> str | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.strptime(value, "%H:%M")
+    except ValueError:
+        return None
+    return (parsed + timedelta(minutes=minutes)).strftime("%H:%M")
 
 
 def _record(
@@ -171,10 +245,13 @@ def _record(
     action: str,
     target_id: uuid.UUID | None,
     replacement_id: uuid.UUID | None = None,
+    reason: str | None = None,
 ) -> None:
     payload = {"action": action, "target_id": str(target_id) if target_id else None}
     if replacement_id:
         payload["replacement_id"] = str(replacement_id)
+    if reason:
+        payload["reason"] = reason
     if did_apply:
         applied.append(payload)
     else:

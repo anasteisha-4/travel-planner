@@ -66,8 +66,8 @@ class LLMQualityGate:
             prompt=ITINERARY_QUALITY_TEMPLATE,
             prompt_version=ITINERARY_QUALITY_PROMPT_VERSION,
             context=context,
-            max_tokens=2200,
-            timeout_seconds=min(settings.LLM_TIMEOUT_SECONDS, 8.0),
+            max_tokens=3200,
+            timeout_seconds=max(settings.LLM_TIMEOUT_SECONDS, 30.0),
             max_retries=0,
         )
 
@@ -410,12 +410,14 @@ def _normalize_review_payload(payload: dict) -> dict:
 
 
 def _normalize_review_status(review: LLMQualityReview) -> LLMQualityReview:
-    if review.status in {LLMReviewStatus.skipped, LLMReviewStatus.failed}:
+    if review.status == LLMReviewStatus.skipped:
         return review
     if any(issue.severity.value == "critical" for issue in review.issues):
         return review.model_copy(update={"status": LLMReviewStatus.reject})
     if any(issue.severity.value == "warning" for issue in review.issues):
         return review.model_copy(update={"status": LLMReviewStatus.caution})
+    if review.status == LLMReviewStatus.failed:
+        return review.model_copy(update={"status": LLMReviewStatus.skipped})
     return review
 
 

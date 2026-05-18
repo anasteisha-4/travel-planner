@@ -1,4 +1,5 @@
 import json
+import math
 import uuid
 from datetime import datetime
 from typing import Any
@@ -33,6 +34,9 @@ Rules:
 - Every place must include latitude, longitude, arrival_time, departure_time, category, and a short reason.
 - Use the user's duration, pace, daily time window, rest days, notes, and preferred activities.
 - Generate the requested number of route variants when possible.
+- For standard pace, return exactly 3 high-quality POIs per active day. For slow pace, return 2-3. For fast pace, return 3-4.
+- Every POI must be inside or immediately near the requested destination city; do not include nearby major cities.
+- Do not repeat the same POI across days or variants.
 - Do not use catalog IDs. The backend will mark all places as external candidates for review.
 - If unsure about a POI, still provide coordinates and mark confidence below 0.7.
 - Do not include markdown or prose outside JSON.
@@ -131,39 +135,52 @@ def generate_external_route(
         destination_info=destination_info,
         trigger=trigger,
     )
-    try:
-        response = get_provider().complete(
-            LLMRequest(
-                model=settings.LLM_MODEL,
-                temperature=0.25,
-                max_tokens=settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS,
-                timeout_seconds=min(settings.LLM_TIMEOUT_SECONDS, 18.0),
-                max_retries=0,
-                json_schema=external_route_json_schema(),
-                messages=[
-                    LLMMessage(role="system", content=_EXTERNAL_ROUTE_SYSTEM_PROMPT),
-                    LLMMessage(
-                        role="user",
-                        content=compact_json({"prompt_version": EXTERNAL_ROUTE_PROMPT_VERSION, "context": context}),
-                    ),
-                ],
+    provider = get_provider()
+    for attempt in range(2):
+        try:
+            response = provider.complete(
+                LLMRequest(
+                    model=settings.LLM_MODEL,
+                    temperature=0.25 if attempt == 0 else 0,
+                    max_tokens=settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS,
+                    timeout_seconds=max(settings.LLM_TIMEOUT_SECONDS, 30.0),
+                    max_retries=0,
+                    json_schema=external_route_json_schema(),
+                    messages=[
+                        LLMMessage(role="system", content=_external_route_system_prompt(attempt)),
+                        LLMMessage(
+                            role="user",
+                            content=compact_json({"prompt_version": EXTERNAL_ROUTE_PROMPT_VERSION, "context": context}),
+                        ),
+                    ],
+                )
             )
-        )
-        payload = _loads_json_object(response.content)
-    except (LLMProviderError, json.JSONDecodeError, ValueError, TypeError, KeyError):
-        return None
+            payload = _loads_json_object(response.content)
+        except (LLMProviderError, json.JSONDecodeError, ValueError, TypeError, KeyError):
+            continue
 
-    variants = _normalize_external_variants(
-        payload=payload,
-        destination_id=destination_id,
-        destination_name=destination_name,
-        trip_id=trip_id,
-        request=request,
-        trigger=trigger,
+        variants = _normalize_external_variants(
+            payload=payload,
+            destination_id=destination_id,
+            destination_name=destination_name,
+            trip_id=trip_id,
+            request=request,
+            trigger=trigger,
+        )
+        if variants:
+            return variants[0].model_copy(update={"variants": variants})
+    return None
+
+
+def _external_route_system_prompt(attempt: int) -> str:
+    if attempt <= 0:
+        return _EXTERNAL_ROUTE_SYSTEM_PROMPT
+    return (
+        f"{_EXTERNAL_ROUTE_SYSTEM_PROMPT}\n"
+        "Previous output was rejected by validation. This time every variant must include exactly all requested "
+        "active days, at least two specific non-generic POIs per active day, valid coordinates, and increasing "
+        "arrival/departure times. Return only JSON."
     )
-    if not variants:
-        return None
-    return variants[0].model_copy(update={"variants": variants})
 
 
 def _external_route_context(
@@ -201,6 +218,7 @@ def _external_route_context(
         },
         "quality_requirements": {
             "min_active_places_per_day": _MIN_ACTIVE_PLACES_PER_DAY,
+            "max_active_places_per_day": _max_places_per_day(request.pace),
             "coordinates_required": True,
             "specific_real_poi_names_required": True,
             "avoid_generic_names": sorted(_GENERIC_NAME_PARTS),
@@ -289,6 +307,7 @@ def _normalize_external_days(
 
     rest_days = _rest_days(request.duration_days, request.rest_days_count)
     days: list[ItineraryDay] = []
+    seen_names: set[str] = set()
     for day_number in range(1, request.duration_days + 1):
         if day_number in rest_days:
             days.append(
@@ -310,6 +329,7 @@ def _normalize_external_days(
             raw_places=raw_day.get("places"),
             day_number=day_number,
             destination_name=destination_name,
+            seen_names=seen_names,
         )
         days.append(
             ItineraryDay(
@@ -322,7 +342,7 @@ def _normalize_external_days(
                 items=places,
             )
         )
-    return days
+    return _clean_external_days(days, request)
 
 
 def _normalize_external_places(
@@ -330,11 +350,11 @@ def _normalize_external_places(
     raw_places: Any,
     day_number: int,
     destination_name: str,
+    seen_names: set[str],
 ) -> list[ItineraryPlace]:
     if not isinstance(raw_places, list):
         return []
     places: list[ItineraryPlace] = []
-    seen_names: set[str] = set()
     for index, raw_place in enumerate(raw_places):
         if not isinstance(raw_place, dict):
             continue
@@ -379,6 +399,52 @@ def _normalize_external_places(
     return places
 
 
+def _clean_external_days(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> list[ItineraryDay]:
+    days = _remove_coordinate_outliers(days)
+    max_places = _max_places_per_day(request.pace)
+    cleaned: list[ItineraryDay] = []
+    for day in days:
+        if str(day.theme or "").lower() == "rest":
+            cleaned.append(day)
+            continue
+        places = day.places[:max_places]
+        cleaned.append(day.model_copy(update={"places": places, "items": places}))
+    return cleaned
+
+
+def _remove_coordinate_outliers(days: list[ItineraryDay]) -> list[ItineraryDay]:
+    places_with_coords = [
+        place for day in days for place in day.places if place.lat is not None and place.lng is not None
+    ]
+    if len(places_with_coords) < 4:
+        return days
+    median_lat = sorted(float(place.lat) for place in places_with_coords)[len(places_with_coords) // 2]
+    median_lng = sorted(float(place.lng) for place in places_with_coords)[len(places_with_coords) // 2]
+    cleaned: list[ItineraryDay] = []
+    for day in days:
+        if str(day.theme or "").lower() == "rest":
+            cleaned.append(day)
+            continue
+        places = [
+            place
+            for place in day.places
+            if place.lat is not None
+            and place.lng is not None
+            and _haversine_km(float(place.lat), float(place.lng), median_lat, median_lng) <= 35
+        ]
+        cleaned.append(day.model_copy(update={"places": places, "items": places}))
+    return cleaned
+
+
+def _max_places_per_day(pace: str | None) -> int:
+    normalized = str(pace or "").lower()
+    if normalized in {"slow", "relaxed", "low"}:
+        return 3
+    if normalized in {"fast", "intense", "high"}:
+        return 4
+    return 3
+
+
 def _is_complete_external_route(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> bool:
     if len(days) != request.duration_days:
         return False
@@ -390,6 +456,16 @@ def _is_complete_external_route(days: list[ItineraryDay], request: ItineraryGene
         if any(place.lat is None or place.lng is None for place in day.places):
             return False
     return True
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    radius_km = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lng2 - lng1)
+    value = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    return 2 * radius_km * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
 def _loads_json_object(content: str) -> dict:

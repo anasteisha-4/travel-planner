@@ -231,6 +231,7 @@ def test_itinerary_quality_review_caution_and_notes_context(client: TestClient, 
     )
     response.raise_for_status.return_value = None
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_ITINERARY_REVIEW_VARIANTS", 3)
     monkeypatch.setattr("app.routers.itinerary.httpx.post", Mock(return_value=response))
     monkeypatch.setattr(
         "app.routers.itinerary._destination_info", lambda _destination_id: {"display_name": "Test City"}
@@ -375,7 +376,7 @@ def test_itinerary_quality_fail_open_returns_itinerary_without_500(client: TestC
 
 
 def test_rejected_first_variant_is_ordered_after_alternatives(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    review = LLMQualityReview(
+    rejected_review = LLMQualityReview(
         status=LLMReviewStatus.reject,
         confidence=0.9,
         provider="yandex",
@@ -391,10 +392,19 @@ def test_rejected_first_variant_is_ordered_after_alternatives(client: TestClient
         ],
         suggested_adjustments=[],
     )
+    ok_review = LLMQualityReview(
+        status=LLMReviewStatus.ok,
+        confidence=0.9,
+        provider="yandex",
+        model="qwen3.6-35b-a3b/latest",
+        prompt_version="itinerary_quality_v1",
+        issues=[],
+        suggested_adjustments=[],
+    )
 
     class FakeGate:
-        def review_itinerary(self, **_kwargs):
-            return review
+        def review_itinerary(self, **kwargs):
+            return rejected_review if kwargs["itinerary_id"] == "rejected" else ok_review
 
     first = _itinerary_payload()
     first["variant_index"] = 0
@@ -418,6 +428,47 @@ def test_rejected_first_variant_is_ordered_after_alternatives(client: TestClient
     data = resp.json()
     assert data["route_signature"] == "alternative"
     assert [variant["route_signature"] for variant in data["variants"]] == ["alternative", "rejected"]
+    assert [variant["quality_review"]["status"] for variant in data["variants"]] == ["ok", "reject"]
+
+
+def test_itinerary_quality_reviews_all_default_variants(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    reviewed_ids: list[str] = []
+
+    class FakeGate:
+        def review_itinerary(self, **kwargs):
+            reviewed_ids.append(kwargs["itinerary_id"])
+            return LLMQualityReview(
+                status=LLMReviewStatus.ok,
+                confidence=0.9,
+                provider="yandex",
+                model="qwen3.6-35b-a3b/latest",
+                prompt_version="itinerary_quality_v1",
+                issues=[],
+                suggested_adjustments=[],
+            )
+
+    variants = []
+    for index in range(3):
+        variant = _itinerary_payload()
+        variant["variant_index"] = index
+        variant["variant_seed"] = 101 + index
+        variant["route_signature"] = f"variant-{index}"
+        variants.append(variant)
+    response = Mock()
+    response.json.return_value = {**variants[0], "variants": variants}
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_ITINERARY_REVIEW_VARIANTS", 3)
+    monkeypatch.setattr("app.routers.itinerary.httpx.post", Mock(return_value=response))
+    monkeypatch.setattr("app.routers.itinerary._destination_info", lambda _destination_id: None)
+    monkeypatch.setattr("app.routers.itinerary.LLMQualityGate", lambda: FakeGate())
+
+    resp = client.post("/api/v1/itinerary", json=_payload(variant_count=3))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert reviewed_ids == ["variant-0", "variant-1", "variant-2"]
+    assert [variant["quality_review"]["status"] for variant in data["variants"]] == ["ok", "ok", "ok"]
 
 
 def test_itinerary_candidate_poi_is_added_as_external_candidate(
@@ -477,6 +528,8 @@ def test_itinerary_candidate_poi_is_added_as_external_candidate(
     places = data["days"][0]["places"]
     assert [place["name"] for place in places] == ["Museum", "Quiet tea house"]
     assert places[1]["external_candidate_source"] == "llm_candidate_poi"
+    assert places[1]["arrival_time"] == "11:50"
+    assert places[1]["departure_time"] == "12:50"
     assert data["candidate_poi"][0]["name"] == "Quiet tea house"
     assert data["score_summary"]["llm_candidate_poi"][0]["status"] == "external_candidate"
 
@@ -590,9 +643,11 @@ def test_no_feasible_internal_route_can_return_external_draft(client: TestClient
         "app.routers.itinerary._destination_info", lambda _destination_id: {"display_name": "Test City"}
     )
 
-    def fake_external_route(**_kwargs):
+    def fake_external_route(**kwargs):
         from app.schemas.itinerary import ItineraryGenerateResponse
 
+        assert kwargs["request"].allow_external_route is True
+        assert kwargs["trigger"] == "data_service_no_feasible"
         return ItineraryGenerateResponse.model_validate(external)
 
     monkeypatch.setattr("app.routers.itinerary.generate_external_route", fake_external_route)
@@ -725,7 +780,6 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
             "duration_days": 1,
             "start_date": "2026-06-10",
             "variant_count": 3,
-            "allow_external_route": True,
         },
     )
 

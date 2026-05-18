@@ -1,3 +1,4 @@
+import math
 import re
 from functools import lru_cache
 from unicodedata import normalize
@@ -72,6 +73,11 @@ _CITY_IATA_OVERRIDES: dict[str, str] = {
     "yekaterinburg": "SVX",
 }
 
+_AIRPORT_COORDINATE_FALLBACKS: tuple[tuple[str, str, float, float], ...] = (
+    ("VIE", "AT", 48.1103, 16.5697),
+    ("HKT", "TH", 8.1132, 98.3169),
+)
+
 
 def _normalize_city(value: str | None) -> str:
     if not value:
@@ -128,4 +134,38 @@ def resolve_iata(
     lng: float | None = None,
     country_code: str | None = None,
 ) -> str | None:
-    return _override_iata(city_name) or _resolve_iata_from_data_service(city_name, lat, lng, country_code)
+    return (
+        _override_iata(city_name)
+        or _resolve_iata_from_data_service(city_name, lat, lng, country_code)
+        or _nearest_local_airport(lat=lat, lng=lng, country_code=country_code)
+    )
+
+
+def _nearest_local_airport(
+    *,
+    lat: float | None,
+    lng: float | None,
+    country_code: str | None,
+) -> str | None:
+    if lat is None or lng is None:
+        return None
+    country = str(country_code or "").upper()
+    candidates = [
+        (iata, airport_lat, airport_lng)
+        for iata, airport_country, airport_lat, airport_lng in _AIRPORT_COORDINATE_FALLBACKS
+        if not country or airport_country == country
+    ]
+    if not candidates:
+        return None
+    nearest = min(candidates, key=lambda item: _haversine_km(lat, lng, item[1], item[2]))
+    return nearest[0] if _haversine_km(lat, lng, nearest[1], nearest[2]) <= 120 else None
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    radius_km = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lng2 - lng1)
+    value = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    return 2 * radius_km * math.atan2(math.sqrt(value), math.sqrt(1 - value))
