@@ -32,9 +32,9 @@ def apply_itinerary_quality_review(
 
     for issue in review.issues:
         target_id = issue.item_id or issue.target_id
-        if issue.severity.value == "critical" and target_id:
+        if issue.severity.value in {"critical", "warning"} and target_id:
             adjusted, did_apply = _remove_item(adjusted, target_id)
-            _record(applied, ignored, did_apply, "remove", target_id, reason="critical_issue")
+            _record(applied, ignored, did_apply, "remove", target_id, reason=f"{issue.severity.value}_issue")
             if did_apply:
                 removed_targets.add(target_id)
 

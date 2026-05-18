@@ -97,7 +97,6 @@ CLIMATE_ATTRIBUTE_MAP: dict[str, list[str]] = {
 MIDDLE_EAST_COUNTRY_CODES = {
     "AE",
     "BH",
-    "CY",
     "IL",
     "IQ",
     "IR",

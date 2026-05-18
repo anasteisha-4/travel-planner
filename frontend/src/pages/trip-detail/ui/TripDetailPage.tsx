@@ -1,8 +1,14 @@
-import type { TripStatus } from '@/entities/trip';
 import { expenseApi } from '@/entities/expense';
-import { DestinationValidationCompact } from '@/features/recommendations';
+import type { TripStatus } from '@/entities/trip';
 import { profileApi } from '@/features/profile';
-import { CancelTripSheet, DeleteTripSheet, EditTripSheet, useTripDetail, type TripFormSnapshot } from '@/features/trips';
+import { DestinationValidationCompact } from '@/features/recommendations';
+import {
+  CancelTripSheet,
+  DeleteTripSheet,
+  EditTripSheet,
+  useTripDetail,
+  type TripFormSnapshot,
+} from '@/features/trips';
 import { localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { StatusBadge, TabBar } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -41,8 +47,15 @@ export const TripDetailPage = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const { trip, loading, handleStatusChange, isStatusChanging, handleDelete, isDeleting, invalidateTrip } =
-    useTripDetail(id);
+  const {
+    trip,
+    loading,
+    handleStatusChange,
+    isStatusChanging,
+    handleDelete,
+    isDeleting,
+    invalidateTrip,
+  } = useTripDetail(id);
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: profileApi.getProfile,
@@ -61,7 +74,8 @@ export const TripDetailPage = () => {
   const validationStartDate = debouncedEditSnapshot?.start_date ?? trip?.start_date;
   const validationEndDate = debouncedEditSnapshot?.end_date ?? trip?.end_date;
   const validationDurationDays = getDurationDays(validationStartDate, validationEndDate);
-  const validationDestinationId = debouncedEditSnapshot?.destination_id ?? trip?.destination_id ?? null;
+  const validationDestinationId =
+    debouncedEditSnapshot?.destination_id ?? trip?.destination_id ?? null;
   const isValidationBudgetUnlimited = validationBudget < 0;
   const needsUsdRate = !!trip && validationBudget > 0 && validationCurrency !== 'USD';
   const { data: validationRates } = useQuery({
@@ -80,9 +94,10 @@ export const TripDetailPage = () => {
         : validationRates?.rates.USD
           ? validationBudget * validationRates.rates.USD
           : null;
-  const validationBudgetPerDayUsd = validationBudgetUsd !== null
-    ? validationBudgetUsd / Math.max(validationDurationDays * validationPeopleCount, 1)
-    : null;
+  const validationBudgetPerDayUsd =
+    validationBudgetUsd !== null
+      ? validationBudgetUsd / Math.max(validationDurationDays * validationPeopleCount, 1)
+      : null;
 
   const handleCancelConfirm = async () => {
     await handleStatusChange('cancelled');
@@ -103,11 +118,11 @@ export const TripDetailPage = () => {
     ? 'analytics'
     : pathname.endsWith('/itinerary')
       ? 'itinerary'
-    : pathname.endsWith('/diary')
-      ? 'diary'
-      : pathname.endsWith('/expenses')
-        ? 'expenses'
-        : 'info';
+      : pathname.endsWith('/diary')
+        ? 'diary'
+        : pathname.endsWith('/expenses')
+          ? 'expenses'
+          : 'info';
 
   const isCompleted = trip?.status === 'completed';
 
@@ -173,12 +188,14 @@ export const TripDetailPage = () => {
           {trip.departure_city && (
             <p className="mt-2 flex items-center gap-1 text-[14px] font-medium text-stone-400 dark:text-slate-500">
               <MapPin className="h-3.5 w-3.5 shrink-0" />
-              <span className="line-clamp-2">{trip.departure_city} → {localizeDestinationName(trip.destination)}</span>
+              <span className="line-clamp-2">
+                {trip.departure_city} → {localizeDestinationName(trip.destination)}
+              </span>
             </p>
           )}
         </div>
 
-        <div className="mt-4 overflow-x-auto border-b border-[hsl(var(--surface-border))] no-scrollbar">
+        <div className="no-scrollbar mt-4 overflow-x-auto border-b border-[hsl(var(--surface-border))]">
           <TabBar
             tabs={TABS}
             active={activeTab}
@@ -204,7 +221,9 @@ export const TripDetailPage = () => {
             budgetUnlimited={isValidationBudgetUnlimited}
             durationDays={validationDurationDays}
             riskTolerance={profile?.risk_tolerance}
-            preferredLanguage={profile?.language_comfort?.find((language) => language !== 'any') ?? null}
+            preferredLanguage={
+              profile?.language_comfort?.find((language) => language !== 'any') ?? null
+            }
           />
         }
       />

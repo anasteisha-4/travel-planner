@@ -232,8 +232,9 @@ def _review_response(
                 trigger="llm_reject_regenerate",
             )
             if external is not None:
-                reviewed_variants.extend(_response_variants(external))
-                continue
+                replacement_variants = _response_variants(external)
+                first_replacement = replacement_variants[0]
+                return first_replacement.model_copy(update={"variants": replacement_variants[:1]})
         adjusted = apply_itinerary_quality_review(variant, review, db=db)
         priced_itinerary = adjusted.itinerary
         final_review = _review_after_repairs(review, adjusted)

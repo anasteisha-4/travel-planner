@@ -14,7 +14,7 @@ type TabBarProps<T extends string> = {
   className?: string;
 };
 
-export const TabBar = <T extends string,>({ tabs, active, onChange, className }: TabBarProps<T>) => {
+export const TabBar = <T extends string>({ tabs, active, onChange, className }: TabBarProps<T>) => {
   const { play } = useHapticFeedback();
 
   return (
@@ -28,7 +28,7 @@ export const TabBar = <T extends string,>({ tabs, active, onChange, className }:
             onChange(id);
           }}
           className={cn(
-            'flex min-h-11 items-center gap-1.5 pb-2.5 pr-5 text-[15px] font-semibold transition-colors',
+            'flex min-h-11 items-center gap-1.5 px-2 pb-2.5 text-[14px] font-semibold transition-colors',
             active === id
               ? 'border-b-[2.5px] border-primary text-stone-900 dark:text-white'
               : 'text-stone-400 dark:text-stone-500'

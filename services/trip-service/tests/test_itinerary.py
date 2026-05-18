@@ -215,9 +215,10 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     assert _ml_itinerary_call(post_mock).kwargs["timeout"] == 180.0
     assert len(itinerary["days"]) == 14
     assert itinerary["days"][0]["items"][0]["arrival_time"] == "09:30:00"
-    assert itinerary["quality_review"]["status"] == "caution"
-    assert itinerary["days"][0]["quality_review"]["status"] == "caution"
-    assert itinerary["days"][0]["items"][0]["quality_review"]["status"] == "caution"
+    assert itinerary["quality_review"] is None
+    assert itinerary["days"][0]["quality_review"] is None
+    assert itinerary["days"][0]["items"][0]["quality_review"] is None
+    assert "llm_quality_review" not in itinerary["score_summary"]
 
     approved = client.post(f"/api/trips/{trip_id}/itinerary/{itinerary['id']}/approve", headers=auth_headers)
     assert approved.status_code == 200
@@ -226,6 +227,55 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
     assert state.status_code == 200
     assert state.json()["approved"]["id"] == itinerary["id"]
+
+
+def test_regenerate_approved_catalog_trip_requests_one_variant_and_keeps_approved_route(
+    client, auth_headers, trip_data, monkeypatch
+):
+    trip_id = _create_trip(client, auth_headers, trip_data)
+    first_response = Mock()
+    first_response.json.return_value = _ml_response()
+    first_response.raise_for_status.return_value = None
+    second_response = Mock()
+    second_body = _ml_response()
+    second_body["variants"][0]["route_signature"] = "sig-b"
+    second_body["variants"][0]["variant_seed"] = 202
+    second_response.json.return_value = second_body
+    second_response.raise_for_status.return_value = None
+
+    def post_side_effect(*_args, **kwargs):
+        return second_response if kwargs["json"].get("exclude_signature") == "sig-a" else first_response
+
+    post_mock = Mock(side_effect=post_side_effect)
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", post_mock)
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 1},
+        headers=auth_headers,
+    )
+    assert generated.status_code == 201
+    approved_id = generated.json()[0]["id"]
+    approved = client.post(f"/api/trips/{trip_id}/itinerary/{approved_id}/approve", headers=auth_headers)
+    assert approved.status_code == 200
+
+    regenerated = client.post(
+        f"/api/trips/{trip_id}/itinerary/regenerate",
+        json={"variant_count": 3, "exclude_signature": "sig-a", "allow_external_route": True},
+        headers=auth_headers,
+    )
+
+    assert regenerated.status_code == 201
+    assert regenerated.json()[0]["route_signature"] == "sig-b"
+    regenerate_payload = next(
+        call.kwargs["json"] for call in post_mock.call_args_list if call.kwargs["json"].get("exclude_signature")
+    )
+    assert regenerate_payload["variant_count"] == 1
+    assert regenerate_payload["exclude_signature"] == "sig-a"
+    state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
+    assert state.status_code == 200
+    assert state.json()["approved"]["id"] == approved_id
+    assert state.json()["drafts"][0]["route_signature"] == "sig-b"
 
 
 def test_generate_rejects_variants_with_empty_active_days(client, auth_headers, trip_data, monkeypatch):
@@ -318,7 +368,40 @@ def test_generate_manual_destination_can_persist_external_route(client, auth_hea
     payload = _ml_itinerary_call(post_mock).kwargs["json"]
     assert payload["destination_id"] is None
     assert payload["destination_text"] == "Manual Coast"
+    assert payload["variant_count"] == 1
     assert payload["allow_external_route"] is True
+
+
+def test_external_llm_route_response_is_persisted_as_one_variant_for_catalog_trip(
+    client, auth_headers, trip_data, monkeypatch
+):
+    trip_id = _create_trip(client, auth_headers, trip_data)
+    external_body = _ml_response()
+    external_body["source"] = "llm-external-draft"
+    external_body["model_version"] = "llm-external-route:qwen3.6-35b-a3b/latest"
+    external_body["score_summary"] = {"external_route_used": True}
+    external_body["variants"] = []
+    for index in range(3):
+        variant = _ml_response()["variants"][0]
+        variant["source"] = "llm-external-draft"
+        variant["model_version"] = "llm-external-route:qwen3.6-35b-a3b/latest"
+        variant["route_signature"] = f"llm-external-{index}"
+        variant["score_summary"] = {"external_route_used": True}
+        external_body["variants"].append(variant)
+    response = Mock()
+    response.json.return_value = external_body
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 3, "allow_external_route": True},
+        headers=auth_headers,
+    )
+
+    assert generated.status_code == 201
+    assert len(generated.json()) == 1
+    assert generated.json()[0]["route_signature"] == "llm-external-0"
 
 
 def test_generate_preserves_ml_no_feasible_error(client, auth_headers, trip_data, monkeypatch):
@@ -407,7 +490,7 @@ def test_external_candidate_poi_is_persisted_but_cannot_be_visited(client, auth_
     external = next(item for item in items if item["name"] == "Quiet tea house")
     assert external["poi_id"] is None
     assert external["source"] == "external_candidate"
-    assert external["external_candidate_source"] == "llm_candidate_poi"
+    assert external["external_candidate_source"] is None
 
     visited = client.post(f"/api/trips/{trip_id}/itinerary/items/{external['id']}/visit", headers=auth_headers)
     assert visited.status_code == 400

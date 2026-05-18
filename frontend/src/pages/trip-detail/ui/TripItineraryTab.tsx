@@ -254,36 +254,6 @@ const formatUsd = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount);
 
-const qualityMeta = (review?: LLMQualityReview | null) => {
-  if (!review) return null;
-  if (review.status === 'ok') {
-    return {
-      label: 'Проверено',
-      className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    };
-  }
-  if (review.status === 'caution') {
-    return {
-      label: 'Есть нюансы',
-      className: 'border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-200',
-    };
-  }
-  if (review.status === 'reject' || review.status === 'failed') {
-    return {
-      label: 'Лучше перепроверить',
-      className: 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300',
-    };
-  }
-  return {
-    label: 'Базовая проверка',
-    className:
-      'border-stone-300 bg-stone-100 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300',
-  };
-};
-
-const warningIssues = (review?: LLMQualityReview | null) =>
-  review?.issues.filter((issue) => issue.severity !== 'info').slice(0, 3) ?? [];
-
 const routeNeedsRegeneration = (review?: LLMQualityReview | null) =>
   review?.status === 'reject' &&
   review.suggested_adjustments.some(
@@ -324,6 +294,58 @@ const EmptyState = ({ onGenerate, isLoading }: { onGenerate: () => void; isLoadi
   </div>
 );
 
+const ItineraryGenerationLoader = ({
+  mode,
+  messageIndex,
+}: {
+  mode: 'generate' | 'regenerate';
+  messageIndex: number;
+}) => {
+  const steps =
+    mode === 'generate'
+      ? ['Подбираю места', 'Проверяю логику дня', 'Собираю маршрут']
+      : ['Ищу другой порядок', 'Обновляю точки', 'Проверяю маршрут'];
+
+  return (
+    <div className="trip-info-card absolute left-0 top-0 z-30 overflow-hidden p-4">
+      <div className="absolute inset-x-0 top-0 h-1" />
+      <div className="flex items-start gap-3">
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/30">
+          <Route className="h-5 w-5 text-[#2563EB]" />
+          <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.85)]" />
+        </div>
+        <div className="my-2 min-w-0 flex-1">
+          <p className="text-[15px] font-extrabold text-stone-900 dark:text-white">
+            {mode === 'generate' ? 'Собираю маршрут' : 'Собираю новый вариант'}
+          </p>
+          <p className="mt-1 text-[12px] font-semibold leading-relaxed text-stone-500 dark:text-stone-400">
+            Проверяю дни, время и последовательность точек. Это может занять немного времени
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                className="h-1 overflow-hidden rounded-full bg-stone-100 dark:bg-[hsl(var(--surface-muted))]"
+              >
+                <div
+                  className="h-full w-full origin-left animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-[#2563EB]"
+                  style={{ animationDelay: `${index * 180}ms` }}
+                />
+              </div>
+            ))}
+          </div>
+          <p
+            className="mt-3 min-h-5 text-[13px] font-bold text-muted-foreground transition-opacity"
+            style={{ animationDelay: `180ms` }}
+          >
+            {steps[messageIndex % steps.length]}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
   <div className="flex gap-2 rounded-xl bg-stone-50 px-2.5 py-2 dark:bg-[hsl(var(--surface-muted))]/60">
     <div className="w-[48px] shrink-0 text-[11px] font-extrabold leading-5 text-stone-500 dark:text-stone-400">
@@ -343,11 +365,6 @@ const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
           {openingLabel(item.opening_status)}
         </span>
-        {(item.source === 'external_candidate' || item.external_candidate_source) && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            Предложено ИИ
-          </span>
-        )}
       </div>
     </div>
   </div>
@@ -359,7 +376,6 @@ const DraftDayPreview = ({ day, isExpanded }: { day: ItineraryDay; isExpanded: b
   const timeRange = getDayTimeRange(day);
   const visibleItems = isExpanded ? items : items.slice(0, 3);
   const hiddenCount = items.length - visibleItems.length;
-  const dayIssues = warningIssues(day.quality_review);
 
   return (
     <div className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 py-3">
@@ -384,11 +400,6 @@ const DraftDayPreview = ({ day, isExpanded }: { day: ItineraryDay; isExpanded: b
             Для свободного планирования
           </p>
         )}
-        {dayIssues.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            {dayIssues[0].message}
-          </div>
-        )}
         {visibleItems.map((item) => (
           <DraftPreviewItem key={item.id} item={item} />
         ))}
@@ -412,7 +423,6 @@ const VariantCard = ({
   isLoading: boolean;
 }) => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const meta = qualityMeta(itinerary.quality_review);
   const needsRegeneration = routeNeedsRegeneration(itinerary.quality_review);
   const approveAndClose = () => {
     onApprove(itinerary.id);
@@ -426,16 +436,6 @@ const VariantCard = ({
           <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
             Вариант {itinerary.variant_index + 1}
           </p>
-          {meta && (
-            <span
-              className={cn(
-                'rounded-full border px-2 py-0.5 text-[10px] font-extrabold',
-                meta.className
-              )}
-            >
-              {meta.label}
-            </span>
-          )}
         </div>
         <h2 className="mt-1 text-[18px] font-extrabold text-stone-900 dark:text-white">
           {getPlacesCount(itinerary)} {formatPlaces(getPlacesCount(itinerary))},{' '}
@@ -1032,9 +1032,6 @@ const ItemRow = ({
   };
   const isExternalCandidate =
     item.source === 'external_candidate' || Boolean(item.external_candidate_source);
-  const sourceUrl = item.external_candidate_source?.startsWith('http')
-    ? item.external_candidate_source
-    : null;
 
   return (
     <div
@@ -1078,16 +1075,6 @@ const ItemRow = ({
                   Посещено
                 </span>
               )}
-              {isExternalCandidate && (
-                <>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                    Предложено ИИ
-                  </span>
-                  <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-200">
-                    Требует проверки
-                  </span>
-                </>
-              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
@@ -1114,28 +1101,6 @@ const ItemRow = ({
             </Button>
           </div>
         </div>
-
-        {isExternalCandidate && (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <div>Не добавлено в каталог. Проверьте место перед посещением.</div>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {item.entrance_fee_usd !== null && (
-                <span>Оценка входа: {formatUsd(item.entrance_fee_usd)}</span>
-              )}
-              {sourceUrl && (
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  Источник
-                </a>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="mt-3 grid grid-cols-[1fr_30px_1fr] items-center">
           <div className="inline-flex h-9 shrink-0 items-center rounded-xl border border-stone-200 bg-stone-50 px-2 shadow-inner dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))]/70">
@@ -1352,11 +1317,6 @@ const ApprovedItinerary = ({
                 {restDay ? 'Без активностей' : `${placesCount} ${formatPlaces(placesCount)}`}
               </span>
             </div>
-            {warningIssues(day.quality_review).length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-                {warningIssues(day.quality_review)[0].message}
-              </div>
-            )}
             {children(day)}
           </section>
         );
@@ -1396,6 +1356,11 @@ export const TripItineraryTab = () => {
     generateMutation.isError || regenerateMutation.isError
       ? itineraryErrorMessage(generateMutation.error ?? regenerateMutation.error)
       : null;
+  const generationMode = generateMutation.isPending
+    ? 'generate'
+    : regenerateMutation.isPending
+      ? 'regenerate'
+      : null;
   const isBusy =
     generateMutation.isPending ||
     regenerateMutation.isPending ||
@@ -1433,8 +1398,9 @@ export const TripItineraryTab = () => {
   }, [current, durationDays, trip.destination_id, trip.id]);
 
   const handleGenerate = () => {
+    const variantCount = trip.destination_id ? 3 : 1;
     generateMutation.mutate(
-      { variant_count: 3, pace: 'standard', allow_external_route: true },
+      { variant_count: variantCount, pace: 'standard', allow_external_route: true },
       {
         onSuccess: (items) => {
           const first = items[0];
@@ -1464,9 +1430,10 @@ export const TripItineraryTab = () => {
   };
 
   const handleRegenerate = () => {
+    const variantCount = approved || !trip.destination_id ? 1 : 3;
     regenerateMutation.mutate(
       {
-        variant_count: 3,
+        variant_count: variantCount,
         pace: 'standard',
         exclude_signature: current?.route_signature,
         allow_external_route: true,
@@ -1526,6 +1493,15 @@ export const TripItineraryTab = () => {
       }
     );
   };
+
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setLoadingMessageIndex((current) => current + 1);
+    }, 2200);
+    return () => window.clearInterval(intervalId);
+  });
 
   const handleDragOver = (event: DragOverEvent) => {
     const activeId = String(event.active.id);
@@ -1659,7 +1635,7 @@ export const TripItineraryTab = () => {
 
   return (
     <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-4">
-      <div className="flex flex-col gap-3">
+      <div className="relative flex flex-col gap-3">
         {stateQuery.isPending && (
           <div className="trip-info-card flex items-center gap-3 px-4 py-4">
             <Loader2 className="h-4 w-4 animate-spin text-[#2563EB]" />
@@ -1678,7 +1654,10 @@ export const TripItineraryTab = () => {
             </p>
           </div>
         )}
-        {!stateQuery.isPending && !approved && drafts.length === 0 && (
+        {generationMode && (
+          <ItineraryGenerationLoader mode={generationMode} messageIndex={loadingMessageIndex} />
+        )}
+        {!generationMode && !stateQuery.isPending && !approved && drafts.length === 0 && (
           <EmptyState onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
         )}
         {!approved && drafts.length > 0 && (

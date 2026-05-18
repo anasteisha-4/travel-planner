@@ -38,6 +38,9 @@ def _poi(
         visit_duration_minutes=visit_duration_minutes,
         popularity_score=popularity_score,
         opening_hours=opening_hours,
+        address=None,
+        price_tier=None,
+        entrance_fee_usd=None,
     )
 
 
@@ -144,3 +147,30 @@ def test_seeded_candidate_pool_varies_close_candidates_without_promoting_weak_it
     assert first != second
     assert "poi-4" not in first[:3]
     assert "poi-4" not in second[:3]
+
+
+def test_build_variant_supplements_short_template_days_to_standard_density():
+    template = _trajectory(1, ["culture"], ["poi-1", "poi-2"])
+    poi_map = {f"poi-{index}": _poi(f"poi-{index}", name=f"POI {index}", opening_hours=None) for index in range(1, 7)}
+
+    variant = build_variant(
+        template=template,
+        poi_map=poi_map,
+        translations={},
+        destination_id="11111111-1111-1111-1111-111111111111",
+        duration_days=1,
+        preferred_activities=["culture"],
+        start_date=datetime(2026, 6, 10),
+        variant_seed=42,
+        variant_index=0,
+        pace="standard",
+        day_start_time=datetime.strptime("09:30", "%H:%M").time(),
+        day_end_time=datetime.strptime("19:00", "%H:%M").time(),
+        rest_days_count=0,
+        trip_budget=None,
+        people_count=1,
+        supplemental_pois=list(poi_map.values()),
+    )
+
+    assert variant is not None
+    assert len(variant["days"][0]["items"]) == 4

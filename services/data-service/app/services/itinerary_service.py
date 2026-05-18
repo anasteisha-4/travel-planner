@@ -54,7 +54,15 @@ def generate_itinerary(
             for poi_id in day_data.get("poi_ids", [])
         }
     )
-    poi_map = {str(p.id): p for p in db.query(POI).filter(POI.id.in_(all_poi_ids)).all()}
+    template_pois = db.query(POI).filter(POI.id.in_(all_poi_ids)).all()
+    supplemental_pois = (
+        db.query(POI)
+        .filter(POI.destination_id == destination_id, POI.lat.isnot(None), POI.lng.isnot(None))
+        .order_by(POI.popularity_score.desc().nullslast())
+        .limit(300)
+        .all()
+    )
+    poi_map = {str(p.id): p for p in [*template_pois, *supplemental_pois]}
     templates = select_best_templates(
         trajectories=trajectories,
         duration_days=duration_days,
@@ -77,6 +85,7 @@ def generate_itinerary(
         variant = build_variant(
             template=template,
             poi_map=poi_map,
+            supplemental_pois=supplemental_pois,
             translations=poi_translations,
             destination_id=destination_id,
             duration_days=duration_days,
@@ -301,6 +310,7 @@ def build_variant(
     rest_days_count: int,
     trip_budget: float | None,
     people_count: int,
+    supplemental_pois: list[Any] | None = None,
 ) -> dict | None:
     rng = random.Random(variant_seed)
     max_per_day = {"relaxed": 3, "standard": 4, "intense": 5}.get(pace, 4)
@@ -335,6 +345,12 @@ def build_variant(
             poi = poi_map.get(str(poi_id))
             if poi and is_usable_poi(poi):
                 candidates.append(poi)
+        candidates = _with_supplemental_candidates(
+            candidates,
+            supplemental_pois or [],
+            used_poi_ids=used_poi_ids,
+            target_count=max_per_day,
+        )
         scored_candidates = [
             (
                 poi_relevance_score(
@@ -474,6 +490,28 @@ def schedule_day(
         current_dt = departure_dt + timedelta(minutes=20)
         prev = poi
     return result, total_score, total_travel, opening_warnings
+
+
+def _with_supplemental_candidates(
+    candidates: list[Any],
+    supplemental_pois: list[Any],
+    *,
+    used_poi_ids: set[str],
+    target_count: int,
+) -> list[Any]:
+    if len(candidates) >= target_count:
+        return candidates
+    result = list(candidates)
+    seen = {str(poi.id) for poi in result}
+    for poi in supplemental_pois:
+        key = str(getattr(poi, "id", ""))
+        if not key or key in seen or key in used_poi_ids or not is_usable_poi(poi):
+            continue
+        result.append(poi)
+        seen.add(key)
+        if len(result) >= max(target_count * 3, target_count + 6):
+            break
+    return result
 
 
 def default_duration(category: str) -> int:

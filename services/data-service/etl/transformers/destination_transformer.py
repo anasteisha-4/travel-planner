@@ -6,6 +6,17 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+REGION_OVERRIDES: dict[str, tuple[str, str]] = {
+    "CY": ("Europe", "Southern Europe"),
+}
+
+
+def _normalize_region(country_code: str, region: str | None, subregion: str | None) -> tuple[str | None, str | None]:
+    override = REGION_OVERRIDES.get(country_code.upper())
+    if override:
+        return override
+    return region, subregion
+
 
 def transform_countries(raw: list[dict]) -> list[dict]:
     """Transform REST Countries API response into destination dicts."""
@@ -25,6 +36,11 @@ def transform_countries(raw: list[dict]) -> list[dict]:
 
         currencies_raw = country.get("currencies", {})
         currencies = {code: info.get("name", code) for code, info in currencies_raw.items()}
+        region, subregion = _normalize_region(
+            country.get("cca2", ""),
+            country.get("region"),
+            country.get("subregion"),
+        )
 
         destinations.append(
             {
@@ -32,8 +48,8 @@ def transform_countries(raw: list[dict]) -> list[dict]:
                 "country_code": country.get("cca2", ""),
                 "lat": latlng[0],
                 "lng": latlng[1],
-                "region": country.get("region"),
-                "subregion": country.get("subregion"),
+                "region": region,
+                "subregion": subregion,
                 "capital": True,
                 "population": country.get("population"),
                 "currencies": currencies,
@@ -52,14 +68,19 @@ def transform_cities(df: pd.DataFrame) -> list[dict]:
 
     destinations = []
     for _, row in df.iterrows():
+        region, subregion = _normalize_region(
+            str(row["country_code"]),
+            row.get("region"),
+            row.get("subregion"),
+        )
         destinations.append(
             {
                 "name": row["name"],
                 "country_code": row["country_code"],
                 "lat": float(row["lat"]),
                 "lng": float(row["lng"]),
-                "region": row.get("region"),
-                "subregion": row.get("subregion"),
+                "region": region,
+                "subregion": subregion,
                 "capital": False,
                 "population": int(row["population"]) if pd.notna(row.get("population")) else None,
                 "currencies": {},

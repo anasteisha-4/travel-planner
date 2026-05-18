@@ -10,7 +10,6 @@ from app.services.llm.prompts import compact_json
 from app.services.llm.providers import LLMMessage, LLMProviderError, LLMRequest, get_provider
 
 EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v2"
-_MIN_ACTIVE_PLACES_PER_DAY = 2
 
 _GENERIC_NAME_PARTS = {
     "центральный район",
@@ -33,17 +32,18 @@ Rules:
 - Each active day must contain geographically plausible POIs in visit order.
 - Every place must include latitude, longitude, arrival_time, departure_time, category, and a short reason.
 - Use the user's duration, pace, daily time window, rest days, notes, and preferred activities.
-- Generate the requested number of route variants when possible.
-- For standard pace, return exactly 3 high-quality POIs per active day. For slow pace, return 2-3. For fast pace, return 3-4.
+- Generate exactly one route variant. Never generate alternative route variants in the same response.
+- For standard pace, return exactly 4 high-quality POIs per active day. For slow pace, return exactly 3. For fast pace, return exactly 5.
 - Every POI must be inside or immediately near the requested destination city; do not include nearby major cities.
-- Do not repeat the same POI across days or variants.
+- Do not repeat the same POI across days.
+- If a previous route signature or POI list is supplied, produce a materially different route with different POIs.
 - Do not use catalog IDs. The backend will mark all places as external candidates for review.
 - If unsure about a POI, still provide coordinates and mark confidence below 0.7.
 - Do not include markdown or prose outside JSON.
 """.strip()
 
 
-def external_route_json_schema() -> dict:
+def external_route_json_schema(max_variants: int = 1) -> dict:
     place_schema = {
         "type": "object",
         "additionalProperties": False,
@@ -105,7 +105,7 @@ def external_route_json_schema() -> dict:
                 "variants": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 3,
+                    "maxItems": max(1, min(1, max_variants)),
                     "items": variant_schema,
                 }
             },
@@ -129,8 +129,9 @@ def generate_external_route(
 
     destination_name = _destination_name(request, destination_info)
     destination_id = request.destination_id or uuid.uuid5(uuid.NAMESPACE_URL, f"triply:external:{destination_name}")
+    effective_request = _external_route_request(request, trigger)
     context = _external_route_context(
-        request=request,
+        request=effective_request,
         destination_name=destination_name,
         destination_info=destination_info,
         trigger=trigger,
@@ -142,10 +143,10 @@ def generate_external_route(
                 LLMRequest(
                     model=settings.LLM_MODEL,
                     temperature=0.25 if attempt == 0 else 0,
-                    max_tokens=settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS,
+                    max_tokens=min(settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS, 4500),
                     timeout_seconds=max(settings.LLM_TIMEOUT_SECONDS, 30.0),
                     max_retries=0,
-                    json_schema=external_route_json_schema(),
+                    json_schema=external_route_json_schema(max_variants=effective_request.variant_count),
                     messages=[
                         LLMMessage(role="system", content=_external_route_system_prompt(attempt)),
                         LLMMessage(
@@ -164,7 +165,7 @@ def generate_external_route(
             destination_id=destination_id,
             destination_name=destination_name,
             trip_id=trip_id,
-            request=request,
+            request=effective_request,
             trigger=trigger,
         )
         if variants:
@@ -177,9 +178,9 @@ def _external_route_system_prompt(attempt: int) -> str:
         return _EXTERNAL_ROUTE_SYSTEM_PROMPT
     return (
         f"{_EXTERNAL_ROUTE_SYSTEM_PROMPT}\n"
-        "Previous output was rejected by validation. This time every variant must include exactly all requested "
-        "active days, at least two specific non-generic POIs per active day, valid coordinates, and increasing "
-        "arrival/departure times. Return only JSON."
+        "Previous output was rejected by validation. This time the single variant must include exactly all requested "
+        "active days, the exact requested POI count per active day, valid coordinates, increasing "
+        "arrival/departure times, and a route that differs from the excluded previous route. Return only JSON."
     )
 
 
@@ -209,6 +210,8 @@ def _external_route_context(
             "day_end_time": request.day_end_time,
             "preferred_activities": request.preferred_activities or [],
             "variant_count": request.variant_count,
+            "variant_seed": request.variant_seed,
+            "exclude_signature": request.exclude_signature,
             "people_count": request.people_count,
             "budget": request.trip_budget,
             "currency": request.currency,
@@ -217,7 +220,7 @@ def _external_route_context(
             "trigger": trigger,
         },
         "quality_requirements": {
-            "min_active_places_per_day": _MIN_ACTIVE_PLACES_PER_DAY,
+            "min_active_places_per_day": _min_places_per_day(request.pace),
             "max_active_places_per_day": _max_places_per_day(request.pace),
             "coordinates_required": True,
             "specific_real_poi_names_required": True,
@@ -240,7 +243,7 @@ def _normalize_external_variants(
         return []
 
     normalized: list[ItineraryGenerateResponse] = []
-    for fallback_index, raw_variant in enumerate(raw_variants[: request.variant_count]):
+    for fallback_index, raw_variant in enumerate(raw_variants[: _external_variant_count(request)]):
         if not isinstance(raw_variant, dict):
             continue
         days = _normalize_external_days(
@@ -255,19 +258,19 @@ def _normalize_external_variants(
             {
                 "trip_id": str(trip_id) if trip_id else None,
                 "destination": destination_name,
-                "variant_index": variant_index,
-                "seed": request.variant_seed,
-                "trigger": trigger,
                 "days": [[place.name for place in day.places] for day in days if day.places],
             }
         )
+        route_signature = f"llm-external-{uuid.uuid5(uuid.NAMESPACE_URL, signature_seed)}"
+        if request.exclude_signature and route_signature == request.exclude_signature:
+            continue
         normalized.append(
             ItineraryGenerateResponse(
                 destination_id=destination_id,
                 duration_days=request.duration_days,
                 variant_index=variant_index,
                 variant_seed=(request.variant_seed or 0) + variant_index,
-                route_signature=f"llm-external-{uuid.uuid5(uuid.NAMESPACE_URL, signature_seed)}",
+                route_signature=route_signature,
                 model_version=f"llm-external-route:{settings.LLM_MODEL}",
                 days=days,
                 activity_tags=request.preferred_activities or [],
@@ -441,8 +444,27 @@ def _max_places_per_day(pace: str | None) -> int:
     if normalized in {"slow", "relaxed", "low"}:
         return 3
     if normalized in {"fast", "intense", "high"}:
+        return 5
+    return 4
+
+
+def _min_places_per_day(pace: str | None) -> int:
+    normalized = str(pace or "").lower()
+    if normalized in {"slow", "relaxed", "low"}:
+        return 3
+    if normalized in {"fast", "intense", "high"}:
         return 4
-    return 3
+    return 4
+
+
+def _external_variant_count(request: ItineraryGenerateRequest) -> int:
+    return max(1, min(1, request.variant_count))
+
+
+def _external_route_request(request: ItineraryGenerateRequest, trigger: str) -> ItineraryGenerateRequest:
+    if trigger in {"manual_destination", "data_service_no_feasible", "data_service_no_template"}:
+        return request.model_copy(update={"variant_count": 1})
+    return request.model_copy(update={"variant_count": 1})
 
 
 def _is_complete_external_route(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> bool:
@@ -451,7 +473,7 @@ def _is_complete_external_route(days: list[ItineraryDay], request: ItineraryGene
     for day in days:
         if str(day.theme or "").lower() == "rest":
             continue
-        if len(day.places) < _MIN_ACTIVE_PLACES_PER_DAY:
+        if len(day.places) < _min_places_per_day(request.pace):
             return False
         if any(place.lat is None or place.lng is None for place in day.places):
             return False

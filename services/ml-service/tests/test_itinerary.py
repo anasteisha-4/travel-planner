@@ -19,6 +19,7 @@ from app.schemas.llm_quality import (
     LLMReviewSeverity,
     LLMReviewStatus,
 )
+from app.services.llm.prompts import compact_json
 from app.services.llm.providers import FakeProvider
 from app.services.llm.quality_gate import LLMQualityGate
 from tests.conftest import TEST_USER_ID
@@ -196,6 +197,7 @@ def test_itinerary_quality_review_caution_and_notes_context(client: TestClient, 
                 code="closed_poi",
                 severity=LLMReviewSeverity.warning,
                 message="A POI may be closed at the planned visit time.",
+                item_id=POI_ID,
             )
         ],
         suggested_adjustments=[
@@ -242,9 +244,12 @@ def test_itinerary_quality_review_caution_and_notes_context(client: TestClient, 
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["quality_review"]["status"] == "caution"
-    assert data["days"][0]["quality_review"]["issues"][0]["code"] == "closed_poi"
-    assert data["score_summary"]["llm_quality_review"]["status"] == "caution"
+    assert data["quality_review"]["status"] == "ok"
+    assert data["days"][0]["places"] == []
+    assert data["score_summary"]["llm_quality_review"]["status"] == "ok"
+    assert data["score_summary"]["llm_quality_applied_adjustments"] == [
+        {"action": "remove", "target_id": str(POI_ID), "reason": "warning_issue"}
+    ]
 
 
 def test_itinerary_quality_unknown_remove_is_ignored(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -469,6 +474,71 @@ def test_itinerary_quality_reviews_all_default_variants(client: TestClient, monk
     data = resp.json()
     assert reviewed_ids == ["variant-0", "variant-1", "variant-2"]
     assert [variant["quality_review"]["status"] for variant in data["variants"]] == ["ok", "ok", "ok"]
+
+
+def test_rejected_catalog_variants_trigger_single_external_replacement(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    reject_review = LLMQualityReview(
+        status=LLMReviewStatus.reject,
+        confidence=0.9,
+        provider="yandex",
+        model="qwen3.6-35b-a3b/latest",
+        prompt_version="itinerary_quality_v1",
+        issues=[
+            LLMReviewIssue(
+                code="wrong_city_route",
+                severity=LLMReviewSeverity.critical,
+                message="Route should be regenerated externally.",
+            )
+        ],
+        suggested_adjustments=[
+            LLMReviewAdjustment(action=LLMReviewAction.generate_external_route, reason="Use external route.")
+        ],
+    )
+
+    class FakeGate:
+        def review_itinerary(self, **_kwargs):
+            return reject_review
+
+    variants = []
+    for index in range(3):
+        variant = _itinerary_payload()
+        variant["variant_index"] = index
+        variant["variant_seed"] = 101 + index
+        variant["route_signature"] = f"variant-{index}"
+        variants.append(variant)
+    response = Mock()
+    response.json.return_value = {**variants[0], "variants": variants}
+    response.raise_for_status.return_value = None
+    external = _itinerary_payload()
+    external["source"] = "llm-external-draft"
+    external["model_version"] = "llm-external-route:qwen3.6-35b-a3b/latest"
+    external["route_signature"] = "external-single"
+    calls = 0
+
+    def fake_external_route(**_kwargs):
+        nonlocal calls
+        calls += 1
+        from app.schemas.itinerary import ItineraryGenerateResponse
+
+        return ItineraryGenerateResponse.model_validate(external)
+
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", True)
+    monkeypatch.setattr("app.routers.itinerary.httpx.post", Mock(return_value=response))
+    monkeypatch.setattr(
+        "app.routers.itinerary._destination_info", lambda _destination_id: {"display_name": "Test City"}
+    )
+    monkeypatch.setattr("app.routers.itinerary.LLMQualityGate", lambda: FakeGate())
+    monkeypatch.setattr("app.routers.itinerary.generate_external_route", fake_external_route)
+
+    resp = client.post("/api/v1/itinerary", json=_payload(variant_count=3))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert calls == 1
+    assert data["source"] == "llm-external-draft"
+    assert [variant["route_signature"] for variant in data["variants"]] == ["external-single"]
 
 
 def test_itinerary_candidate_poi_is_added_as_external_candidate(
@@ -697,6 +767,32 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
                                 "reason": "Nearby Roman circus keeps the route compact.",
                                 "confidence": 0.9,
                             },
+                            {
+                                "name": "Catedral de Tarragona",
+                                "category": "culture",
+                                "lat": 41.1182,
+                                "lng": 1.2582,
+                                "address": "Pla de la Seu",
+                                "arrival_time": "13:10",
+                                "departure_time": "14:20",
+                                "visit_duration_minutes": 70,
+                                "travel_from_previous_minutes": 20,
+                                "reason": "Historic landmark within the old town route.",
+                                "confidence": 0.88,
+                            },
+                            {
+                                "name": "Balco del Mediterrani",
+                                "category": "viewpoint",
+                                "lat": 41.1134,
+                                "lng": 1.2566,
+                                "address": "Rambla Nova",
+                                "arrival_time": "14:45",
+                                "departure_time": "15:30",
+                                "visit_duration_minutes": 45,
+                                "travel_from_previous_minutes": 15,
+                                "reason": "Scenic finish near the historic center.",
+                                "confidence": 0.86,
+                            },
                         ],
                     }
                 ],
@@ -735,6 +831,32 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
                                 "reason": "Logical scenic stop after the old town.",
                                 "confidence": 0.88,
                             },
+                            {
+                                "name": "Mercat Central de Tarragona",
+                                "category": "food",
+                                "lat": 41.1167,
+                                "lng": 1.2476,
+                                "address": "Placa Corsini",
+                                "arrival_time": "12:35",
+                                "departure_time": "13:35",
+                                "visit_duration_minutes": 60,
+                                "travel_from_previous_minutes": 20,
+                                "reason": "Local food stop.",
+                                "confidence": 0.84,
+                            },
+                            {
+                                "name": "Passeig Arqueologic",
+                                "category": "history",
+                                "lat": 41.119,
+                                "lng": 1.255,
+                                "address": "Muralles Romanes",
+                                "arrival_time": "14:00",
+                                "departure_time": "15:10",
+                                "visit_duration_minutes": 70,
+                                "travel_from_previous_minutes": 15,
+                                "reason": "Roman walls complete the cultural route.",
+                                "confidence": 0.86,
+                            },
                         ],
                     }
                 ],
@@ -770,7 +892,9 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
     monkeypatch.setattr(
         "app.services.llm.external_route.get_provider",
-        lambda: FakeProvider(responses=[json.dumps(external_payload)]),
+        lambda: FakeProvider(
+            responses=[json.dumps({**external_payload, "variants": external_payload["variants"][:1]})]
+        ),
     )
 
     resp = client.post(
@@ -786,10 +910,166 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
     assert resp.status_code == 200
     data = resp.json()
     assert data["source"] == "llm-external-draft"
-    assert len(data["variants"]) == 2
+    assert len(data["variants"]) == 1
     assert data["variants"][0]["days"][0]["places"][0]["name"] == "Amfiteatre de Tarragona"
+    assert len(data["variants"][0]["days"][0]["places"]) == 4
     assert all(place["lat"] and place["lng"] for place in data["variants"][0]["days"][0]["places"])
     assert "центральный район" not in json.dumps(data, ensure_ascii=False)
+
+
+def test_manual_destination_external_route_requests_single_variant_schema(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    captured_requests = []
+    payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Single Tarragona route",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "culture",
+                        "places": [
+                            {
+                                "name": f"Tarragona POI {index}",
+                                "category": "culture",
+                                "lat": 41.11 + index / 1000,
+                                "lng": 1.25 + index / 1000,
+                                "address": f"Address {index}",
+                                "arrival_time": f"{9 + index:02d}:30",
+                                "departure_time": f"{10 + index:02d}:20",
+                                "visit_duration_minutes": 50,
+                                "travel_from_previous_minutes": 10 if index else 0,
+                                "reason": "Specific Tarragona stop.",
+                                "confidence": 0.86,
+                            }
+                            for index in range(4)
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    class CapturingProvider(FakeProvider):
+        def complete(self, request):
+            captured_requests.append(request)
+            return super().complete(request)
+
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
+    monkeypatch.setattr(
+        "app.services.llm.external_route.get_provider",
+        lambda: CapturingProvider(responses=[json.dumps(payload)]),
+    )
+
+    resp = client.post(
+        "/api/v1/itinerary",
+        json={
+            "destination_text": "Таррагона",
+            "duration_days": 1,
+            "start_date": "2026-06-10",
+            "variant_count": 3,
+        },
+    )
+
+    assert resp.status_code == 200
+    request = captured_requests[0]
+    assert request.json_schema["schema"]["properties"]["variants"]["maxItems"] == 1
+    assert request.max_tokens <= 4500
+    assert json.loads(request.messages[1].content)["context"]["trip"]["variant_count"] == 1
+
+
+def test_manual_destination_regenerate_rejects_same_external_signature(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    def place(name: str, index: int) -> dict:
+        return {
+            "name": name,
+            "category": "culture",
+            "lat": 41.11 + index / 1000,
+            "lng": 1.25 + index / 1000,
+            "address": f"Address {index}",
+            "arrival_time": f"{9 + index:02d}:30",
+            "departure_time": f"{10 + index:02d}:20",
+            "visit_duration_minutes": 50,
+            "travel_from_previous_minutes": 10 if index else 0,
+            "reason": "Specific Tarragona POI.",
+            "confidence": 0.86,
+        }
+
+    same_names = [
+        "Amfiteatre de Tarragona",
+        "Circ Roma de Tarragona",
+        "Catedral de Tarragona",
+        "Balco del Mediterrani",
+    ]
+    other_names = [
+        "Passeig Arqueologic",
+        "Mercat Central de Tarragona",
+        "Museu Nacional Arqueologic de Tarragona",
+        "Forum Provincial de Tarragona",
+    ]
+    excluded_signature = (
+        f"llm-external-"
+        f"{uuid.uuid5(uuid.NAMESPACE_URL, compact_json({'trip_id': None, 'destination': 'Таррагона', 'days': [same_names]}))}"
+    )
+    responses = [
+        json.dumps(
+            {
+                "variants": [
+                    {
+                        "variant_index": 0,
+                        "title": "Same route",
+                        "days": [
+                            {
+                                "day_number": 1,
+                                "theme": "history",
+                                "places": [place(name, i) for i, name in enumerate(same_names)],
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        json.dumps(
+            {
+                "variants": [
+                    {
+                        "variant_index": 0,
+                        "title": "Different route",
+                        "days": [
+                            {
+                                "day_number": 1,
+                                "theme": "history",
+                                "places": [place(name, i) for i, name in enumerate(other_names)],
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+    ]
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
+    monkeypatch.setattr("app.services.llm.external_route.get_provider", lambda: FakeProvider(responses=responses))
+
+    resp = client.post(
+        "/api/v1/itinerary",
+        json={
+            "destination_text": "Таррагона",
+            "duration_days": 1,
+            "start_date": "2026-06-10",
+            "variant_count": 3,
+            "exclude_signature": excluded_signature,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["route_signature"] != excluded_signature
+    assert [place["name"] for place in data["days"][0]["places"]] == other_names
 
 
 def test_generate_itinerary_data_service_failure(client: TestClient, monkeypatch: pytest.MonkeyPatch):

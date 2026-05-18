@@ -167,6 +167,18 @@ def generate_itineraries(
     trip = _verify_trip_ownership(db, trip_id, user_id)
 
     seed_base = random.randint(10_000, 9_999_999)
+    has_approved_itinerary = (
+        isinstance(data, schemas.ItineraryRegenerateRequest)
+        and db.query(models.TripItinerary.id)
+        .filter(
+            models.TripItinerary.trip_id == trip_id,
+            models.TripItinerary.user_id == user_id,
+            models.TripItinerary.status == "approved",
+        )
+        .first()
+        is not None
+    )
+    effective_variant_count = 1 if not trip.destination_id or has_approved_itinerary else data.variant_count
     payload = {
         "trip_id": str(trip.id),
         "destination_id": str(trip.destination_id) if trip.destination_id else None,
@@ -175,7 +187,7 @@ def generate_itineraries(
         "rest_days_count": _rest_days_count(trip, data.rest_days_count),
         "start_date": trip.start_date.isoformat(),
         "preferred_activities": data.preferred_activities,
-        "variant_count": data.variant_count,
+        "variant_count": effective_variant_count,
         "variant_seed": seed_base,
         "pace": data.pace,
         "day_start_time": data.day_start_time.isoformat(timespec="minutes"),
@@ -218,6 +230,8 @@ def generate_itineraries(
     variants = [
         variant for variant in variants if _variant_has_required_active_days(trip, variant, payload["rest_days_count"])
     ]
+    if _contains_external_llm_route(body, variants):
+        effective_variant_count = 1
     if not variants:
         raise AppException(
             status_code=422,
@@ -231,12 +245,27 @@ def generate_itineraries(
     ).update({"status": "archived"}, synchronize_session=False)
 
     created: list[models.TripItinerary] = []
-    for index, variant in enumerate(variants[: data.variant_count]):
+    for index, variant in enumerate(variants[:effective_variant_count]):
         created.append(_persist_variant(db, user_id, trip, variant, index, seed_base + index, payload))
     db.commit()
     for item in created:
         db.refresh(item)
     return created
+
+
+def _contains_external_llm_route(body: dict, variants: list[dict]) -> bool:
+    candidates = [body, *variants]
+    for variant in candidates:
+        if not isinstance(variant, dict):
+            continue
+        score_summary = variant.get("score_summary") or {}
+        if variant.get("source") == "llm-external-draft":
+            return True
+        if str(variant.get("model_version") or "").startswith("llm-external-route:"):
+            return True
+        if isinstance(score_summary, dict) and score_summary.get("external_route_used") is True:
+            return True
+    return False
 
 
 def _variant_has_required_active_days(trip: models.Trip, variant: dict, rest_days_count: int) -> bool:
@@ -741,8 +770,6 @@ def to_response(db: Session, itinerary: models.TripItinerary) -> schemas.Itinera
     for item in item_rows:
         items_by_day.setdefault(item.day_id, []).append(item)
     score_summary = itinerary.score_summary or {}
-    day_reviews = score_summary.get("llm_quality_day_reviews") or {}
-    item_reviews = score_summary.get("llm_quality_item_reviews") or {}
     return schemas.ItineraryResponse(
         id=itinerary.id,
         trip_id=itinerary.trip_id,
@@ -753,11 +780,11 @@ def to_response(db: Session, itinerary: models.TripItinerary) -> schemas.Itinera
         model_version=itinerary.model_version,
         route_signature=itinerary.route_signature,
         constraints=itinerary.constraints,
-        score_summary=itinerary.score_summary,
+        score_summary=_public_score_summary(score_summary),
         quality_model_version=score_summary.get("llm_quality_model_version"),
-        quality_review=score_summary.get("llm_quality_review"),
-        candidate_poi=score_summary.get("llm_candidate_poi") or [],
-        days=[_day_response(day, items_by_day.get(day.id, []), day_reviews, item_reviews) for day in days],
+        quality_review=None,
+        candidate_poi=[],
+        days=[_day_response(day, items_by_day.get(day.id, [])) for day in days],
         created_at=itinerary.created_at.isoformat() if itinerary.created_at else "",
         updated_at=itinerary.updated_at.isoformat() if itinerary.updated_at else None,
     )
@@ -766,8 +793,6 @@ def to_response(db: Session, itinerary: models.TripItinerary) -> schemas.Itinera
 def _day_response(
     day: models.TripItineraryDay,
     items: list[models.TripItineraryItem],
-    day_reviews: dict,
-    item_reviews: dict,
 ) -> schemas.ItineraryDayResponse:
     return schemas.ItineraryDayResponse(
         id=day.id,
@@ -776,8 +801,8 @@ def _day_response(
         theme=day.theme,
         start_time=day.start_time,
         end_time=day.end_time,
-        quality_review=day_reviews.get(str(day.day_number)),
-        items=[_item_response(item, item_reviews) for item in items],
+        quality_review=None,
+        items=[_item_response(item) for item in items],
     )
 
 
@@ -803,8 +828,23 @@ def _item_response(item: models.TripItineraryItem, item_reviews: dict | None = N
         is_pinned=item.is_pinned,
         is_removed=item.is_removed,
         visited_place_id=item.visited_place_id,
-        quality_review=(item_reviews or {}).get(str(item.poi_id)) if item.poi_id else None,
-        external_candidate_source="llm_candidate_poi" if item.source == "external_candidate" else None,
+        quality_review=None,
+        external_candidate_source=None,
         created_at=item.created_at.isoformat() if item.created_at else "",
         updated_at=item.updated_at.isoformat() if item.updated_at else None,
     )
+
+
+def _public_score_summary(score_summary: dict) -> dict:
+    return {
+        key: value
+        for key, value in score_summary.items()
+        if not str(key).startswith("llm_quality")
+        and key
+        not in {
+            "llm_candidate_poi",
+            "llm_external_route_model",
+            "external_route_prompt_version",
+            "catalog_mutation_allowed",
+        }
+    }
