@@ -30,6 +30,12 @@ def _add_events(db: Session, user_id: uuid.UUID):
         UserEvent(
             user_id=user_id,
             session_id=session_id,
+            event_type="recommendation_impression",
+            context={"destination_ids": ["10", "30"]},
+        ),
+        UserEvent(
+            user_id=user_id,
+            session_id=session_id,
             event_type="recommendation_shown",
             entity_type="destination",
             entity_id="10",
@@ -99,6 +105,7 @@ def test_get_features_with_events_and_feedback(client: TestClient, db: Session):
     data = resp.json()
     assert data["session_count"] == 2
     assert "10" in (data["viewed_destination_ids"] or [])
+    assert "30" in (data["viewed_destination_ids"] or [])
     assert "10" in (data["clicked_destination_ids"] or [])
     assert data["completed_trips_count"] == 1
     assert data["avg_destination_rating"] == 4.0

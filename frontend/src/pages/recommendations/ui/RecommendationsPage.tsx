@@ -128,6 +128,7 @@ export const RecommendationsPage = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const trackedEmptyStates = useRef<Set<string>>(new Set());
+  const trackedRecommendationExposures = useRef<Set<string>>(new Set());
 
   const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
   const showLoadingState = isLoading || (isFetching && !data);
@@ -181,6 +182,10 @@ export const RecommendationsPage = () => {
 
   useEffect(() => {
     if (data?.results && data.results.length > 0) {
+      const key = `${data.recommendation_id}:${data.model_version}:${month}:${region ?? 'all'}`;
+      if (trackedRecommendationExposures.current.has(key)) return;
+      trackedRecommendationExposures.current.add(key);
+      const destinationIds = data.results.map((destination) => destination.destination_id);
       sendEvent('recommendation_shown', {
         recommendation_id: data.recommendation_id,
         model_version: data.model_version,
@@ -188,21 +193,13 @@ export const RecommendationsPage = () => {
         month,
         region: region ?? null,
       });
-      data.results.forEach((dest, index) => {
-        sendEvent(
-          'recommendation_impression',
-          {
-            recommendation_id: data.recommendation_id,
-            model_version: data.model_version,
-            destination_id: dest.destination_id,
-            score: dest.score,
-            rank: index + 1,
-            month,
-            region: region ?? null,
-          },
-          'destination',
-          dest.destination_id
-        );
+      sendEvent('recommendation_impression', {
+        recommendation_id: data.recommendation_id,
+        model_version: data.model_version,
+        count: data.results.length,
+        destination_ids: destinationIds,
+        month,
+        region: region ?? null,
       });
     }
     if (data?.results && data.results.length === 0) {

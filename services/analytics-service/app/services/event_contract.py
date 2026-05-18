@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, get_args
 
 CANONICAL_EVENT_VERSION = 1
-CONTRACT_VERSION = "2026-05-13"
+CONTRACT_VERSION = "2026-05-18"
 
 EventType = Literal[
     "app_opened",
@@ -96,7 +96,7 @@ FORBIDDEN_KEY_PARTS = ("password", "token", "secret", "email", "oauth")
 
 EVENT_REQUIRED_CONTEXT: dict[str, set[str]] = {
     "page_viewed": {"path"},
-    "recommendation_impression": {"recommendation_id", "destination_id", "rank", "score", "model_version"},
+    "recommendation_impression": {"recommendation_id", "count", "model_version"},
     "recommendation_shown": {"recommendation_id", "count", "model_version"},
     "recommendation_clicked": {"destination_id", "score"},
     "destination_detail_opened": {"destination_id"},

@@ -89,17 +89,16 @@ def _build_layer2(user_id: uuid.UUID, db: Session) -> dict:
     clicked_ids: list[str] = []
 
     view_rows = (
-        db.query(UserEvent.entity_id)
+        db.query(UserEvent.entity_id, UserEvent.context)
         .filter(
             UserEvent.user_id == user_id,
             UserEvent.event_type.in_(["recommendation_impression", "recommendation_shown"]),
-            UserEvent.entity_id.isnot(None),
         )
         .distinct()
         .limit(100)
         .all()
     )
-    viewed_ids = [r.entity_id for r in view_rows if r.entity_id]
+    viewed_ids = _viewed_destination_ids(view_rows)
 
     click_rows = (
         db.query(UserEvent.entity_id)
@@ -160,6 +159,25 @@ def _build_layer3(user_id: uuid.UUID, db: Session) -> dict:
         "avg_destination_rating": avg_rating,
         "would_revisit_ratio": revisit_ratio,
     }
+
+
+def _viewed_destination_ids(rows) -> list[str]:
+    destination_ids: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        if row.entity_id and row.entity_id not in seen:
+            destination_ids.append(row.entity_id)
+            seen.add(row.entity_id)
+        if not isinstance(row.context, dict):
+            continue
+        raw_context_ids = row.context.get("destination_ids")
+        if not isinstance(raw_context_ids, list):
+            continue
+        for destination_id in [str(item) for item in raw_context_ids if item]:
+            if destination_id not in seen:
+                destination_ids.append(destination_id)
+                seen.add(destination_id)
+    return destination_ids[:100]
 
 
 async def build_user_features(
