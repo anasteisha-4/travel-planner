@@ -1,4 +1,5 @@
-import type { ConvertedExpenseSummary, ExpenseCategory } from '@/entities/expense';
+import type { ConvertedExpenseSummary, Expense, ExpenseCategory } from '@/entities/expense';
+import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import {
   AlertTriangle,
   Car,
@@ -8,12 +9,16 @@ import {
   Home,
   MoreHorizontal,
   Music,
+  Plus,
   ShoppingBag,
 } from 'lucide-react';
 
 type ExpenseSummaryProps = {
   summary: ConvertedExpenseSummary;
   budget: number | null;
+  isReadonly: boolean;
+  setEditingExpense: (value: Expense | undefined) => void;
+  setShowExpenseForm: (value: boolean) => void;
 };
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -62,7 +67,7 @@ const RING_R = 54;
 const RING_SIZE = 128;
 const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
-type BudgetSummaryStatus = 'under_budget' | 'on_track' | 'risk' | 'over_budget';
+type BudgetSummaryStatus = 'forecast_only' | 'under_budget' | 'on_track' | 'risk' | 'over_budget';
 
 const STATUS_META: Record<
   BudgetSummaryStatus,
@@ -72,23 +77,28 @@ const STATUS_META: Record<
     tone: string;
   }
 > = {
+  forecast_only: {
+    badge: 'Без лимита',
+    icon: CheckCircle2,
+    tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
   under_budget: {
-    badge: 'В рамках',
+    badge: 'В рамках бюджета',
     icon: CheckCircle2,
     tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
   on_track: {
-    badge: 'В рамках',
+    badge: 'В рамках бюджета',
     icon: Gauge,
     tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
   risk: {
-    badge: 'Почти лимит',
+    badge: 'Лимит почти достигнут',
     icon: AlertTriangle,
     tone: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
   },
   over_budget: {
-    badge: 'Превышен',
+    badge: 'Лимит исчерпан',
     icon: AlertTriangle,
     tone: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
   },
@@ -113,16 +123,22 @@ const fmtBudgetShort = (v: number): string => {
   return v.toLocaleString('ru-RU');
 };
 
-export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
+export const ExpenseSummary = ({
+  summary,
+  budget,
+  isReadonly,
+  setEditingExpense,
+  setShowExpenseForm,
+}: ExpenseSummaryProps) => {
+  const { play } = useHapticFeedback();
+
   const total = Number(summary.total);
-  const planningTotal = Number(summary.planning_total);
-  const inTripTotal = Number(summary.in_trip_total);
   const currency = summary.target_currency;
   const remaining = budget ? budget - total : null;
   const pct = budget && budget > 0 ? total / budget : 0;
   const isOverBudget = pct > 1;
   const hasExpenses = total > 0;
-  const status = budget && budget > 0 ? getBudgetSummaryStatus(pct) : null;
+  const status = budget && budget > 0 ? getBudgetSummaryStatus(pct) : 'forecast_only';
   const statusMeta = status ? STATUS_META[status] : null;
   const StatusIcon = statusMeta?.icon;
 
@@ -150,92 +166,74 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
           : ''
       }`}
     >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-          Бюджет
-        </p>
+      <div className="mb-4 flex w-full items-start">
         {statusMeta && StatusIcon && (
-          <span
-            className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${statusMeta.tone}`}
+          <div
+            className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${statusMeta.tone}`}
           >
-            <StatusIcon className="h-3.5 w-3.5" />
+            <StatusIcon className="h-3 w-3" />
             {statusMeta.badge}
-          </span>
+          </div>
         )}
       </div>
 
       {/* Ring + stats */}
       <div className="flex items-center gap-4">
-        <div className="shrink-0">
-          <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-            <circle
-              cx={cx}
-              cy={cy}
-              r={RING_R}
-              fill="none"
-              stroke="hsl(var(--surface-muted))"
-              strokeWidth="10"
-            />
-            {budget && budget > 0 && (
+        {budget && budget > 0 && (
+          <div className="shrink-0">
+            <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
               <circle
                 cx={cx}
                 cy={cy}
                 r={RING_R}
                 fill="none"
-                stroke={ringColor}
+                stroke="hsl(var(--surface-muted))"
                 strokeWidth="10"
-                strokeLinecap="round"
-                strokeDasharray={CIRCUMFERENCE}
-                strokeDashoffset={dashOffset}
-                transform={`rotate(-90 ${cx} ${cy})`}
-                style={{ transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease' }}
               />
-            )}
-            {budget && budget > 0 ? (
-              <>
-                <text
-                  x={cx}
-                  y={cy - 8}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="18"
-                  fontWeight="800"
-                  fontFamily="Manrope, sans-serif"
-                  fill={hasExpenses ? (isOverBudget ? '#EF4444' : 'currentColor') : '#A8A29E'}
-                >
-                  {percentDisplay}%
-                </text>
-                <text
-                  x={cx}
-                  y={cy + 11}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="10"
-                  fontWeight="500"
-                  fontFamily="Manrope, sans-serif"
-                  fill="#A8A29E"
-                >
-                  {`из ${fmtBudgetShort(budget)}`}
-                </text>
-              </>
-            ) : (
+              {budget && budget > 0 && (
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={RING_R}
+                  fill="none"
+                  stroke={ringColor}
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDashoffset={dashOffset}
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                  style={{ transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease' }}
+                />
+              )}
               <text
                 x={cx}
-                y={cy}
+                y={cy - 8}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fontSize="20"
+                fontSize="18"
                 fontWeight="800"
+                fontFamily="Manrope, sans-serif"
+                fill={hasExpenses ? (isOverBudget ? '#EF4444' : 'currentColor') : '#A8A29E'}
+              >
+                {percentDisplay}%
+              </text>
+              <text
+                x={cx}
+                y={cy + 11}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize="10"
+                fontWeight="500"
                 fontFamily="Manrope, sans-serif"
                 fill="#A8A29E"
               >
-                0
+                {`из ${fmtBudgetShort(budget)}`}
               </text>
-            )}
-          </svg>
-        </div>
+            </svg>
+          </div>
+        )}
 
-        <div className="flex flex-1 flex-col gap-3">
+        <div className="my-2 flex flex-1 flex-col gap-3">
           <div>
             <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               Потрачено
@@ -284,29 +282,8 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
         </div>
       )}
 
-      {planningTotal > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-              До поездки
-            </p>
-            <p className="mt-1 text-[15px] font-extrabold text-stone-900 dark:text-white">
-              {fmt(planningTotal)} {currency}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-              В поездке
-            </p>
-            <p className="mt-1 text-[15px] font-extrabold text-stone-900 dark:text-white">
-              {fmt(inTripTotal)} {currency}
-            </p>
-          </div>
-        </div>
-      )}
-
       {categoryEntries.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mb-5 mt-3 flex flex-wrap gap-2">
           {categoryEntries.map(({ category, amount }) => {
             const colors = CATEGORY_COLORS[category] ?? CATEGORY_COLORS['other'];
             const Icon = CATEGORY_ICONS[category as ExpenseCategory] ?? MoreHorizontal;
@@ -322,6 +299,22 @@ export const ExpenseSummary = ({ summary, budget }: ExpenseSummaryProps) => {
               </div>
             );
           })}
+        </div>
+      )}
+      {!isReadonly && (
+        <div className="flex shrink-0 justify-end">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2 text-[13px] font-semibold text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)]"
+            onClick={() => {
+              play('nudge');
+              setEditingExpense(undefined);
+              setShowExpenseForm(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Добавить
+          </button>
         </div>
       )}
     </div>

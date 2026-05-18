@@ -41,12 +41,17 @@ type PageContentProps = {
   scrollHaptic?: boolean;
 };
 
-export const PageContent = ({ children, pb = 'pb-24', className, scrollHaptic = false }: PageContentProps) => {
+export const PageContent = ({
+  children,
+  pb = 'pb-24',
+  className,
+  scrollHaptic = false,
+}: PageContentProps) => {
   const scrollHaptics = useScrollHaptics({ enabled: scrollHaptic });
 
   return (
     <div
-      className={cn('flex-1 overflow-y-auto px-5 no-scrollbar', pb, className)}
+      className={cn('no-scrollbar flex-1 overflow-y-auto px-5', pb, className)}
       {...(scrollHaptic ? scrollHaptics : {})}
     >
       {children}

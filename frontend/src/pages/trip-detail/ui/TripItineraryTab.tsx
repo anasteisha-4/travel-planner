@@ -24,6 +24,7 @@ import {
   type YMapChild,
   type YMapInstance,
 } from '@/shared/lib';
+import type { LLMQualityReview } from '@/shared/model';
 import { AdaptiveSheet, Button, Input } from '@/shared/ui';
 import {
   closestCenter,
@@ -41,7 +42,6 @@ import { CSS } from '@dnd-kit/utilities';
 import cn from 'classnames';
 import {
   Check,
-  AlertTriangle,
   Eye,
   GripVertical,
   Info,
@@ -61,7 +61,6 @@ import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { TripDetailOutletContext } from './TripDetailPage';
-import type { LLMQualityReview } from '@/shared/model';
 
 const formatDays = (count: number): string => {
   const lastDigit = Math.abs(count) % 10;
@@ -245,7 +244,8 @@ const scoreMaybeNumber = (summary: Record<string, unknown> | null, key: string) 
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 };
 
-const scoreBoolean = (summary: Record<string, unknown> | null, key: string) => summary?.[key] === true;
+const scoreBoolean = (summary: Record<string, unknown> | null, key: string) =>
+  summary?.[key] === true;
 
 const formatUsd = (amount: number) =>
   new Intl.NumberFormat('ru-RU', {
@@ -276,7 +276,8 @@ const qualityMeta = (review?: LLMQualityReview | null) => {
   }
   return {
     label: 'Базовая проверка',
-    className: 'border-stone-300 bg-stone-100 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300',
+    className:
+      'border-stone-300 bg-stone-100 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300',
   };
 };
 
@@ -1029,9 +1030,11 @@ const ItemRow = ({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const isExternalCandidate = item.source === 'external_candidate' || Boolean(item.external_candidate_source);
-  const sourceUrl =
-    item.external_candidate_source?.startsWith('http') ? item.external_candidate_source : null;
+  const isExternalCandidate =
+    item.source === 'external_candidate' || Boolean(item.external_candidate_source);
+  const sourceUrl = item.external_candidate_source?.startsWith('http')
+    ? item.external_candidate_source
+    : null;
 
   return (
     <div
@@ -1248,132 +1251,117 @@ const ApprovedItinerary = ({
   children: (day: ItineraryDay) => React.ReactNode;
 }) => {
   const estimatedPaidTotal = scoreMaybeNumber(itinerary.score_summary, 'estimated_paid_poi_total');
-  const evidenceBackedCount = scoreNumber(itinerary.score_summary, 'evidence_backed_paid_poi_count');
+  const evidenceBackedCount = scoreNumber(
+    itinerary.score_summary,
+    'evidence_backed_paid_poi_count'
+  );
   const candidatePriceCount = scoreNumber(itinerary.score_summary, 'candidate_poi_price_count');
   const priceEstimationUsed = scoreBoolean(itinerary.score_summary, 'price_estimation_used');
-  const meta = qualityMeta(itinerary.quality_review);
   const needsRegeneration = routeNeedsRegeneration(itinerary.quality_review);
 
   return (
-  <div className="flex flex-col gap-3">
-    {meta && (
-      <div
-        className={cn(
-          'trip-info-card flex items-start gap-3 border px-3.5 py-3',
-          meta.className
-        )}
-      >
-        <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-        <div className="min-w-0">
-          <p className="text-[13px] font-extrabold">{meta.label}</p>
-          {itinerary.quality_review?.user_summary_ru && (
-            <p className="mt-1 text-[12px] font-semibold leading-snug">
-              {itinerary.quality_review.user_summary_ru}
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="trip-info-card px-3 py-3">
+          <Map className="mb-2 h-4 w-4 text-[#2563EB]" />
+          <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
+            {itinerary.days.length}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
+            {formatDays(itinerary.days.length)}
+          </p>
+        </div>
+        <div className="trip-info-card px-3 py-3">
+          <MapPinned className="mb-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
+            {getPlacesCount(itinerary)}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
+            {formatPlaces(getPlacesCount(itinerary))}
+          </p>
+        </div>
+        <div className="trip-info-card px-3 py-3">
+          <Route className="mb-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
+            {scoreNumber(itinerary.score_summary, 'travel_overhead_minutes')}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
+            мин пути
+          </p>
+        </div>
+      </div>
+      {priceEstimationUsed && estimatedPaidTotal !== null && estimatedPaidTotal > 0 && (
+        <div className="trip-info-card flex items-start gap-3 px-3.5 py-3">
+          <Info className="mt-0.5 h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-extrabold text-stone-900 dark:text-white">
+              Платные входы примерно {formatUsd(estimatedPaidTotal)}
             </p>
-          )}
-        </div>
-      </div>
-    )}
-    <div className="grid grid-cols-3 gap-2.5">
-      <div className="trip-info-card px-3 py-3">
-        <Map className="mb-2 h-4 w-4 text-[#2563EB]" />
-        <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
-          {itinerary.days.length}
-        </p>
-        <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
-          {formatDays(itinerary.days.length)}
-        </p>
-      </div>
-      <div className="trip-info-card px-3 py-3">
-        <MapPinned className="mb-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-        <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
-          {getPlacesCount(itinerary)}
-        </p>
-        <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
-          {formatPlaces(getPlacesCount(itinerary))}
-        </p>
-      </div>
-      <div className="trip-info-card px-3 py-3">
-        <Route className="mb-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
-        <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
-          {scoreNumber(itinerary.score_summary, 'travel_overhead_minutes')}
-        </p>
-        <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
-          мин пути
-        </p>
-      </div>
-    </div>
-    {priceEstimationUsed && estimatedPaidTotal !== null && estimatedPaidTotal > 0 && (
-      <div className="trip-info-card flex items-start gap-3 px-3.5 py-3">
-        <Info className="mt-0.5 h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
-        <div className="min-w-0">
-          <p className="text-[13px] font-extrabold text-stone-900 dark:text-white">
-            Платные входы примерно {formatUsd(estimatedPaidTotal)}
-          </p>
-          <p className="mt-1 text-[11px] font-semibold leading-snug text-stone-500 dark:text-stone-400">
-            {evidenceBackedCount > 0
-              ? `Есть подтверждение источниками: ${evidenceBackedCount}`
-              : 'Использованы цены из каталога'}
-            {candidatePriceCount > 0 ? `, включая кандидатов ИИ: ${candidatePriceCount}` : ''}
-          </p>
-        </div>
-      </div>
-    )}
-    <Button
-      variant="outline"
-      className={cn(
-        'h-[48px] rounded-2xl border-stone-200 bg-stone-100 text-[14px] font-bold text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200',
-        needsRegeneration && 'border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
-      )}
-      onClick={onRegenerate}
-      disabled={isRegenerating}
-    >
-      {isRegenerating ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        <RefreshCw className="h-4 w-4" />
-      )}
-      {needsRegeneration ? 'Пересобрать маршрут' : 'Собрать другой вариант'}
-    </Button>
-    {itinerary.days.map((day) => {
-      const restDay = isRestDay(day);
-      const timeRange = getDayTimeRange(day);
-      const placesCount = getVisibleItems(day).length;
-
-      return (
-        <section
-          key={day.id}
-          className={cn(
-            'trip-info-card flex flex-col gap-3 transition-colors duration-150',
-            dropTargetDayId === day.id &&
-              'bg-blue-50/70 ring-2 ring-blue-500/15 dark:bg-blue-950/20'
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-                День {day.day_number}
-              </p>
-              <h2 className="mt-1 text-[18px] font-extrabold text-stone-900 dark:text-white">
-                {restDay
-                  ? 'День отдыха'
-                  : `${formatTime(timeRange?.start ?? null)} - ${formatTime(timeRange?.end ?? null)}`}
-              </h2>
-            </div>
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-500 dark:bg-[hsl(var(--surface-muted))] dark:text-stone-400">
-              {restDay ? 'Без активностей' : `${placesCount} ${formatPlaces(placesCount)}`}
-            </span>
+            <p className="mt-1 text-[11px] font-semibold leading-snug text-stone-500 dark:text-stone-400">
+              {evidenceBackedCount > 0
+                ? `Есть подтверждение источниками: ${evidenceBackedCount}`
+                : 'Использованы цены из каталога'}
+              {candidatePriceCount > 0 ? `, включая кандидатов ИИ: ${candidatePriceCount}` : ''}
+            </p>
           </div>
-          {warningIssues(day.quality_review).length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-              {warningIssues(day.quality_review)[0].message}
+        </div>
+      )}
+      <Button
+        variant="outline"
+        className={cn(
+          'h-[48px] rounded-2xl border-stone-200 bg-stone-100 text-[14px] font-bold text-stone-700 dark:border-[hsl(var(--surface-border))] dark:bg-[hsl(var(--surface-muted))] dark:text-stone-200',
+          needsRegeneration &&
+            'border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
+        )}
+        onClick={onRegenerate}
+        disabled={isRegenerating}
+      >
+        {isRegenerating ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <RefreshCw className="h-4 w-4" />
+        )}
+        {needsRegeneration ? 'Пересобрать маршрут' : 'Собрать другой вариант'}
+      </Button>
+      {itinerary.days.map((day) => {
+        const restDay = isRestDay(day);
+        const timeRange = getDayTimeRange(day);
+        const placesCount = getVisibleItems(day).length;
+
+        return (
+          <section
+            key={day.id}
+            className={cn(
+              'trip-info-card flex flex-col gap-3 transition-colors duration-150',
+              dropTargetDayId === day.id &&
+                'bg-blue-50/70 ring-2 ring-blue-500/15 dark:bg-blue-950/20'
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                  День {day.day_number}
+                </p>
+                <h2 className="mt-1 text-[18px] font-extrabold text-stone-900 dark:text-white">
+                  {restDay
+                    ? 'День отдыха'
+                    : `${formatTime(timeRange?.start ?? null)} - ${formatTime(timeRange?.end ?? null)}`}
+                </h2>
+              </div>
+              <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-500 dark:bg-[hsl(var(--surface-muted))] dark:text-stone-400">
+                {restDay ? 'Без активностей' : `${placesCount} ${formatPlaces(placesCount)}`}
+              </span>
             </div>
-          )}
-          {children(day)}
-        </section>
-      );
-    })}
-  </div>
+            {warningIssues(day.quality_review).length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                {warningIssues(day.quality_review)[0].message}
+              </div>
+            )}
+            {children(day)}
+          </section>
+        );
+      })}
+    </div>
   );
 };
 
@@ -1670,7 +1658,7 @@ export const TripItineraryTab = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 pb-24 pt-4">
+    <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-4">
       <div className="flex flex-col gap-3">
         {stateQuery.isPending && (
           <div className="trip-info-card flex items-center gap-3 px-4 py-4">

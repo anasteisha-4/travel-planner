@@ -1,14 +1,18 @@
 import type { Expense } from '@/entities/expense';
-import type { TripDetailOutletContext } from './TripDetailPage';
-import { DeleteExpenseSheet, ExpenseForm, ExpenseList, ExpenseSummary, useExpenses } from '@/features/expenses';
+import {
+  DeleteExpenseSheet,
+  ExpenseForm,
+  ExpenseList,
+  ExpenseSummary,
+  useExpenses,
+} from '@/features/expenses';
 import { sendEvent } from '@/shared/api';
-import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import type { TripDetailOutletContext } from './TripDetailPage';
 
 export const TripExpensesTab = () => {
-  const { play } = useHapticFeedback();
   const { trip } = useOutletContext<TripDetailOutletContext>();
 
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -18,7 +22,7 @@ export const TripExpensesTab = () => {
 
   const { expenses, convertedSummary, loading, refetch, removeExpense } = useExpenses(
     trip.id,
-    trip.currency,
+    trip.currency
   );
 
   const isReadonly = trip.status === 'completed' || trip.status === 'cancelled';
@@ -61,24 +65,7 @@ export const TripExpensesTab = () => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {!isReadonly && (
-        <div className="flex shrink-0 justify-end px-5 pb-2 pt-3">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2 text-[13px] font-semibold text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)]"
-            onClick={() => {
-              play('nudge');
-              setEditingExpense(undefined);
-              setShowExpenseForm(true);
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Добавить
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-5 pb-24 pt-2">
+      <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-2">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
@@ -86,7 +73,13 @@ export const TripExpensesTab = () => {
         ) : (
           <div className="flex flex-col gap-3">
             {convertedSummary && (
-              <ExpenseSummary summary={convertedSummary} budget={trip.budget} />
+              <ExpenseSummary
+                summary={convertedSummary}
+                budget={trip.budget}
+                isReadonly={isReadonly}
+                setEditingExpense={setEditingExpense}
+                setShowExpenseForm={setShowExpenseForm}
+              />
             )}
             <ExpenseList
               expenses={expenses}

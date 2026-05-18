@@ -306,7 +306,7 @@ export const RecommendationsPage = () => {
         />
       </AppPageHeader>
 
-      <PageContent className="pt-4">
+      <PageContent>
         {showLoadingState ? (
           <RecommendationsLoadingState messageIndex={displayedLoadingMessageIndex} />
         ) : isError ? (

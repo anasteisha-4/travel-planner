@@ -245,7 +245,7 @@ export const DestinationValidationCompact = ({
             Проверка направления
           </p>
           <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
-            {isFetching ? 'Обновляем проверку...' : 'Виза, сезон, бюджет и риск'}
+            {isFetching && 'Обновляем проверку...'}
           </p>
         </div>
         <span
@@ -260,9 +260,7 @@ export const DestinationValidationCompact = ({
         {FACTORS.map((factor) => {
           const warning = warningsByType.get(factor.key);
           const status =
-            factor.key === 'budget' && missingBudget
-              ? 'caution'
-              : statusFromWarning(warning);
+            factor.key === 'budget' && missingBudget ? 'caution' : statusFromWarning(warning);
           const meta = STATUS_META[status];
           const title =
             factor.key === 'budget' && budgetUnlimited

@@ -238,7 +238,7 @@ export const ExpenseForm = ({
         onOpenChange(newOpen);
       }}
       title={isEdit ? 'Редактировать расход' : 'Добавить расход'}
-      description="Категория, сумма, дата и описание расхода"
+      description=""
       bodyClassName="pb-6"
       footer={footer}
     >

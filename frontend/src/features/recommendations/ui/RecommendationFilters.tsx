@@ -16,10 +16,14 @@ const MONTHS = [
 ] as const;
 
 const SEASON_CLASS: Record<string, string> = {
-  winter: 'data-[active=true]:border-blue-400 data-[active=true]:bg-blue-500/10 data-[active=true]:text-blue-600 dark:data-[active=true]:text-blue-300',
-  spring: 'data-[active=true]:border-emerald-400 data-[active=true]:bg-emerald-500/10 data-[active=true]:text-emerald-600 dark:data-[active=true]:text-emerald-300',
-  summer: 'data-[active=true]:border-amber-400 data-[active=true]:bg-amber-500/10 data-[active=true]:text-amber-600 dark:data-[active=true]:text-amber-300',
-  autumn: 'data-[active=true]:border-orange-400 data-[active=true]:bg-orange-500/10 data-[active=true]:text-orange-600 dark:data-[active=true]:text-orange-300',
+  winter:
+    'data-[active=true]:border-blue-400 data-[active=true]:bg-blue-500/10 data-[active=true]:text-blue-600 dark:data-[active=true]:text-blue-300',
+  spring:
+    'data-[active=true]:border-emerald-400 data-[active=true]:bg-emerald-500/10 data-[active=true]:text-emerald-600 dark:data-[active=true]:text-emerald-300',
+  summer:
+    'data-[active=true]:border-amber-400 data-[active=true]:bg-amber-500/10 data-[active=true]:text-amber-600 dark:data-[active=true]:text-amber-300',
+  autumn:
+    'data-[active=true]:border-orange-400 data-[active=true]:bg-orange-500/10 data-[active=true]:text-orange-600 dark:data-[active=true]:text-orange-300',
 };
 
 const REGIONS = [
@@ -46,7 +50,7 @@ export const RecommendationFilters = ({
   onRegionChange,
 }: RecommendationFiltersProps) => (
   <div className="flex flex-col gap-3">
-    <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+    <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
       {MONTHS.map((item) => {
         const isActive = item.num === month;
         return (
@@ -56,19 +60,18 @@ export const RecommendationFilters = ({
             data-active={isActive}
             onClick={() => onMonthChange(item.num)}
             className={cn(
-              'flex min-h-12 min-w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 text-muted-foreground transition active:scale-[0.98]',
+              'flex min-h-8 min-w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] px-3 text-muted-foreground transition active:scale-[0.98]',
               SEASON_CLASS[item.season],
               isActive && 'font-extrabold'
             )}
           >
             <span className="text-[12px] leading-none">{item.short}</span>
-            <span className="mt-1 text-[10px] leading-none opacity-75">{item.num}</span>
           </button>
         );
       })}
     </div>
 
-    <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+    <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
       {REGIONS.map((item) => {
         const isActive = region === item.key;
         return (
@@ -77,7 +80,7 @@ export const RecommendationFilters = ({
             type="button"
             onClick={() => onRegionChange(item.key)}
             className={cn(
-              'min-h-9 shrink-0 rounded-full border px-4 text-[12px] font-bold transition active:scale-[0.98]',
+              'min-h-8 shrink-0 rounded-full border px-4 text-[12px] font-bold transition active:scale-[0.98]',
               isActive
                 ? 'border-primary/50 bg-primary/10 text-primary'
                 : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] text-muted-foreground'

@@ -1,9 +1,9 @@
-import type { TripDetailOutletContext } from './TripDetailPage';
 import { useFeedback } from '@/features/feedback';
 import { useItineraryState } from '@/features/itinerary';
 import { profileApi } from '@/features/profile';
 import { useBudgetMonitor, useBudgetPrediction } from '@/features/recommendations';
 import { BudgetMonitoringCard, useTripAnalytics } from '@/features/trips';
+import { sendEvent } from '@/shared/api';
 import { localizeDestinationName } from '@/shared/lib';
 import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import { Button } from '@/shared/ui';
@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { sendEvent } from '@/shared/api';
+import type { TripDetailOutletContext } from './TripDetailPage';
 
 const formatDateFull = (dateStr: string) => {
   if (!dateStr) return '';
@@ -20,25 +20,6 @@ const formatDateFull = (dateStr: string) => {
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
   } catch {
     return dateStr;
-  }
-};
-
-const formatYear = (dateStr: string) => {
-  if (!dateStr) return '';
-  try {
-    return new Date(dateStr + 'T00:00:00').getFullYear().toString();
-  } catch {
-    return '';
-  }
-};
-
-const getDaysDiff = (start: string, end: string) => {
-  try {
-    const s = new Date(start + 'T00:00:00');
-    const e = new Date(end + 'T00:00:00');
-    return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
-  } catch {
-    return null;
   }
 };
 
@@ -87,8 +68,20 @@ const isCandidatePriceSource = (source: unknown) =>
   'candidate_poi' in source &&
   source.candidate_poi === true;
 
-const isManualForecastExpense = (expense: { category: string; description?: string | null; expense_date?: string | null; is_one_time?: boolean }, tripStart: string, tripEnd: string) => {
-  if (expense.expense_date && (expense.expense_date < tripStart || expense.expense_date > tripEnd)) {
+const isManualForecastExpense = (
+  expense: {
+    category: string;
+    description?: string | null;
+    expense_date?: string | null;
+    is_one_time?: boolean;
+  },
+  tripStart: string,
+  tripEnd: string
+) => {
+  if (
+    expense.expense_date &&
+    (expense.expense_date < tripStart || expense.expense_date > tripEnd)
+  ) {
     return false;
   }
   if (expense.is_one_time || expense.category === 'housing') {
@@ -142,26 +135,35 @@ export const TripInfoTab = () => {
     if (!itinerary) return null;
     const today = todayParam;
     const remainingDays = itinerary.days.filter((day) => day.date >= today);
-    const remainingItems = remainingDays.flatMap((day) => day.items.filter((item) => !item.is_removed && !item.visited_place_id));
+    const remainingItems = remainingDays.flatMap((day) =>
+      day.items.filter((item) => !item.is_removed && !item.visited_place_id)
+    );
     const priceSources = getPriceSources(itinerary.score_summary);
     const evidenceBackedSourceCount = priceSources.filter(isEvidenceBackedSource).length;
     const hasPriceEvidence = evidenceBackedSourceCount > 0;
     const durations = remainingItems
       .map((item) => item.duration_minutes)
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-    const remainingEntranceFees = remainingItems.reduce((sum, item) => sum + (item.entrance_fee_usd ?? 0), 0);
+    const remainingEntranceFees = remainingItems.reduce(
+      (sum, item) => sum + (item.entrance_fee_usd ?? 0),
+      0
+    );
     return {
       generated_days_count: itinerary.days.length,
       remaining_days_count: remainingDays.length,
       remaining_poi_count: remainingItems.length,
       remaining_food_poi_count: remainingItems.filter((item) => item.category === 'food').length,
-      remaining_paid_poi_count: remainingItems.filter((item) => item.entrance_fee_usd !== null).length,
+      remaining_paid_poi_count: remainingItems.filter((item) => item.entrance_fee_usd !== null)
+        .length,
       remaining_estimated_entrance_fees: remainingEntranceFees,
       remaining_evidence_backed_entrance_fees: hasPriceEvidence ? remainingEntranceFees : 0,
       evidence_backed_price_count: evidenceBackedSourceCount,
       candidate_poi_price_count: priceSources.filter(isCandidatePriceSource).length,
       price_estimation_used: Boolean(itinerary.score_summary?.price_estimation_used),
-      avg_visit_duration_minutes: durations.length > 0 ? durations.reduce((sum, value) => sum + value, 0) / durations.length : null,
+      avg_visit_duration_minutes:
+        durations.length > 0
+          ? durations.reduce((sum, value) => sum + value, 0) / durations.length
+          : null,
     };
   }, [itineraryState?.approved, todayParam]);
   const budgetPredictionParams = useMemo(
@@ -172,7 +174,10 @@ export const TripInfoTab = () => {
             duration_days: durationDays,
             people_count: trip.people_count,
             travel_month: getTravelMonth(trip.start_date),
-            accommodation_tier: getAccommodationTier(profile?.budget_min_usd, profile?.budget_max_usd),
+            accommodation_tier: getAccommodationTier(
+              profile?.budget_min_usd,
+              profile?.budget_max_usd
+            ),
             currency: trip.currency,
             origin_city_name: profile?.origin_city_name ?? trip.departure_city,
             origin_lat: profile?.origin_lat,
@@ -221,12 +226,12 @@ export const TripInfoTab = () => {
   }, [budgetPrediction]);
   const plannedDailyBudget =
     budgetPrediction && monitorPreTripPrediction
-      ? budgetPrediction.daily_recurring_mid ??
+      ? (budgetPrediction.daily_recurring_mid ??
         Math.max(
           0,
           monitorPreTripPrediction.total_mid -
             (monitorPreTripPrediction.breakdown.travel_to_destination ?? 0)
-        ) / Math.max(budgetPrediction.duration_days, 1)
+        ) / Math.max(budgetPrediction.duration_days, 1))
       : null;
   const manualForecastExpenseCount = expenses.filter((expense) =>
     isManualForecastExpense(expense, trip.start_date, trip.end_date)
@@ -350,7 +355,7 @@ export const TripInfoTab = () => {
   const cardBase = isCancelled ? 'trip-info-card-muted' : 'trip-info-card';
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 pb-24 pt-4">
+    <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-4">
       <div className="flex flex-col gap-3">
         {isCancelled && (
           <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50/60 px-4 py-3 dark:border-red-900/50 dark:bg-red-900/20">
@@ -379,11 +384,8 @@ export const TripInfoTab = () => {
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               Начало
             </p>
-            <p className="text-[20px] font-bold leading-snug text-stone-900 dark:text-white">
+            <p className="text-[20px] font-bold leading-tight text-stone-900 dark:text-white">
               {formatDateFull(trip.start_date)}
-            </p>
-            <p className="mt-1.5 text-[12px] font-medium text-stone-400 dark:text-stone-500">
-              {formatYear(trip.start_date)}
             </p>
           </div>
           <div className="mx-[20px] w-px self-stretch bg-stone-200 dark:bg-stone-700" />
@@ -391,27 +393,8 @@ export const TripInfoTab = () => {
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               Конец
             </p>
-            <p className="text-[20px] font-bold leading-snug text-stone-900 dark:text-white">
+            <p className="text-[20px] font-bold leading-tight text-stone-900 dark:text-white">
               {formatDateFull(trip.end_date)}
-            </p>
-            <p className="mt-1.5 text-[12px] font-medium text-stone-400 dark:text-stone-500">
-              {formatYear(trip.end_date)}
-              {(() => {
-                const d = getDaysDiff(trip.start_date, trip.end_date);
-                if (d === null) return null;
-                const label =
-                  d % 10 === 1 && d % 100 !== 11
-                    ? 'день'
-                    : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)
-                      ? 'дня'
-                      : 'дней';
-                return (
-                  <>
-                    {' '}
-                    · {d} {label}
-                  </>
-                );
-              })()}
             </p>
           </div>
         </div>

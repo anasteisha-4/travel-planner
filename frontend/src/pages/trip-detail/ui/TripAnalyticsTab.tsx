@@ -43,22 +43,22 @@ const STATUS_META: Record<
   }
 > = {
   under_budget: {
-    badge: 'В рамках',
+    badge: 'В рамках бюджета',
     icon: CheckCircle2,
     tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
   on_track: {
-    badge: 'В рамках',
+    badge: 'В рамках бюджета',
     icon: Gauge,
     tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
   risk: {
-    badge: 'Почти лимит',
+    badge: 'Лимит почти достигнут',
     icon: AlertTriangle,
     tone: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
   },
   over_budget: {
-    badge: 'Превышен',
+    badge: 'Лимит исчерпан',
     icon: AlertTriangle,
     tone: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
   },
@@ -135,10 +135,10 @@ export const TripAnalyticsTab = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 pb-24 pt-4">
+    <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-2">
       <div className="flex flex-col gap-3">
         {/* Hero card */}
-        <div className="relative overflow-hidden rounded-[28px] border border-blue-100 bg-[linear-gradient(150deg,#EFF6FF_0%,#DBEAFE_50%,#EDE9FE_100%)] px-6 py-8 text-center dark:border-blue-500/20 dark:bg-[linear-gradient(150deg,rgba(30,58,95,0.78)_0%,rgba(30,64,175,0.42)_48%,rgba(67,56,202,0.30)_100%)]">
+        <div className="relative overflow-hidden rounded-[28px] border border-blue-100 bg-[linear-gradient(150deg,#EFF6FF_0%,#DBEAFE_50%,#EDE9FE_100%)] px-2 py-3.5 text-center dark:border-blue-500/20 dark:bg-[linear-gradient(150deg,rgba(30,58,95,0.78)_0%,rgba(30,64,175,0.42)_48%,rgba(67,56,202,0.30)_100%)]">
           <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-blue-300/20 dark:bg-blue-400/10" />
           <div className="pointer-events-none absolute -bottom-8 -left-6 h-28 w-28 rounded-full bg-indigo-300/15 dark:bg-indigo-300/10" />
 
@@ -182,24 +182,26 @@ export const TripAnalyticsTab = () => {
             <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               Длительность
             </p>
-            <p className="text-[38px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
-              {durationDays}
-            </p>
-            <p className="mt-1.5 text-[13px] font-medium text-stone-400 dark:text-stone-500">
-              {pluralDays(durationDays)}
-            </p>
+            <div className="flex items-baseline gap-1">
+              <p className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+                {durationDays}
+              </p>
+              <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
+                {pluralDays(durationDays)}
+              </p>
+            </div>
           </div>
 
           <div className="trip-info-card">
             <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               Мест
             </p>
-            <p className="text-[38px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
-              {placesVisited}
-            </p>
-            <p className="mt-1.5 text-[13px] font-medium text-stone-400 dark:text-stone-500">
-              посещено
-            </p>
+            <div className="flex items-baseline gap-1">
+              <p className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-white">
+                {placesVisited}
+              </p>
+              <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">посещено</p>
+            </div>
           </div>
         </div>
 
@@ -209,7 +211,7 @@ export const TripAnalyticsTab = () => {
             Потрачено
           </p>
           <div className="flex items-baseline gap-2">
-            <p className="text-[42px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
+            <p className="text-[22px] font-extrabold leading-none tracking-tight text-stone-900 dark:text-white">
               {fmt(totalSpent)}
             </p>
             <p className="pb-1 text-[16px] font-semibold text-stone-400 dark:text-stone-500">
@@ -228,9 +230,14 @@ export const TripAnalyticsTab = () => {
               <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
                 В поездке / день
               </p>
-              <p className="text-[20px] font-extrabold leading-none tracking-tight text-stone-700 dark:text-stone-300">
-                {fmt(avgPerDay)} {currency}
-              </p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-[22px] font-extrabold leading-none tracking-tight text-stone-700 dark:text-stone-300">
+                  {fmt(avgPerDay)}
+                </p>
+                <p className="pb-1 text-[16px] font-semibold text-stone-400 dark:text-stone-500">
+                  {currency}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -254,7 +261,7 @@ export const TripAnalyticsTab = () => {
               </div>
               {budgetStatusMeta && BudgetStatusIcon && (
                 <span
-                  className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${budgetStatusMeta.tone}`}
+                  className={`flex min-h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${budgetStatusMeta.tone}`}
                 >
                   <BudgetStatusIcon className="h-3.5 w-3.5" />
                   {budgetStatusMeta.badge}

@@ -1,5 +1,6 @@
-import { groupPlacesByDate } from '@/entities/place';
 import type { PlaceVisit } from '@/entities/place';
+import { groupPlacesByDate } from '@/entities/place';
+import type { DragEndEvent } from '@dnd-kit/core';
 import {
   DndContext,
   PointerSensor,
@@ -8,7 +9,6 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { MapPin } from 'lucide-react';
 
@@ -32,7 +32,7 @@ type PlaceListProps = {
 export const PlaceList = ({ places, onSelectPlace, onReorder }: PlaceListProps) => {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   );
 
   if (places.length === 0) {
@@ -41,15 +41,19 @@ export const PlaceList = ({ places, onSelectPlace, onReorder }: PlaceListProps) 
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-stone-100 dark:bg-[hsl(var(--surface-muted))]">
           <MapPin className="h-6 w-6 text-stone-400 dark:text-stone-500" />
         </div>
-        <p className="text-[15px] font-semibold text-stone-500 dark:text-stone-400">Нет посещённых мест</p>
-        <p className="text-[13px] text-stone-400 dark:text-stone-500">Добавьте первое место через карту</p>
+        <p className="text-[15px] font-semibold text-stone-500 dark:text-stone-400">
+          Нет посещённых мест
+        </p>
+        <p className="text-[13px] text-stone-400 dark:text-stone-500">
+          Добавьте первое место через карту
+        </p>
       </div>
     );
   }
 
   const groups = groupPlacesByDate(places);
   const groupOffsets = groups.map((_, i) =>
-    groups.slice(0, i).reduce((acc, g) => acc + g.places.length, 0),
+    groups.slice(0, i).reduce((acc, g) => acc + g.places.length, 0)
   );
 
   return (
@@ -71,7 +75,11 @@ export const PlaceList = ({ places, onSelectPlace, onReorder }: PlaceListProps) 
             <p className="mb-2.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
               {formatSectionDate(group.date)}
             </p>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
               <SortableContext items={ids} strategy={verticalListSortingStrategy}>
                 <div className="flex flex-col gap-2">
                   {group.places.map((place, i) => (

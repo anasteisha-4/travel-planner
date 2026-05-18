@@ -3,7 +3,7 @@ import { sendEvent } from '@/shared/api';
 import { getCountryFlag, localizeDestinationName, useDebouncedValue } from '@/shared/lib';
 import { AppInput } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, Search } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 type DestinationCheckSearchProps = {
@@ -66,21 +66,7 @@ export const DestinationCheckSearch = ({ onSelect }: DestinationCheckSearchProps
     (results.length > 0 || isFetching);
 
   return (
-    <section className="relative z-30 rounded-[24px] border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)] dark:shadow-none">
-      <div className="mb-3 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          <CheckCircle2 className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[15px] font-extrabold leading-tight text-foreground">
-            Проверить направление
-          </p>
-          <p className="mt-1 text-[13px] font-semibold leading-snug text-muted-foreground">
-            Найдите город или страну из общего каталога
-          </p>
-        </div>
-      </div>
-
+    <section className="relative z-30 rounded-[24px]">
       <div className="relative">
         <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
           {isFetching ? (
@@ -98,13 +84,12 @@ export const DestinationCheckSearch = ({ onSelect }: DestinationCheckSearchProps
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Например, Стамбул или Япония"
+          placeholder="Проверить направление из каталога"
           className="h-12 pl-10 pr-4 text-[15px] font-bold"
         />
       </div>
-
       {showDropdown && (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))] shadow-[0_16px_42px_rgba(0,0,0,0.18)]">
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-elevated))]">
           {isFetching && results.length === 0 ? (
             <div className="flex items-center gap-2 px-4 py-3 text-[14px] font-semibold text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
