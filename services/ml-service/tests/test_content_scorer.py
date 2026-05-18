@@ -282,7 +282,15 @@ def test_explanation_tags_max_5():
 
 
 def _make_dest(dest_id: uuid.UUID, name: str = "TestCity") -> dict:
-    return {"id": str(dest_id), "name": name, "country_code": "XX", "region": "TestRegion", "subregion": "TestSub"}
+    return {
+        "id": str(dest_id),
+        "name": name,
+        "country_code": "XX",
+        "region": "TestRegion",
+        "subregion": "TestSub",
+        "lat": 40.0,
+        "lng": 30.0,
+    }
 
 
 def _make_features(dest_id: uuid.UUID, **overrides) -> tuple[uuid.UUID, dict]:
@@ -321,6 +329,7 @@ def _make_profile(**overrides) -> dict:
         "climate_preferences": ["any"],
         "liked_destination_ids": [],
         "origin_lat": 55.75,
+        "origin_lng": 37.62,
     }
     base.update(overrides)
     return base
@@ -413,6 +422,55 @@ def test_scorer_region_filter():
         filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": "Europe"},
     )
     assert results == []
+
+
+def test_scorer_middle_east_filter_matches_country_codes_inside_asia():
+    scorer = ContentScorer()
+    ae_id = uuid.uuid4()
+    in_id = uuid.uuid4()
+    dests = [
+        {**_make_dest(ae_id, "Dubai"), "country_code": "AE", "region": "Asia"},
+        {**_make_dest(in_id, "Goa"), "country_code": "IN", "region": "Asia"},
+    ]
+    results = scorer.score(
+        user_profile=_make_profile(),
+        destinations=dests,
+        dest_features={
+            ae_id: _make_features(ae_id)[1],
+            in_id: _make_features(in_id)[1],
+        },
+        travel_month=7,
+        filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": "Middle East"},
+    )
+
+    assert [item.destination_id for item in results] == [ae_id]
+
+
+def test_scorer_excludes_origin_destination_by_coordinates():
+    scorer = ContentScorer()
+    moscow_id = uuid.uuid4()
+    petersburg_id = uuid.uuid4()
+    dests = [
+        {
+            **_make_dest(moscow_id, "Москва"),
+            "name_original": "Moscow",
+            "lat": 55.7558,
+            "lng": 37.6173,
+        },
+        {**_make_dest(petersburg_id, "Saint Petersburg"), "lat": 59.9311, "lng": 30.3609},
+    ]
+    results = scorer.score(
+        user_profile=_make_profile(origin_city_name="Москва", origin_lat=55.7558, origin_lng=37.6173),
+        destinations=dests,
+        dest_features={
+            moscow_id: _make_features(moscow_id)[1],
+            petersburg_id: _make_features(petersburg_id)[1],
+        },
+        travel_month=7,
+        filters={"citizenship_code": "RU", "exclude_destination_ids": [], "region": None},
+    )
+
+    assert [item.destination_id for item in results] == [petersburg_id]
 
 
 def test_scorer_sorted_by_score_desc():

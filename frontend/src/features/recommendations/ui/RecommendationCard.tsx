@@ -83,13 +83,6 @@ const getSeasonMeta = (score: number) => {
   return { label: 'Не сезон', className: 'text-muted-foreground', dot: 'bg-muted-foreground' };
 };
 
-const getMatchTone = (score: number) => {
-  if (score >= 0.8)
-    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
-  if (score >= 0.6) return 'border-primary/40 bg-primary/10 text-primary';
-  return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300';
-};
-
 const formatDailyCost = (amount: number, currency: string) => {
   try {
     return new Intl.NumberFormat('ru-RU', {
@@ -116,7 +109,6 @@ export const RecommendationCard = ({
   const flag = getCountryFlag(destination.country_code);
   const season = getSeasonMeta(destination.season_score ?? 0);
   const topTags = destination.explanation_tags.slice(0, 3);
-  const score = Math.round(destination.score * 100);
   const dailyCost =
     destination.avg_daily_budget ?? destination.avg_daily_cost ?? destination.avg_daily_cost_usd;
   const dailyCostCurrency =
@@ -147,15 +139,6 @@ export const RecommendationCard = ({
               {destination.region}
             </p>
           </div>
-        </div>
-        <div
-          className={cn(
-            'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border font-extrabold leading-none',
-            getMatchTone(destination.score)
-          )}
-        >
-          <span className="text-[15px]">{score}</span>
-          <span className="text-[13px]">%</span>
         </div>
       </div>
 

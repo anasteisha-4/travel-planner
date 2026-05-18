@@ -94,6 +94,25 @@ CLIMATE_ATTRIBUTE_MAP: dict[str, list[str]] = {
     "any": [],
 }
 
+MIDDLE_EAST_COUNTRY_CODES = {
+    "AE",
+    "BH",
+    "CY",
+    "IL",
+    "IQ",
+    "IR",
+    "JO",
+    "KW",
+    "LB",
+    "OM",
+    "PS",
+    "QA",
+    "SA",
+    "SY",
+    "TR",
+    "YE",
+}
+
 
 ACTIVITY_TYPES = [
     "beach",
@@ -421,6 +440,40 @@ def _origin_proximity_score(
         return 0.20
 
 
+def _destination_matches_region(dest: dict, region_filter: str | None) -> bool:
+    if not region_filter:
+        return True
+    if region_filter == "Middle East":
+        return str(dest.get("country_code") or "").upper() in MIDDLE_EAST_COUNTRY_CODES
+    return dest.get("region") == region_filter
+
+
+def _is_origin_destination(user_profile: dict, dest: dict) -> bool:
+    origin_lat = user_profile.get("origin_lat")
+    origin_lng = user_profile.get("origin_lng")
+    dest_lat = dest.get("lat")
+    dest_lng = dest.get("lng")
+    if origin_lat is not None and origin_lng is not None and dest_lat is not None and dest_lng is not None:
+        distance_km = _haversine_km(float(origin_lat), float(origin_lng), float(dest_lat), float(dest_lng))
+        if distance_km <= 50:
+            return True
+
+    origin_name = _normalize_city_name(user_profile.get("origin_city_name"))
+    if not origin_name:
+        return False
+    names = {
+        _normalize_city_name(dest.get("name")),
+        _normalize_city_name(dest.get("name_original")),
+        _normalize_city_name(dest.get("display_name")),
+        _normalize_city_name(dest.get("name_ru")),
+    }
+    return origin_name in names
+
+
+def _normalize_city_name(value: object) -> str:
+    return str(value or "").strip().casefold().replace("ё", "е")
+
+
 def _explanation_tags(
     breakdown: dict[str, float],
     features: dict[str, Any],
@@ -554,7 +607,9 @@ class ContentScorer:
 
             if dest_id in exclude_ids:
                 continue
-            if region_filter and dest.get("region") != region_filter:
+            if _is_origin_destination(user_profile, dest):
+                continue
+            if not _destination_matches_region(dest, region_filter):
                 continue
 
             f = dest_features.get(dest_id, {})

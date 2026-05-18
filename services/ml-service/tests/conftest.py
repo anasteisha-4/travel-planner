@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import settings
 from app.database import Base, get_db
 from app.deps import get_current_user_id
 from app.main import app
@@ -59,6 +60,7 @@ def create_test_schema():
 
 @pytest.fixture(autouse=True)
 def clean_tables():
+    settings.LLM_QUALITY_ENABLED = False
     yield
     db = TestingSessionLocal()
     try:

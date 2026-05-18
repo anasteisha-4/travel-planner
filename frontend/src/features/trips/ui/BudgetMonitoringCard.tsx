@@ -275,17 +275,19 @@ export const BudgetMonitoringCard = ({
           <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
             Контроль бюджета
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-[13px] font-semibold text-stone-600 dark:text-stone-300">
-              {isForecastOnly ? 'Прогноз без лимита' : meta.description}
-            </span>
-          </div>
+          {isForecastOnly ? null : (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span className="text-[13px] font-semibold text-stone-600 dark:text-stone-300">
+                {isForecastOnly ? 'Прогноз без лимита' : meta.description}
+              </span>
+            </div>
+          )}
         </div>
         <span
           className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-bold ${meta.tone}`}
         >
           <Icon className="h-3.5 w-3.5" />
-          {isForecastOnly ? 'Прогноз' : meta.badge}
+          {isForecastOnly ? 'Прогноз без лимита' : meta.badge}
         </span>
       </div>
 

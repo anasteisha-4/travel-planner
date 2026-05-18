@@ -8,6 +8,7 @@ ContentScorer if no model is available.
 import io
 import logging
 import math
+import threading
 import uuid
 from typing import Any
 
@@ -17,7 +18,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.schemas.recommendation import ScoredDestination
-from app.services.content_scorer import ContentScorer, _explanation_tags
+from app.services.content_scorer import (
+    ContentScorer,
+    _destination_matches_region,
+    _explanation_tags,
+    _is_origin_destination,
+)
 
 ACTIVITY_TYPES_DEST = [
     "beach",
@@ -35,6 +41,8 @@ ACTIVITY_TYPES_DEST = [
 logger = logging.getLogger(__name__)
 
 _content_scorer = ContentScorer()
+_scorer_cache_lock = threading.Lock()
+_scorer_cache: dict[str, Any] = {}
 
 ACTIVITY_TYPE_MAP = {
     "beach": "act_beach",
@@ -443,7 +451,9 @@ class LTRScorer:
                 continue
             if dest_id in exclude_ids:
                 continue
-            if region_filter and dest.get("region") != region_filter:
+            if _is_origin_destination(user_profile, dest):
+                continue
+            if not _destination_matches_region(dest, region_filter):
                 continue
 
             f = dest_features.get(dest_id, {})
@@ -523,7 +533,7 @@ def get_scorer_by_version(db: Session, version: str) -> LTRScorer | None:
     if not row:
         return None
 
-    return LTRScorer(
+    return _cached_ltr_scorer(
         model_id=str(row.id),
         version=str(row.version),
         blob=bytes(row.model_blob) if row.model_blob else None,
@@ -543,7 +553,7 @@ def get_active_scorer(db: Session) -> LTRScorer | ContentScorer:
     ).fetchone()
 
     if row:
-        return LTRScorer(
+        return _cached_ltr_scorer(
             model_id=str(row.id),
             version=str(row.version),
             blob=bytes(row.model_blob) if row.model_blob else None,
@@ -551,3 +561,25 @@ def get_active_scorer(db: Session) -> LTRScorer | ContentScorer:
         )
 
     return _content_scorer
+
+
+def _cached_ltr_scorer(
+    *,
+    model_id: str,
+    version: str,
+    blob: bytes | None,
+    model_path: str | None,
+) -> LTRScorer:
+    cache_key = f"{model_id}:{version}"
+    with _scorer_cache_lock:
+        cached = _scorer_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        scorer = LTRScorer(
+            model_id=model_id,
+            version=version,
+            blob=blob,
+            model_path=model_path,
+        )
+        _scorer_cache[cache_key] = scorer
+        return scorer

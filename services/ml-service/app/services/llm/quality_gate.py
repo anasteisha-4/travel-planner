@@ -45,8 +45,8 @@ class LLMQualityGate:
             prompt=RECOMMENDATION_QUALITY_TEMPLATE,
             prompt_version=RECOMMENDATION_QUALITY_PROMPT_VERSION,
             context=context,
-            max_tokens=1800,
-            timeout_seconds=min(settings.LLM_TIMEOUT_SECONDS, 8.0),
+            max_tokens=3200,
+            timeout_seconds=min(settings.LLM_TIMEOUT_SECONDS, 12.0),
             max_retries=0,
         )
 
@@ -99,7 +99,20 @@ class LLMQualityGate:
             cached = get_cached_review(cache_key)
             if cached:
                 review = LLMQualityReview.model_validate(cached)
-                return review.model_copy(update={"review_id": review.review_id})
+                review_id = self._save_log(
+                    db=db,
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    review=review,
+                    request_summary={"prompt_version": prompt_version, "context": sanitized_context},
+                    response=review.model_dump(mode="json"),
+                    latency_ms=0,
+                    cache_hit=True,
+                    error_code=None,
+                    input_hash=cache_key.rsplit(":", 1)[-1],
+                )
+                return review.model_copy(update={"review_id": review_id})
 
         request = LLMRequest(
             model=model,
@@ -115,6 +128,7 @@ class LLMQualityGate:
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
         )
+        response_payload: dict | None = None
         try:
             response, review, payload = self._complete_and_validate(
                 request=request,
@@ -123,8 +137,9 @@ class LLMQualityGate:
                 prompt_version=prompt_version,
                 timeout_seconds=timeout_seconds,
             )
+            response_payload = payload
             if cache_enabled:
-                set_cached_review(cache_key, review.model_dump(mode="json"))
+                set_cached_review(cache_key, review.model_copy(update={"review_id": None}).model_dump(mode="json"))
             review_id = self._save_log(
                 db=db,
                 user_id=user_id,
@@ -139,14 +154,16 @@ class LLMQualityGate:
                 input_hash=cache_key.rsplit(":", 1)[-1],
             )
             return review.model_copy(update={"review_id": review_id})
-        except (json.JSONDecodeError, ValidationError, LLMProviderError) as exc:
+        except Exception as exc:
             if not settings.LLM_FAIL_OPEN:
                 raise
+            error_code = _error_code(exc)
+            response_payload = _failure_response_payload(exc)
             review = self._failure_review(
                 provider=settings.LLM_PROVIDER,
                 model=model,
                 prompt_version=prompt_version,
-                error_code=getattr(exc, "error_code", "invalid_json_or_schema"),
+                error_code=error_code,
                 detail=str(exc),
             )
             review_id = self._save_log(
@@ -156,10 +173,10 @@ class LLMQualityGate:
                 entity_id=entity_id,
                 review=review,
                 request_summary={"prompt_version": prompt_version, "context": sanitized_context},
-                response=None,
+                response=response_payload,
                 latency_ms=None,
                 cache_hit=False,
-                error_code=getattr(exc, "error_code", "invalid_json_or_schema"),
+                error_code=error_code,
                 input_hash=cache_key.rsplit(":", 1)[-1],
             )
             return review.model_copy(update={"review_id": review_id})
@@ -185,19 +202,35 @@ class LLMQualityGate:
             retry_request = LLMRequest(
                 model=request.model,
                 temperature=0,
-                max_tokens=min(request.max_tokens, 900),
+                max_tokens=min(request.max_tokens, 2000),
                 messages=_strict_retry_messages(request.messages),
                 json_schema=request.json_schema,
                 timeout_seconds=request.timeout_seconds,
                 max_retries=0,
             )
-            retry_response = _complete_with_deadline(self.provider, retry_request, timeout_seconds)
-            return _validate_response_payload(
-                response=retry_response,
-                provider_name=provider_name,
-                model=model,
-                prompt_version=prompt_version,
-            )
+            try:
+                retry_response = _complete_with_deadline(self.provider, retry_request, timeout_seconds)
+                return _validate_response_payload(
+                    response=retry_response,
+                    provider_name=provider_name,
+                    model=model,
+                    prompt_version=prompt_version,
+                )
+            except (json.JSONDecodeError, ValidationError) as retry_error:
+                raise LLMInvalidReviewResponseError(
+                    "invalid_json_or_schema",
+                    "LLM response did not match the quality review contract",
+                    response_content=response.content,
+                    retry_response_content=getattr(locals().get("retry_response", None), "content", None),
+                ) from retry_error
+            except LLMProviderError:
+                raise
+            except Exception as retry_error:
+                raise LLMInvalidReviewResponseError(
+                    "invalid_json_or_schema",
+                    "LLM review retry failed after initial invalid response",
+                    response_content=response.content,
+                ) from retry_error
 
     def _failure_review(
         self,
@@ -272,6 +305,43 @@ def _complete_with_deadline(provider: LLMProvider, request: LLMRequest, timeout_
         raise LLMProviderError("provider_timeout", "LLM provider exceeded interactive deadline") from exc
 
 
+class LLMInvalidReviewResponseError(LLMProviderError):
+    def __init__(
+        self,
+        error_code: str,
+        message: str,
+        *,
+        response_content: str | None = None,
+        retry_response_content: str | None = None,
+    ):
+        super().__init__(error_code, message)
+        self.response_content = response_content
+        self.retry_response_content = retry_response_content
+
+
+def _error_code(exc: Exception) -> str:
+    if isinstance(exc, json.JSONDecodeError | ValidationError):
+        return "invalid_json_or_schema"
+    return getattr(exc, "error_code", exc.__class__.__name__)
+
+
+def _failure_response_payload(exc: Exception) -> dict | None:
+    first = getattr(exc, "response_content", None)
+    retry = getattr(exc, "retry_response_content", None)
+    if first is None and retry is None:
+        return None
+    return {
+        "raw_response_sample": _sample_text(first),
+        "retry_raw_response_sample": _sample_text(retry),
+    }
+
+
+def _sample_text(value: Any, max_chars: int = 2000) -> str | None:
+    if value is None:
+        return None
+    return str(value)[:max_chars]
+
+
 def _strict_retry_messages(messages: list[LLMMessage]) -> list[LLMMessage]:
     strict_instruction = (
         "Return only one valid compact JSON object matching the supplied schema. "
@@ -312,18 +382,41 @@ def _validate_response_payload(
     payload["model"] = response.model or model
     payload["prompt_version"] = prompt_version
     review = LLMQualityReview.model_validate(payload)
-    return response, review, payload
+    review = _normalize_review_status(review)
+    return response, review, review.model_dump(mode="json")
 
 
 def _normalize_review_payload(payload: dict) -> dict:
     normalized = dict(payload)
-    normalized["issues"] = [_normalize_issue(item) for item in _as_list(normalized.get("issues"))]
-    normalized["suggested_adjustments"] = [
-        _normalize_adjustment(item) for item in _as_list(normalized.get("suggested_adjustments"))
-    ]
+    raw_issues = (
+        normalized.get("issues")
+        or normalized.get("problems")
+        or normalized.get("findings")
+        or normalized.get("warnings")
+        or normalized.get("review_issues")
+    )
+    raw_adjustments = (
+        normalized.get("suggested_adjustments")
+        or normalized.get("adjustments")
+        or normalized.get("recommendation_adjustments")
+        or normalized.get("ranking_adjustments")
+        or normalized.get("suggestions")
+    )
+    normalized["issues"] = [_normalize_issue(item) for item in _as_list(raw_issues)]
+    normalized["suggested_adjustments"] = [_normalize_adjustment(item) for item in _as_list(raw_adjustments)]
     normalized.setdefault("user_summary_ru", None)
     normalized.setdefault("defense_trace", None)
     return normalized
+
+
+def _normalize_review_status(review: LLMQualityReview) -> LLMQualityReview:
+    if review.status in {LLMReviewStatus.skipped, LLMReviewStatus.failed}:
+        return review
+    if any(issue.severity.value == "critical" for issue in review.issues):
+        return review.model_copy(update={"status": LLMReviewStatus.reject})
+    if any(issue.severity.value == "warning" for issue in review.issues):
+        return review.model_copy(update={"status": LLMReviewStatus.caution})
+    return review
 
 
 def _normalize_issue(item: Any) -> dict:
@@ -335,7 +428,14 @@ def _normalize_issue(item: Any) -> dict:
             "evidence": [],
         }
     source = _flatten_nested_payload(item, ("issue", "problem", "details"))
-    code = source.get("code") or source.get("issue_code") or source.get("type") or "llm_quality_issue"
+    target_id = (
+        source.get("destination_id")
+        or source.get("target_destination_id")
+        or source.get("target_id")
+        or source.get("id")
+    )
+    code = source.get("code") or source.get("issue_code") or source.get("type") or source.get("category")
+    code = code or _infer_issue_code(source.get("message") or source.get("reason") or source.get("description"))
     severity = _normalize_severity(source.get("severity"))
     message = (
         source.get("message") or source.get("reason") or source.get("description") or source.get("explanation") or code
@@ -346,9 +446,7 @@ def _normalize_issue(item: Any) -> dict:
         "severity": severity,
         "message": str(message),
         "evidence": _as_list(source.get("evidence")),
-        "destination_id": _nullable_uuidish(
-            source.get("destination_id") or source.get("target_destination_id") or source.get("target_id")
-        ),
+        "destination_id": _nullable_uuidish(target_id),
         "target_id": _nullable_uuidish(source.get("target_id")),
         "item_id": _nullable_uuidish(source.get("item_id")),
         "day": source.get("day"),
@@ -361,14 +459,20 @@ def _normalize_adjustment(item: Any) -> dict:
     source = _flatten_nested_payload(item, ("adjustment", "suggestion", "change"))
     action = source.get("action") or source.get("type") or "note"
     reason = source.get("reason") or source.get("message") or source.get("description") or str(action)
-    target_id = source.get("target_id") or source.get("destination_id") or source.get("target_destination_id")
+    target_id = (
+        source.get("target_id")
+        or source.get("destination_id")
+        or source.get("target_destination_id")
+        or source.get("id")
+    )
+    replacement_id = source.get("replacement_id") or source.get("replacement_destination_id")
     return {
         **dict(source),
         "action": _normalize_action(action),
         "reason": str(reason),
         "target_id": _nullable_uuidish(target_id),
         "target_destination_id": _nullable_uuidish(source.get("target_destination_id") or target_id),
-        "replacement_id": _nullable_uuidish(source.get("replacement_id")),
+        "replacement_id": _nullable_uuidish(replacement_id),
         "target_day": source.get("target_day"),
         "target_order": source.get("target_order"),
         "candidate_poi": _normalize_candidate_poi(source.get("candidate_poi")),
@@ -448,10 +552,16 @@ def _normalize_action(value: Any) -> str:
     normalized = str(value or "note").lower()
     aliases = {
         "penalize": "demote",
+        "penalty": "demote",
         "downrank": "demote",
+        "lower_rank": "demote",
+        "lower": "demote",
         "deprioritize": "demote",
         "delete": "remove",
+        "exclude": "remove",
         "replace": "remove",
+        "raise_rank": "promote",
+        "up_rank": "promote",
     }
     normalized = aliases.get(normalized, normalized)
     allowed = {
@@ -467,3 +577,16 @@ def _normalize_action(value: Any) -> str:
         "generate_external_route",
     }
     return normalized if normalized in allowed else "note"
+
+
+def _infer_issue_code(value: Any) -> str:
+    text = str(value or "").lower()
+    if any(part in text for part in ("safe", "risk", "crime", "conflict", "опас")):
+        return "safety_fit"
+    if any(part in text for part in ("beach", "пляж", "coast", "sea")):
+        return "beach_fit"
+    if any(part in text for part in ("budget", "expensive", "cost", "дорог")):
+        return "budget_fit"
+    if any(part in text for part in ("visa", "виза")):
+        return "visa_fit"
+    return "llm_quality_issue"

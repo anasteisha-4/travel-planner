@@ -62,13 +62,20 @@ def _select_scorer(request: RecommendRequest, db: Session) -> tuple[BaseScorer, 
     return scorer, version
 
 
-def _with_display_currency(item: ScoredDestination, display_currency: str) -> ScoredDestination:
+def _with_display_currency(
+    item: ScoredDestination,
+    display_currency: str,
+    *,
+    request_region: str | None = None,
+) -> ScoredDestination:
+    display_region = "Middle East" if request_region == "Middle East" else item.region
     return item.model_copy(
         update={
             "name": item.display_name or item.name_ru or translate_destination_name(item.name),
             "name_original": item.name_original or item.name,
             "name_ru": item.name_ru or translate_destination_name(item.name),
             "display_name": item.display_name or item.name_ru or translate_destination_name(item.name),
+            "region": display_region,
             "avg_daily_cost": convert_usd(item.avg_daily_cost_usd, display_currency),
             "avg_daily_cost_currency": display_currency,
             "avg_daily_budget": convert_usd(item.avg_daily_budget_usd or item.avg_daily_cost_usd, display_currency),
@@ -102,6 +109,7 @@ def get_recommendations(
         "citizenship_code": citizenship,
         "exclude_destination_ids": [uuid.UUID(str(x)) for x in request.exclude_destination_ids],
         "region": request.region,
+        "include_route_fares": False,
     }
 
     scorer, model_version = _select_scorer(request, db)
@@ -112,9 +120,13 @@ def get_recommendations(
         travel_month=request.travel_month,
         filters=filters,
     )
+    scored = _apply_country_diversity(scored, region=request.region, limit=max(request.limit * 4, request.limit + 20))
 
     candidate_pool_size = min(len(scored), max(request.limit * 3, request.limit + 10))
-    candidate_pool = [_with_display_currency(item, display_currency) for item in scored[:candidate_pool_size]]
+    candidate_pool = [
+        _with_display_currency(item, display_currency, request_region=request.region)
+        for item in scored[:candidate_pool_size]
+    ]
     top_results = candidate_pool[: request.limit]
     recommendation_id = uuid.uuid4()
     quality_review = None
@@ -142,7 +154,11 @@ def get_recommendations(
             quality_review,
             replacement_pool=candidate_pool[request.limit :],
         )
-        top_results = adjustment_result.results
+        top_results = _apply_country_diversity(
+            adjustment_result.results,
+            region=request.region,
+            limit=request.limit,
+        )
         applied_adjustments = adjustment_result.applied_adjustments
         ignored_adjustments = adjustment_result.ignored_adjustments
         final_quality_review = _review_after_adjustments(
@@ -278,6 +294,11 @@ def _log_recommendation(
                 "region": request.region,
                 "citizenship_code": request.citizenship_code,
                 "exclude_destination_ids": [str(x) for x in request.exclude_destination_ids],
+                "llm_quality": _recommendation_log_quality_payload(
+                    quality_review=quality_review,
+                    applied_adjustments=applied_adjustments,
+                    ignored_adjustments=ignored_adjustments,
+                ),
                 "travel_advisory": {
                     "blocked_count": len(advisory_blocked or []),
                     "blocked_sample": (advisory_blocked or [])[:20],
@@ -317,6 +338,41 @@ def _log_recommendation(
         db.commit()
     except Exception:
         db.rollback()
+
+
+def _apply_country_diversity(
+    results: list[ScoredDestination],
+    *,
+    region: str | None,
+    limit: int,
+) -> list[ScoredDestination]:
+    if not results or limit <= 0:
+        return results
+
+    normalized_region = (region or "").strip().casefold()
+    if normalized_region in {"asia", "europe"}:
+        max_per_country = 2
+    elif normalized_region == "middle east":
+        max_per_country = 4
+    else:
+        max_per_country = 3
+
+    selected: list[ScoredDestination] = []
+    country_counts: dict[str, int] = {}
+    deferred: list[ScoredDestination] = []
+
+    for item in results:
+        country_code = (item.country_code or "").upper()
+        if country_counts.get(country_code, 0) < max_per_country:
+            selected.append(item)
+            country_counts[country_code] = country_counts.get(country_code, 0) + 1
+        else:
+            deferred.append(item)
+        if len(selected) >= limit:
+            return selected
+
+    selected.extend(deferred[: max(0, limit - len(selected))])
+    return selected
 
 
 def _emit_llm_review_events(
@@ -364,9 +420,6 @@ def _review_after_adjustments(quality_review, applied: list[dict], ignored: list
     if quality_review.status.value in {"caution", "reject"} and applied and not ignored:
         return quality_review.model_copy(
             update={
-                "status": LLMReviewStatus.ok,
-                "issues": [],
-                "suggested_adjustments": [],
                 "user_summary_ru": "Рекомендации скорректированы по результатам проверки.",
                 "defense_trace": f"{quality_review.defense_trace or ''} Applied all LLM recommendation adjustments.".strip(),
             }
@@ -380,6 +433,29 @@ def _public_quality_model_version(quality_review) -> str | None:
     return quality_review.model or settings.LLM_MODEL
 
 
+def _recommendation_log_quality_payload(
+    *,
+    quality_review,
+    applied_adjustments: list[dict],
+    ignored_adjustments: list[dict],
+) -> dict | None:
+    if quality_review is None:
+        return None
+    return {
+        "status": quality_review.status.value,
+        "provider": quality_review.provider,
+        "model": quality_review.model,
+        "prompt_version": quality_review.prompt_version,
+        "review_id": str(quality_review.review_id) if quality_review.review_id else None,
+        "issue_codes": [issue.code for issue in quality_review.issues],
+        "suggested_adjustments": [
+            adjustment.model_dump(mode="json") for adjustment in quality_review.suggested_adjustments
+        ],
+        "applied_adjustments": applied_adjustments,
+        "ignored_adjustments": ignored_adjustments,
+    }
+
+
 def _enforce_recommendation_review_sanity(
     quality_review,
     request: RecommendRequest,
@@ -388,32 +464,37 @@ def _enforce_recommendation_review_sanity(
 ):
     if quality_review is None or quality_review.status in {LLMReviewStatus.skipped, LLMReviewStatus.failed}:
         return quality_review
-    if quality_review.issues:
-        return quality_review
-    if not _is_beach_sensitive_request(request, profile):
-        return quality_review
 
-    issues = []
-    for item in top_results[:5]:
-        if "beach" in item.explanation_tags:
-            continue
-        if item.region not in {"Europe", "Americas", "Oceania"} and item.country_code not in {
-            "RU",
-            "SE",
-            "FI",
-            "NO",
-            "US",
-            "CA",
-        }:
-            continue
-        issues.append(
-            LLMReviewIssue(
-                code="beach_fit_guardrail",
-                severity=LLMReviewSeverity.warning,
-                message="Top destination lacks a current-season beach scenario for a beach-focused request.",
-                destination_id=item.destination_id,
+    quality_review = _drop_invalid_budget_issues(quality_review, profile, top_results)
+    issues = list(quality_review.issues)
+    if _is_beach_sensitive_request(request, profile):
+        for item in top_results[:5]:
+            if "beach" in item.explanation_tags:
+                continue
+            if not _needs_beach_fit_guardrail(item):
+                continue
+            issues.append(
+                LLMReviewIssue(
+                    code="beach_fit_guardrail",
+                    severity=LLMReviewSeverity.warning,
+                    message="Top destination lacks a current-season beach scenario for a beach-focused request.",
+                    destination_id=item.destination_id,
+                )
             )
-        )
+    if _is_international_europe_sensitive_request(request, profile, top_results):
+        for item in top_results:
+            if item.country_code != "RU":
+                continue
+            issues.append(
+                LLMReviewIssue(
+                    code="international_europe_fit_guardrail",
+                    severity=LLMReviewSeverity.warning,
+                    message=(
+                        "Domestic Russia is a weak fit for an English-speaking, Mediterranean, Paris-like Europe request."
+                    ),
+                    destination_id=item.destination_id,
+                )
+            )
     if not issues:
         return quality_review
     return quality_review.model_copy(
@@ -425,6 +506,69 @@ def _enforce_recommendation_review_sanity(
     )
 
 
+def _drop_invalid_budget_issues(
+    quality_review,
+    profile: dict,
+    top_results: list[ScoredDestination],
+):
+    budget_max_usd = profile.get("budget_max_usd")
+    duration_days = profile.get("typical_duration_days")
+    if budget_max_usd is None or not duration_days:
+        return quality_review
+
+    by_id = {item.destination_id: item for item in top_results}
+    invalid_budget_target_ids: set[uuid.UUID] = set()
+    kept_issues: list[LLMReviewIssue] = []
+    for issue in quality_review.issues:
+        target_id = issue.destination_id or issue.target_id or issue.item_id
+        if target_id and _is_invalid_budget_issue(
+            issue, by_id.get(target_id), float(budget_max_usd), int(duration_days)
+        ):
+            invalid_budget_target_ids.add(target_id)
+            continue
+        kept_issues.append(issue)
+
+    if not invalid_budget_target_ids:
+        return quality_review
+
+    kept_adjustments = [
+        adjustment
+        for adjustment in quality_review.suggested_adjustments
+        if (adjustment.target_destination_id or adjustment.target_id) not in invalid_budget_target_ids
+    ]
+    status = quality_review.status
+    if not kept_issues and status in {LLMReviewStatus.caution, LLMReviewStatus.reject}:
+        status = LLMReviewStatus.ok
+
+    return quality_review.model_copy(
+        update={
+            "status": status,
+            "issues": kept_issues,
+            "suggested_adjustments": kept_adjustments,
+            "defense_trace": (
+                f"{quality_review.defense_trace or ''} Backend ignored invalid LLM budget issue(s)."
+            ).strip(),
+        }
+    )
+
+
+def _is_invalid_budget_issue(
+    issue: LLMReviewIssue,
+    item: ScoredDestination | None,
+    budget_max_usd: float,
+    duration_days: int,
+) -> bool:
+    if item is None or item.avg_daily_cost_usd is None:
+        return False
+    code = issue.code.casefold()
+    if "budget" not in code and "cost" not in code:
+        return False
+    estimated_total = float(item.avg_daily_cost_usd) * max(duration_days, 1)
+    if item.route_cost_usd is not None:
+        estimated_total += float(item.route_cost_usd)
+    return estimated_total <= budget_max_usd
+
+
 def _is_beach_sensitive_request(request: RecommendRequest, profile: dict) -> bool:
     preferences = [
         str(item.get("value") if isinstance(item, dict) else item).lower()
@@ -433,3 +577,30 @@ def _is_beach_sensitive_request(request: RecommendRequest, profile: dict) -> boo
     climate = [str(item).lower() for item in (profile.get("climate_preferences") or [])]
     wants_warm = not climate or any(item in {"mediterranean", "tropical_warm", "any"} for item in climate)
     return "beach" in preferences[:3] and wants_warm and request.travel_month in {4, 5, 6, 7, 8, 9}
+
+
+def _needs_beach_fit_guardrail(item: ScoredDestination) -> bool:
+    cold_or_inland_country = item.country_code in {"RU", "SE", "FI", "NO", "BY", "MD", "RS", "BA", "CZ", "SK"}
+    return cold_or_inland_country or item.region in {"Americas", "Oceania"}
+
+
+def _is_international_europe_sensitive_request(
+    request: RecommendRequest,
+    profile: dict,
+    top_results: list[ScoredDestination],
+) -> bool:
+    if request.region != "Europe":
+        return False
+    top_five = top_results[:5]
+    if sum(1 for item in top_five if item.country_code == "RU") < 3:
+        return False
+    languages = {str(item).lower() for item in (profile.get("language_comfort") or [])}
+    climate = {str(item).lower() for item in (profile.get("climate_preferences") or [])}
+    liked_names = " ".join(str(item).lower() for item in (profile.get("liked_destination_names") or []))
+    preferences = {
+        str(item.get("value") if isinstance(item, dict) else item).lower()
+        for item in (profile.get("vacation_preferences_ranked") or [])
+    }
+    english_only = "en" in languages and "ru" not in languages and "any" not in languages
+    international_signal = english_only or "mediterranean" in climate or "paris" in liked_names
+    return international_signal and bool({"beach", "culture", "shopping"} & preferences)

@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import date
 from unittest.mock import Mock
@@ -287,6 +288,72 @@ def test_itinerary_quality_unknown_remove_is_ignored(client: TestClient, monkeyp
     ]
 
 
+def test_itinerary_quality_resolved_remove_hides_stale_warning(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    review = LLMQualityReview(
+        status=LLMReviewStatus.caution,
+        confidence=0.86,
+        provider="yandex",
+        model="qwen3.6-35b-a3b/latest",
+        prompt_version="itinerary_quality_v1",
+        issues=[
+            LLMReviewIssue(
+                code="wrong_city_poi",
+                severity=LLMReviewSeverity.warning,
+                message="This POI appears to belong to a different city.",
+                item_id=POI_ID,
+            )
+        ],
+        suggested_adjustments=[
+            LLMReviewAdjustment(action=LLMReviewAction.remove, target_id=POI_ID, reason="Remove wrong-city POI."),
+            LLMReviewAdjustment(action=LLMReviewAction.note, reason="Explain the correction to the user."),
+        ],
+    )
+
+    class FakeGate:
+        def review_itinerary(self, **_kwargs):
+            return review
+
+    response = Mock()
+    response.json.return_value = _itinerary_payload(
+        [
+            {
+                "id": str(POI_ID),
+                "name": "Statue de David",
+                "category": "culture",
+                "arrival_time": "09:30",
+                "departure_time": "11:30",
+                "travel_from_previous_minutes": 0,
+                "visit_duration_minutes": 120,
+                "score": 1.0,
+            },
+            {
+                "id": str(uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")),
+                "name": "Museum",
+                "category": "culture",
+                "arrival_time": "12:00",
+                "departure_time": "13:00",
+                "travel_from_previous_minutes": 20,
+                "visit_duration_minutes": 60,
+                "score": 0.9,
+            },
+        ]
+    )
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", True)
+    monkeypatch.setattr("app.routers.itinerary.httpx.post", Mock(return_value=response))
+    monkeypatch.setattr("app.routers.itinerary._destination_info", lambda _destination_id: None)
+    monkeypatch.setattr("app.routers.itinerary.LLMQualityGate", lambda: FakeGate())
+
+    resp = client.post("/api/v1/itinerary", json=_payload())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [place["name"] for place in data["days"][0]["places"]] == ["Museum"]
+    assert data["quality_review"]["status"] == "ok"
+    assert data["quality_review"]["issues"] == []
+    assert data["days"][0]["quality_review"] is None
+
+
 def test_itinerary_quality_fail_open_returns_itinerary_without_500(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     response = Mock()
     response.json.return_value = _itinerary_payload()
@@ -536,6 +603,139 @@ def test_no_feasible_internal_route_can_return_external_draft(client: TestClient
     data = resp.json()
     assert data["source"] == "llm-external-draft"
     assert data["score_summary"]["external_route_used"] is True
+
+
+def test_manual_destination_external_route_uses_llm_specific_pois(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    external_payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Roman Tarragona",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "history",
+                        "places": [
+                            {
+                                "name": "Amfiteatre de Tarragona",
+                                "category": "history",
+                                "lat": 41.1143,
+                                "lng": 1.2595,
+                                "address": "Parc de l'Amfiteatre",
+                                "arrival_time": "09:30",
+                                "departure_time": "11:00",
+                                "visit_duration_minutes": 90,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Major Roman landmark in Tarragona.",
+                                "confidence": 0.92,
+                            },
+                            {
+                                "name": "Circ Roma de Tarragona",
+                                "category": "history",
+                                "lat": 41.1152,
+                                "lng": 1.2564,
+                                "address": "Rambla Vella",
+                                "arrival_time": "11:20",
+                                "departure_time": "12:40",
+                                "visit_duration_minutes": 80,
+                                "travel_from_previous_minutes": 15,
+                                "reason": "Nearby Roman circus keeps the route compact.",
+                                "confidence": 0.9,
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "variant_index": 1,
+                "title": "Old city and sea",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "culture",
+                        "places": [
+                            {
+                                "name": "Catedral de Tarragona",
+                                "category": "culture",
+                                "lat": 41.1182,
+                                "lng": 1.2582,
+                                "address": "Pla de la Seu",
+                                "arrival_time": "09:30",
+                                "departure_time": "11:00",
+                                "visit_duration_minutes": 90,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Core old-town landmark.",
+                                "confidence": 0.91,
+                            },
+                            {
+                                "name": "Balco del Mediterrani",
+                                "category": "viewpoint",
+                                "lat": 41.1134,
+                                "lng": 1.2566,
+                                "address": "Rambla Nova",
+                                "arrival_time": "11:25",
+                                "departure_time": "12:10",
+                                "visit_duration_minutes": 45,
+                                "travel_from_previous_minutes": 15,
+                                "reason": "Logical scenic stop after the old town.",
+                                "confidence": 0.88,
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "variant_index": 2,
+                "title": "Generic route must be rejected",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "generic",
+                        "places": [
+                            {
+                                "name": "Таррагона: центральный район",
+                                "category": "walk",
+                                "lat": 41.1189,
+                                "lng": 1.2445,
+                                "address": None,
+                                "arrival_time": "09:30",
+                                "departure_time": "11:00",
+                                "visit_duration_minutes": 90,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Placeholder.",
+                                "confidence": 0.3,
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
+    monkeypatch.setattr(
+        "app.services.llm.external_route.get_provider",
+        lambda: FakeProvider(responses=[json.dumps(external_payload)]),
+    )
+
+    resp = client.post(
+        "/api/v1/itinerary",
+        json={
+            "destination_text": "Таррагона",
+            "duration_days": 1,
+            "start_date": "2026-06-10",
+            "variant_count": 3,
+            "allow_external_route": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["source"] == "llm-external-draft"
+    assert len(data["variants"]) == 2
+    assert data["variants"][0]["days"][0]["places"][0]["name"] == "Amfiteatre de Tarragona"
+    assert all(place["lat"] and place["lng"] for place in data["variants"][0]["days"][0]["places"])
+    assert "центральный район" not in json.dumps(data, ensure_ascii=False)
 
 
 def test_generate_itinerary_data_service_failure(client: TestClient, monkeypatch: pytest.MonkeyPatch):

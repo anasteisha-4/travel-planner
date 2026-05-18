@@ -177,7 +177,7 @@ class YandexAIStudioQwenProvider:
 
 
 def get_provider() -> LLMProvider:
-    if not settings.LLM_QUALITY_ENABLED:
+    if not settings.LLM_QUALITY_ENABLED and not settings.LLM_EXTERNAL_ROUTE_ENABLED:
         return NoopProvider()
     if settings.LLM_PROVIDER == "yandex":
         return YandexAIStudioQwenProvider()

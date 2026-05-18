@@ -1,7 +1,7 @@
 import type { UserProfileV2 } from '@/entities/user';
+import { sendEvent } from '@/shared/api';
 import { getCountryFlag, localizeDestinationName } from '@/shared/lib';
 import { cn } from '@/shared/lib/utils';
-import { sendEvent } from '@/shared/api';
 import { AdaptiveSheet, Button } from '@/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Plane, ShieldAlert } from 'lucide-react';
@@ -136,13 +136,6 @@ const getOverallStatus = (statuses: DestinationValidationStatus[]): DestinationV
   return 'suitable';
 };
 
-const getMatchTone = (score: number) => {
-  if (score >= 0.8)
-    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
-  if (score >= 0.6) return 'border-primary/40 bg-primary/10 text-primary';
-  return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300';
-};
-
 const formatPercent = (value: unknown) =>
   typeof value === 'number' ? `${Math.round(value * 100)}%` : 'нет данных';
 
@@ -234,10 +227,10 @@ const getTopReasons = (destination: ScoredDestination): RecommendationReason[] =
         dailyCostUsd === undefined || dailyCostUsd === null
           ? 0.6
           : dailyCostUsd < 60
-          ? 0.85
-          : dailyCostUsd < 140
-            ? 0.68
-            : 0.52,
+            ? 0.85
+            : dailyCostUsd < 140
+              ? 0.68
+              : 0.52,
       note:
         typeof dailyCost === 'number'
           ? `${formatDailyCost(dailyCost, dailyCostCurrency)}/день`
@@ -527,7 +520,8 @@ export const DestinationDetailSheet = ({
         display_currency: currency,
         duration_days: tripParams.duration_days,
         risk_tolerance: profileCached?.risk_tolerance,
-        preferred_language: profileCached?.language_comfort?.find((language) => language !== 'any') ?? null,
+        preferred_language:
+          profileCached?.language_comfort?.find((language) => language !== 'any') ?? null,
       }
     : null;
   const {
@@ -592,10 +586,9 @@ export const DestinationDetailSheet = ({
   if (!destination && !isLoading) return null;
 
   const title = destination
-    ? destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name)
+    ? (destination.display_name ?? destination.name_ru ?? localizeDestinationName(destination.name))
     : 'Направление';
   const flag = getCountryFlag(destination?.country_code);
-  const matchPct = destination ? Math.round(destination.score * 100) : 0;
   const topReasons = destination ? getTopReasons(destination) : [];
 
   const handleCreateTrip = () => {
@@ -646,63 +639,54 @@ export const DestinationDetailSheet = ({
         <DestinationDetailSkeleton />
       ) : destination ? (
         <div className="flex flex-col gap-4">
-        <section className="flex items-start gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-[34px]">
-            {flag}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="line-clamp-2 text-[24px] font-extrabold leading-tight tracking-tight text-foreground">
-              {destination.display_name ??
-                destination.name_ru ??
-                localizeDestinationName(destination.name)}
-            </h2>
-            <p className="mt-1 text-[13px] font-semibold text-muted-foreground">
-              {destination.region}
+          <section className="flex items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))] text-[34px]">
+              {flag}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="line-clamp-2 text-[24px] font-extrabold leading-tight tracking-tight text-foreground">
+                {destination.display_name ??
+                  destination.name_ru ??
+                  localizeDestinationName(destination.name)}
+              </h2>
+              <p className="mt-1 text-[13px] font-semibold text-muted-foreground">
+                {destination.region}
+              </p>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
+            <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+              Почему подходит
             </p>
-          </div>
-          <div
-            className={cn(
-              'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border',
-              getMatchTone(destination.score)
-            )}
-          >
-            <span className="text-[20px] font-extrabold leading-none">{matchPct}</span>
-            <span className="ml-0.5 text-[16px] font-extrabold leading-none">%</span>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
-          <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
-            Почему подходит
-          </p>
-          <div className="flex flex-col gap-2.5">
-            {topReasons.map((reason) => (
-              <div key={reason.key} className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[12px] font-bold leading-tight text-foreground">
-                  {reason.label}
-                </span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${clampPercent(reason.value)}%` }}
-                  />
+            <div className="flex flex-col gap-2.5">
+              {topReasons.map((reason) => (
+                <div key={reason.key} className="flex items-center gap-3">
+                  <span className="w-28 shrink-0 text-[12px] font-bold leading-tight text-foreground">
+                    {reason.label}
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${clampPercent(reason.value)}%` }}
+                    />
+                  </div>
+                  <span className="w-16 text-right text-[12px] font-extrabold text-primary">
+                    {reason.note ?? `${clampPercent(reason.value)}%`}
+                  </span>
                 </div>
-                <span className="w-16 text-right text-[12px] font-extrabold text-primary">
-                  {reason.note ?? `${clampPercent(reason.value)}%`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
 
-        <section>
-          <ValidationBlock
-            data={destinationValidation}
-            destination={destination}
-            isLoading={isValidationLoading}
-            isError={isValidationError}
-          />
-        </section>
+          <section>
+            <ValidationBlock
+              data={destinationValidation}
+              destination={destination}
+              isLoading={isValidationLoading}
+              isError={isValidationError}
+            />
+          </section>
         </div>
       ) : null}
     </AdaptiveSheet>

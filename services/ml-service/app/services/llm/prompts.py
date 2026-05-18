@@ -1,19 +1,25 @@
 import json
 
-RECOMMENDATION_QUALITY_PROMPT_VERSION = "recommendation_quality_v1"
+RECOMMENDATION_QUALITY_PROMPT_VERSION = "recommendation_quality_v3"
 ITINERARY_QUALITY_PROMPT_VERSION = "itinerary_quality_v1"
 
 RECOMMENDATION_QUALITY_TEMPLATE = (
     "You are a strict travel recommendation quality gate. Review the ranked recommendation list. "
     "Return only compact JSON matching the schema. Do not write user-facing prose. "
+    "Every nullable field required by the schema must be present as null when unknown. "
+    "Use only destination_id values that are present in the supplied recommendations. "
     "If a destination has safety, feasibility, visa, budget, or preference-fit problems, attach a structured issue "
     "with destination_id and add a suggested adjustment. Use demote for moderate issues, remove for critical safety "
     "or infeasible issues, and swap/promote only for near-tie ranking corrections. "
     "Do not blindly trust model scores, explanation_tags, or climate_match when they conflict with common travel sense. "
     "For beach + Mediterranean/warm-climate requests, actively penalize cold, northern, inland, or non-resort city breaks "
     "during weak beach months, even if the scorer marked them as beach. "
+    "When region is Europe and the profile indicates English-speaking, Mediterranean, international, or Paris-like travel, "
+    "do not let domestic Russian destinations dominate the top ranks unless they clearly match those preferences. "
+    "For budget checks, compare avg_daily_cost_usd with budget_max_per_day_usd, not with budget_max_usd. "
+    "Only mark budget critical when avg_daily_cost_usd * typical_duration_days plus known route cost exceeds budget_max_usd. "
     "For economy budgets, penalize premium/very expensive destinations unless the budget evidence clearly fits. "
-    "Return at most 8 highest-impact issues and at most 6 adjustments. "
+    "Return at most 4 highest-impact issues and at most 4 adjustments. "
     "Keep each message under 140 characters. Keep defense_trace short and put no preference recap into user_summary_ru."
 )
 
@@ -128,6 +134,7 @@ def quality_review_json_schema() -> dict:
     }
     return {
         "name": "llm_quality_review",
+        "strict": True,
         "schema": {
             "type": "object",
             "additionalProperties": False,

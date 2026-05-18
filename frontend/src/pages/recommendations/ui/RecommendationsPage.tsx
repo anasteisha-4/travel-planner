@@ -1,4 +1,11 @@
 import {
+  destinationApi,
+  type DestinationDetail,
+  type DestinationSearchResult,
+} from '@/entities/destination';
+import { profileApi } from '@/features/profile';
+import type { ScoredDestination } from '@/features/recommendations';
+import {
   DestinationCheckSearch,
   DestinationDetailSheet,
   RecommendationFiltersUI,
@@ -6,34 +13,75 @@ import {
   useDestinationScore,
   useRecommendations,
 } from '@/features/recommendations';
-import {
-  destinationApi,
-  type DestinationDetail,
-  type DestinationSearchResult,
-} from '@/entities/destination';
-import { profileApi } from '@/features/profile';
-import type { ScoredDestination } from '@/features/recommendations';
 import { sendEvent } from '@/shared/api';
 import { AppPageHeader, PageContent, PageLayout } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
+import { Compass, Map, Route, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-const SkeletonCard = () => (
-  <div className="trip-info-card">
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="h-12 w-12 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
-        <div>
-          <div className="mb-2 h-4 w-32 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-          <div className="h-3 w-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+const LOADING_MESSAGES = [
+  'Сверяем сезон, бюджет и визы',
+  'Отбираем лучшие совпадения',
+  'Проверяем спорные места',
+  'Собираем финальный список',
+] as const;
+
+const LOADING_STEPS = [
+  { label: 'Профиль', icon: Compass },
+  { label: 'Маршруты', icon: Route },
+  { label: 'Проверка', icon: Sparkles },
+] as const;
+
+const RecommendationsLoadingState = ({ messageIndex }: { messageIndex: number }) => (
+  <div className="flex min-h-[430px] flex-col justify-center pb-8">
+    <div className="relative overflow-hidden rounded-[28px] border border-[hsl(var(--surface-border))] px-5 py-6 shadow-[0_5px_15px_rgba(15,23,42,0.10)] dark:shadow-[0_5px_15px_rgba(0,0,0,0.28)]">
+      <div className="relative mx-auto flex h-36 w-36 items-center justify-center">
+        <div className="absolute inset-0 rounded-full border border-primary/15" />
+        <div className="absolute inset-3 animate-[spin_9s_linear_infinite] rounded-full border border-dashed border-primary/35" />
+        <div className="absolute inset-7 animate-[spin_6s_linear_infinite] rounded-full border border-dashed border-amber-400/45 [animation-direction:reverse]" />
+        <div className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_18px_rgba(37,99,235,0.55)]" />
+        <div className="absolute right-5 top-8 h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.6)]" />
+        <div className="flex h-20 w-20 items-center justify-center rounded-[24px] bg-primary text-primary-foreground shadow-[0_16px_36px_hsl(var(--primary)/0.28)]">
+          <Map className="h-9 w-9" />
         </div>
       </div>
-      <div className="h-12 w-12 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
-    </div>
-    <div className="flex gap-2">
-      <div className="h-6 w-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-      <div className="h-6 w-16 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-      <div className="h-6 w-24 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
+
+      <div className="relative mt-5 text-center">
+        <p className="text-[20px] font-extrabold tracking-tight text-foreground">
+          Подбираем направления
+        </p>
+        <p className="mt-2 min-h-5 text-[13px] font-bold text-muted-foreground transition-opacity">
+          {LOADING_MESSAGES[messageIndex % LOADING_MESSAGES.length]}
+        </p>
+      </div>
+
+      <div className="relative mt-6 grid grid-cols-3 gap-2">
+        {LOADING_STEPS.map((step, index) => {
+          const Icon = step.icon;
+          const isActive = index <= messageIndex % LOADING_MESSAGES.length;
+          return (
+            <div
+              key={step.label}
+              className="rounded-2xl border border-[hsl(var(--surface-border))] bg-background/70 px-2.5 py-3 text-center backdrop-blur"
+            >
+              <div
+                className={`mx-auto flex h-9 w-9 items-center justify-center rounded-2xl transition ${
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-[hsl(var(--surface-muted))] text-muted-foreground'
+                }`}
+              >
+                <Icon className="h-[18px] w-[18px]" />
+              </div>
+              <p className="mt-2 text-[11px] font-extrabold text-foreground">{step.label}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="relative mt-5 h-2 overflow-hidden rounded-full bg-background/70">
+        <div className="h-full w-2/5 animate-[recommendation-progress_2.4s_ease-in-out_infinite] rounded-full bg-primary" />
+      </div>
     </div>
   </div>
 );
@@ -70,13 +118,20 @@ export const RecommendationsPage = () => {
   const currentMonth = new Date().getMonth() + 1;
   const [month, setMonth] = useState(currentMonth);
   const [region, setRegion] = useState<string | null>(null);
-  const [selectedRecommendation, setSelectedRecommendation] = useState<ScoredDestination | null>(null);
-  const [selectedCheckResult, setSelectedCheckResult] = useState<DestinationSearchResult | null>(null);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<ScoredDestination | null>(
+    null
+  );
+  const [selectedCheckResult, setSelectedCheckResult] = useState<DestinationSearchResult | null>(
+    null
+  );
   const [sheetMode, setSheetMode] = useState<'recommendation' | 'check'>('recommendation');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const trackedEmptyStates = useRef<Set<string>>(new Set());
 
   const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
+  const showLoadingState = isLoading || (isFetching && !data);
+  const displayedLoadingMessageIndex = showLoadingState ? loadingMessageIndex : 0;
   const { data: checkedDestinationDetail } = useQuery({
     queryKey: ['destination-detail', selectedCheckResult?.id],
     queryFn: () => destinationApi.getDestination(selectedCheckResult?.id ?? ''),
@@ -87,15 +142,16 @@ export const RecommendationsPage = () => {
   const selectedRecommendationMatch = selectedCheckResult
     ? data?.results.find((destination) => destination.destination_id === selectedCheckResult.id)
     : undefined;
-  const { data: checkedDestinationScore, isLoading: isDestinationScoreLoading } = useDestinationScore(
-    selectedCheckResult
-      ? {
-          destination_id: selectedCheckResult.id,
-          travel_month: month,
-          citizenship_code: 'RU',
-        }
-      : null
-  );
+  const { data: checkedDestinationScore, isLoading: isDestinationScoreLoading } =
+    useDestinationScore(
+      selectedCheckResult
+        ? {
+            destination_id: selectedCheckResult.id,
+            travel_month: month,
+            citizenship_code: 'RU',
+          }
+        : null
+    );
   useQuery({
     queryKey: ['profile'],
     queryFn: profileApi.getProfile,
@@ -112,6 +168,16 @@ export const RecommendationsPage = () => {
   const sheetDestination = sheetMode === 'check' ? checkedDestination : selectedRecommendation;
   const isSheetLoading =
     sheetMode === 'check' && !selectedRecommendationMatch && isDestinationScoreLoading;
+
+  useEffect(() => {
+    if (!showLoadingState) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      setLoadingMessageIndex((current) => current + 1);
+    }, 2200);
+    return () => window.clearInterval(intervalId);
+  }, [showLoadingState]);
 
   useEffect(() => {
     if (data?.results && data.results.length > 0) {
@@ -244,12 +310,8 @@ export const RecommendationsPage = () => {
       </AppPageHeader>
 
       <PageContent className="pt-4">
-        {isLoading || isFetching ? (
-          <div className="flex flex-col gap-3">
-            {[0, 1, 2, 3].map((i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
+        {showLoadingState ? (
+          <RecommendationsLoadingState messageIndex={displayedLoadingMessageIndex} />
         ) : isError ? (
           <div className="flex flex-col items-center gap-4 pt-16 text-center">
             <div className="flex h-[72px] w-[72px] items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/10 text-[30px]">
@@ -272,10 +334,7 @@ export const RecommendationsPage = () => {
             </div>
           </div>
         ) : (
-          <RecommendationList
-            destinations={data?.results ?? []}
-            onSelect={handleSelect}
-          />
+          <RecommendationList destinations={data?.results ?? []} onSelect={handleSelect} />
         )}
       </PageContent>
 

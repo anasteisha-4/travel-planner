@@ -32,6 +32,16 @@ def apply_itinerary_quality_review(
         if adjustment.action == LLMReviewAction.remove and adjustment.target_id:
             adjusted, did_apply = _remove_item(adjusted, adjustment.target_id)
             _record(applied, ignored, did_apply, "remove", adjustment.target_id)
+        elif adjustment.action == LLMReviewAction.swap and adjustment.target_id and adjustment.replacement_id:
+            adjusted, did_apply = _swap_items(adjusted, adjustment.target_id, adjustment.replacement_id)
+            _record(
+                applied,
+                ignored,
+                did_apply,
+                "swap",
+                adjustment.target_id,
+                replacement_id=adjustment.replacement_id,
+            )
         elif adjustment.action == LLMReviewAction.add_candidate_poi and adjustment.candidate_poi:
             result = validate_candidate_poi(
                 adjustment.candidate_poi,
@@ -75,6 +85,53 @@ def _remove_item(itinerary: ItineraryGenerateResponse, target_id: uuid.UUID) -> 
     return itinerary.model_copy(update={"days": days}), did_apply
 
 
+def _swap_items(
+    itinerary: ItineraryGenerateResponse,
+    target_id: uuid.UUID,
+    replacement_id: uuid.UUID,
+) -> tuple[ItineraryGenerateResponse, bool]:
+    positions: dict[uuid.UUID, tuple[int, int, ItineraryPlace]] = {}
+    for day_index, day in enumerate(itinerary.days):
+        for place_index, place in enumerate(day.places):
+            if place.id in {target_id, replacement_id}:
+                positions[place.id] = (day_index, place_index, place)
+    if target_id not in positions or replacement_id not in positions:
+        return itinerary, False
+
+    first_day_index, first_place_index, first_place = positions[target_id]
+    second_day_index, second_place_index, second_place = positions[replacement_id]
+    days = [day.model_copy(update={"places": list(day.places), "items": list(day.places)}) for day in itinerary.days]
+    days[first_day_index].places[first_place_index] = _place_in_time_slot(
+        second_place,
+        arrival_time=first_place.arrival_time,
+        departure_time=first_place.departure_time,
+        travel_from_previous_minutes=first_place.travel_from_previous_minutes,
+    )
+    days[second_day_index].places[second_place_index] = _place_in_time_slot(
+        first_place,
+        arrival_time=second_place.arrival_time,
+        departure_time=second_place.departure_time,
+        travel_from_previous_minutes=second_place.travel_from_previous_minutes,
+    )
+    return itinerary.model_copy(update={"days": [day.model_copy(update={"items": day.places}) for day in days]}), True
+
+
+def _place_in_time_slot(
+    place: ItineraryPlace,
+    *,
+    arrival_time: str | None,
+    departure_time: str | None,
+    travel_from_previous_minutes: int,
+) -> ItineraryPlace:
+    return place.model_copy(
+        update={
+            "arrival_time": arrival_time,
+            "departure_time": departure_time,
+            "travel_from_previous_minutes": travel_from_previous_minutes,
+        }
+    )
+
+
 def _add_candidate(
     itinerary: ItineraryGenerateResponse,
     target_day: int,
@@ -108,9 +165,16 @@ def _add_candidate(
 
 
 def _record(
-    applied: list[dict], ignored: list[dict], did_apply: bool, action: str, target_id: uuid.UUID | None
+    applied: list[dict],
+    ignored: list[dict],
+    did_apply: bool,
+    action: str,
+    target_id: uuid.UUID | None,
+    replacement_id: uuid.UUID | None = None,
 ) -> None:
     payload = {"action": action, "target_id": str(target_id) if target_id else None}
+    if replacement_id:
+        payload["replacement_id"] = str(replacement_id)
     if did_apply:
         applied.append(payload)
     else:

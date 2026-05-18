@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes recommendation-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  55% {
+    transform: translateX(95%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
 
 @layer base {
   :root {

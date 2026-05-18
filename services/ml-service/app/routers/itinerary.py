@@ -20,7 +20,7 @@ from app.schemas.llm_quality import LLMQualityReview, LLMReviewStatus
 from app.services.analytics_events import emit_ml_quality_event
 from app.services.llm.candidate_poi_validation import CandidatePOIValidationResult
 from app.services.llm.external_route import generate_external_route
-from app.services.llm.itinerary_adjustment_policy import apply_itinerary_quality_review
+from app.services.llm.itinerary_adjustment_policy import ItineraryAdjustmentResult, apply_itinerary_quality_review
 from app.services.llm.itinerary_context import build_itinerary_context
 from app.services.llm.prompts import ITINERARY_QUALITY_PROMPT_VERSION
 from app.services.llm.quality_gate import LLMQualityGate
@@ -235,7 +235,7 @@ def _review_response(
                 continue
         adjusted = apply_itinerary_quality_review(variant, review, db=db)
         priced_itinerary = adjusted.itinerary
-        final_review = _review_after_repairs(review, adjusted.applied_adjustments, adjusted.ignored_adjustments)
+        final_review = _review_after_repairs(review, adjusted)
         priced_itinerary = _attach_review_targets(priced_itinerary, final_review)
         if final_review is not review:
             priced_itinerary = _clear_item_quality_reviews(priced_itinerary)
@@ -346,10 +346,15 @@ def _quality_score_summary(
 
 def _review_after_repairs(
     review: LLMQualityReview,
-    applied: list[dict],
-    ignored: list[dict],
+    adjusted: ItineraryAdjustmentResult,
 ) -> LLMQualityReview:
-    if review.status in {LLMReviewStatus.caution, LLMReviewStatus.reject} and applied and not ignored:
+    applied = adjusted.applied_adjustments
+    meaningful_ignored = [
+        item
+        for item in adjusted.ignored_adjustments
+        if item.get("action") != "note" and item.get("reason") != "unsupported_or_missing_target"
+    ]
+    if review.status in {LLMReviewStatus.caution, LLMReviewStatus.reject} and applied and not meaningful_ignored:
         return review.model_copy(
             update={
                 "status": LLMReviewStatus.ok,

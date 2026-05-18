@@ -407,9 +407,8 @@ export const TripForm = ({
         <Textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Эти пожелания учитываются при проверке маршрута: темп, ограничения, интересы и места,
-          которые важно не пропустить"
-          className="app-field mb-4 min-h-[112px] resize-none rounded-2xl text-[15px] placeholder:text-muted-foreground"
+          placeholder="Пожелания по маршруту: темп, ограничения, интересы и места, которые важно не пропустить"
+          className="app-field pla mb-4 min-h-[112px] resize-none rounded-2xl text-[15px] placeholder:text-muted-foreground"
         />
       </div>
 
