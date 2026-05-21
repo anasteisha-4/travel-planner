@@ -160,7 +160,7 @@ export const TripDetailPage = () => {
   return (
     <div className="flex h-full flex-col bg-[hsl(var(--app-bg))]">
       <div
-        className="shrink-0 px-5 pb-2"
+        className="shrink-0 pb-2"
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 20px)' }}
       >
         <div className="flex items-center justify-between">
