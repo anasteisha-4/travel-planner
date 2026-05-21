@@ -7,9 +7,11 @@ const envDir = path.resolve(__dirname, '..');
 
 const escapeJsString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
+const RUNTIME_ENV_ALLOWLIST = new Set(['VITE_API_URL', 'VITE_GRAFANA_DASHBOARD_URL']);
+
 const buildRuntimeEnvSource = (env: Record<string, string>): string => {
   const entries = Object.entries(env)
-    .filter(([key]) => key.startsWith('VITE_'))
+    .filter(([key]) => RUNTIME_ENV_ALLOWLIST.has(key))
     .sort(([a], [b]) => a.localeCompare(b));
 
   const body = entries
@@ -172,6 +174,16 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
         },
         '/api/destinations': {
+          target: isDev ? 'http://localhost:8003' : 'http://data-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/geocode': {
+          target: isDev ? 'http://localhost:8003' : 'http://data-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/maps': {
           target: isDev ? 'http://localhost:8003' : 'http://data-service:8000',
           changeOrigin: true,
           secure: false,

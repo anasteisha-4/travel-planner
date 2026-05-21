@@ -1,8 +1,13 @@
 import json
 import math
+import re
+import time
 import uuid
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from typing import Any
+
+import httpx
 
 from app.config import settings
 from app.schemas.itinerary import ItineraryDay, ItineraryGenerateRequest, ItineraryGenerateResponse, ItineraryPlace
@@ -10,6 +15,8 @@ from app.services.llm.prompts import compact_json
 from app.services.llm.providers import LLMMessage, LLMProviderError, LLMRequest, get_provider
 
 EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v2"
+_GEOCODE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="external-route-geocode")
+_LLM_CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="external-route-llm-chunk")
 
 _GENERIC_NAME_PARTS = {
     "центральный район",
@@ -24,6 +31,28 @@ _GENERIC_NAME_PARTS = {
     "местная культура",
 }
 
+_GEOCODE_PLACE_STOPWORDS = {
+    "the",
+    "and",
+    "de",
+    "del",
+    "la",
+    "le",
+    "les",
+    "of",
+    "park",
+    "world",
+    "plaza",
+    "beach",
+    "playa",
+    "platja",
+    "viewpoint",
+    "museum",
+    "museu",
+    "castell",
+    "castle",
+}
+
 _EXTERNAL_ROUTE_SYSTEM_PROMPT = """
 You generate complete travel itineraries as strict JSON for Triply.
 
@@ -35,6 +64,7 @@ Rules:
 - Generate exactly one route variant. Never generate alternative route variants in the same response.
 - For standard pace, return exactly 4 high-quality POIs per active day. For slow pace, return exactly 3. For fast pace, return exactly 5.
 - Every POI must be inside or immediately near the requested destination city; do not include nearby major cities.
+- Every POI coordinate must point to the real land/building/park location, never to nearby water, sea, beach water, or an approximate offshore point.
 - Do not repeat the same POI across days.
 - If a previous route signature or POI list is supplied, produce a materially different route with different POIs.
 - Do not use catalog IDs. The backend will mark all places as external candidates for review.
@@ -130,23 +160,67 @@ def generate_external_route(
     destination_name = _destination_name(request, destination_info)
     destination_id = request.destination_id or uuid.uuid5(uuid.NAMESPACE_URL, f"triply:external:{destination_name}")
     effective_request = _external_route_request(request, trigger)
-    context = _external_route_context(
+    destination_center = _destination_center(destination_info) or _geocode_destination_center(destination_name)
+    provider = get_provider()
+
+    if _active_day_count(effective_request) > 4:
+        return _generate_external_route_chunks(
+            provider=provider,
+            destination_id=destination_id,
+            destination_name=destination_name,
+            destination_info=destination_info,
+            destination_center=destination_center,
+            trip_id=trip_id,
+            request=effective_request,
+            trigger=trigger,
+        )
+
+    return _generate_external_route_single(
+        provider=provider,
+        destination_id=destination_id,
+        destination_name=destination_name,
+        destination_info=destination_info,
+        destination_center=destination_center,
+        trip_id=trip_id,
         request=effective_request,
+        trigger=trigger,
+    )
+
+
+def _generate_external_route_single(
+    *,
+    provider,
+    destination_id: uuid.UUID,
+    destination_name: str,
+    destination_info: dict | None,
+    destination_center: tuple[float, float] | None,
+    trip_id: uuid.UUID | None,
+    request: ItineraryGenerateRequest,
+    trigger: str,
+    timeout_cap_seconds: float | None = None,
+    max_attempts: int = 2,
+) -> ItineraryGenerateResponse | None:
+    context = _external_route_context(
+        request=request,
         destination_name=destination_name,
         destination_info=destination_info,
         trigger=trigger,
     )
-    provider = get_provider()
-    for attempt in range(2):
+    started_at = time.perf_counter()
+    interactive_timeout_seconds = min(settings.LLM_EXTERNAL_ROUTE_TIMEOUT_SECONDS, timeout_cap_seconds or 18.0)
+    for attempt in range(max_attempts):
+        remaining_seconds = interactive_timeout_seconds - (time.perf_counter() - started_at)
+        if remaining_seconds < 8:
+            break
         try:
             response = provider.complete(
                 LLMRequest(
                     model=settings.LLM_MODEL,
                     temperature=0.25 if attempt == 0 else 0,
-                    max_tokens=min(settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS, 4500),
-                    timeout_seconds=max(settings.LLM_TIMEOUT_SECONDS, 30.0),
+                    max_tokens=min(settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS, 3600),
+                    timeout_seconds=max(8.0, min(remaining_seconds, interactive_timeout_seconds)),
                     max_retries=0,
-                    json_schema=external_route_json_schema(max_variants=effective_request.variant_count),
+                    json_schema=external_route_json_schema(max_variants=request.variant_count),
                     messages=[
                         LLMMessage(role="system", content=_external_route_system_prompt(attempt)),
                         LLMMessage(
@@ -164,13 +238,147 @@ def generate_external_route(
             payload=payload,
             destination_id=destination_id,
             destination_name=destination_name,
+            destination_center=destination_center,
             trip_id=trip_id,
-            request=effective_request,
+            request=request,
             trigger=trigger,
         )
         if variants:
             return variants[0].model_copy(update={"variants": variants})
     return None
+
+
+def _generate_external_route_chunks(
+    *,
+    provider,
+    destination_id: uuid.UUID,
+    destination_name: str,
+    destination_info: dict | None,
+    destination_center: tuple[float, float] | None,
+    trip_id: uuid.UUID | None,
+    request: ItineraryGenerateRequest,
+    trigger: str,
+) -> ItineraryGenerateResponse | None:
+    rest_days = _rest_days(request.duration_days, request.rest_days_count)
+    active_days = [day for day in range(1, request.duration_days + 1) if day not in rest_days]
+    day_chunks = [active_days[index : index + 2] for index in range(0, len(active_days), 2)]
+    combined: dict[int, ItineraryDay] = {
+        day_number: ItineraryDay(
+            day=day_number,
+            day_number=day_number,
+            theme="rest",
+            start_time=None,
+            end_time=None,
+            places=[],
+            items=[],
+            total_score=0,
+        )
+        for day_number in rest_days
+    }
+    seed_base = request.variant_seed or 0
+    chunk_futures = {}
+    for chunk_index, day_numbers in enumerate(day_chunks):
+        if not day_numbers:
+            continue
+        chunk_notes = " ".join(
+            part
+            for part in [
+                request.trip_notes,
+                f"Generate only this segment of a longer {request.duration_days}-day trip: original days {day_numbers[0]}-{day_numbers[-1]}.",
+            ]
+            if part
+        )
+        chunk_request = request.model_copy(
+            update={
+                "duration_days": len(day_numbers),
+                "rest_days_count": 0,
+                "start_date": request.start_date + timedelta(days=day_numbers[0] - 1),
+                "variant_count": 1,
+                "variant_seed": seed_base + chunk_index,
+                "exclude_signature": None,
+                "trip_notes": chunk_notes,
+            }
+        )
+        chunk_futures[chunk_index] = (
+            day_numbers,
+            _LLM_CHUNK_EXECUTOR.submit(
+                _generate_external_route_single,
+                provider=get_provider(),
+                destination_id=destination_id,
+                destination_name=destination_name,
+                destination_info=destination_info,
+                destination_center=destination_center,
+                trip_id=trip_id,
+                request=chunk_request,
+                trigger=f"{trigger}_chunk",
+                timeout_cap_seconds=20.0,
+                max_attempts=1,
+            ),
+        )
+
+    seen_names: set[str] = set()
+    for chunk_index in sorted(chunk_futures):
+        day_numbers, future = chunk_futures[chunk_index]
+        try:
+            chunk = future.result(timeout=24.0)
+        except Exception:
+            chunk = None
+        if chunk is None:
+            return None
+        chunk_days = [day for day in chunk.days if str(day.theme or "").lower() != "rest"]
+        if len(chunk_days) < len(day_numbers):
+            return None
+        for offset, original_day_number in enumerate(day_numbers):
+            source_day = chunk_days[offset]
+            places = source_day.places
+            if len(places) < _validated_min_places_per_day(request.pace):
+                return None
+            for place in places:
+                seen_names.add(_normalize_name(place.name))
+            combined[original_day_number] = source_day.model_copy(
+                update={
+                    "day": original_day_number,
+                    "day_number": original_day_number,
+                    "places": places,
+                    "items": places,
+                }
+            )
+
+    days = [combined[day_number] for day_number in range(1, request.duration_days + 1) if day_number in combined]
+    if not _is_complete_external_route(days, request, destination_center):
+        return None
+    signature_seed = compact_json(
+        {
+            "trip_id": str(trip_id) if trip_id else None,
+            "destination": destination_name,
+            "days": [[place.name for place in day.places] for day in days if day.places],
+        }
+    )
+    route_signature = f"llm-external-{uuid.uuid5(uuid.NAMESPACE_URL, signature_seed)}"
+    if request.exclude_signature and route_signature == request.exclude_signature:
+        return None
+    response = ItineraryGenerateResponse(
+        destination_id=destination_id,
+        duration_days=request.duration_days,
+        variant_index=0,
+        variant_seed=request.variant_seed,
+        route_signature=route_signature,
+        model_version=f"llm-external-route:{settings.LLM_MODEL}",
+        days=days,
+        activity_tags=request.preferred_activities or [],
+        source="llm-external-draft",
+        has_template=True,
+        message=None,
+        score_summary={
+            "external_route_used": True,
+            "external_route_prompt_version": EXTERNAL_ROUTE_PROMPT_VERSION,
+            "external_route_trigger": trigger,
+            "external_route_chunked": True,
+            "external_route_chunks": len(day_chunks),
+            "llm_external_route_model": settings.LLM_MODEL,
+        },
+    )
+    return response.model_copy(update={"variants": [response]})
 
 
 def _external_route_system_prompt(attempt: int) -> str:
@@ -224,6 +432,8 @@ def _external_route_context(
             "max_active_places_per_day": _max_places_per_day(request.pace),
             "coordinates_required": True,
             "specific_real_poi_names_required": True,
+            "coordinate_radius_km_from_destination_center": _coordinate_radius_km(request),
+            "coordinates_must_be_on_land_or_exact_poi_location": True,
             "avoid_generic_names": sorted(_GENERIC_NAME_PARTS),
         },
     }
@@ -234,6 +444,7 @@ def _normalize_external_variants(
     payload: dict,
     destination_id: uuid.UUID,
     destination_name: str,
+    destination_center: tuple[float, float] | None,
     trip_id: uuid.UUID | None,
     request: ItineraryGenerateRequest,
     trigger: str,
@@ -249,9 +460,10 @@ def _normalize_external_variants(
         days = _normalize_external_days(
             raw_days=raw_variant.get("days"),
             destination_name=destination_name,
+            destination_center=destination_center,
             request=request,
         )
-        if not _is_complete_external_route(days, request):
+        if not _is_complete_external_route(days, request, destination_center):
             continue
         variant_index = int(raw_variant.get("variant_index") or fallback_index)
         signature_seed = compact_json(
@@ -294,6 +506,7 @@ def _normalize_external_days(
     *,
     raw_days: Any,
     destination_name: str,
+    destination_center: tuple[float, float] | None,
     request: ItineraryGenerateRequest,
 ) -> list[ItineraryDay]:
     if not isinstance(raw_days, list):
@@ -311,6 +524,7 @@ def _normalize_external_days(
     rest_days = _rest_days(request.duration_days, request.rest_days_count)
     days: list[ItineraryDay] = []
     seen_names: set[str] = set()
+    coordinate_cache: dict[str, tuple[float, float]] = {}
     for day_number in range(1, request.duration_days + 1):
         if day_number in rest_days:
             days.append(
@@ -332,6 +546,9 @@ def _normalize_external_days(
             raw_places=raw_day.get("places"),
             day_number=day_number,
             destination_name=destination_name,
+            destination_center=destination_center,
+            coordinate_cache=coordinate_cache,
+            radius_km=_coordinate_radius_km(request),
             seen_names=seen_names,
         )
         days.append(
@@ -353,11 +570,15 @@ def _normalize_external_places(
     raw_places: Any,
     day_number: int,
     destination_name: str,
+    destination_center: tuple[float, float] | None,
+    coordinate_cache: dict[str, tuple[float, float]],
+    radius_km: float,
     seen_names: set[str],
 ) -> list[ItineraryPlace]:
     if not isinstance(raw_places, list):
         return []
     places: list[ItineraryPlace] = []
+    candidate_rows: list[tuple[int, dict, str, str, float, float]] = []
     for index, raw_place in enumerate(raw_places):
         if not isinstance(raw_place, dict):
             continue
@@ -368,6 +589,46 @@ def _normalize_external_places(
         lat = _float_or_none(raw_place.get("lat"))
         lng = _float_or_none(raw_place.get("lng"))
         if lat is None or lng is None or not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+            continue
+        candidate_rows.append((index, raw_place, name, normalized_name, lat, lng))
+
+    repair_futures = {
+        index: _GEOCODE_EXECUTOR.submit(
+            _repair_place_coordinates,
+            name=name,
+            address=raw_place.get("address"),
+            original_lat=lat,
+            original_lng=lng,
+            destination_name=destination_name,
+            destination_center=destination_center,
+            radius_km=radius_km,
+            cache=coordinate_cache,
+        )
+        for index, raw_place, name, _normalized_name, lat, lng in candidate_rows
+    }
+
+    for index, raw_place, name, normalized_name, lat, lng in candidate_rows:
+        try:
+            repaired = repair_futures[index].result(timeout=2.2)
+        except Exception:
+            repaired = None
+        if repaired is not None:
+            lat, lng = repaired
+        elif destination_center is not None and _haversine_km(
+            lat, lng, destination_center[0], destination_center[1]
+        ) > _unverified_coordinate_radius_km(radius_km):
+            continue
+        if any(
+            existing.lat is not None
+            and existing.lng is not None
+            and _haversine_km(float(existing.lat), float(existing.lng), lat, lng) < 0.05
+            for existing in places
+        ):
+            continue
+        if (
+            destination_center is not None
+            and _haversine_km(lat, lng, destination_center[0], destination_center[1]) > radius_km
+        ):
             continue
         arrival_time = _valid_time(raw_place.get("arrival_time"))
         departure_time = _valid_time(raw_place.get("departure_time"))
@@ -399,7 +660,30 @@ def _normalize_external_places(
             )
         )
         seen_names.add(normalized_name)
-    return places
+    return _repair_external_travel_minutes(places)
+
+
+def _repair_external_travel_minutes(places: list[ItineraryPlace]) -> list[ItineraryPlace]:
+    repaired: list[ItineraryPlace] = []
+    previous: ItineraryPlace | None = None
+    for index, place in enumerate(places):
+        travel_minutes = int(place.travel_from_previous_minutes or 0)
+        if index == 0:
+            travel_minutes = 0
+        elif (
+            travel_minutes <= 0
+            and previous
+            and previous.lat is not None
+            and previous.lng is not None
+            and place.lat is not None
+            and place.lng is not None
+        ):
+            distance_km = _haversine_km(float(previous.lat), float(previous.lng), float(place.lat), float(place.lng))
+            travel_minutes = max(5, min(75, int(distance_km / 4.5 * 60) + 3))
+        repaired_place = place.model_copy(update={"travel_from_previous_minutes": travel_minutes})
+        repaired.append(repaired_place)
+        previous = repaired_place
+    return repaired
 
 
 def _clean_external_days(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> list[ItineraryDay]:
@@ -439,6 +723,193 @@ def _remove_coordinate_outliers(days: list[ItineraryDay]) -> list[ItineraryDay]:
     return cleaned
 
 
+def _destination_center(destination_info: dict | None) -> tuple[float, float] | None:
+    if not destination_info:
+        return None
+    lat = _float_or_none(destination_info.get("lat"))
+    lng = _float_or_none(destination_info.get("lng"))
+    if lat is None or lng is None:
+        return None
+    return lat, lng
+
+
+def _geocode_destination_center(destination_name: str) -> tuple[float, float] | None:
+    if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
+        return None
+    try:
+        response = httpx.get(
+            f"{settings.DATA_SERVICE_URL}/api/geocode/search",
+            params={"q": destination_name, "results": 1},
+            timeout=3.0,
+        )
+        if response.status_code != 200:
+            return None
+        items = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    if not isinstance(items, list) or not items:
+        return None
+    lat = _float_or_none(items[0].get("lat"))
+    lng = _float_or_none(items[0].get("lon") or items[0].get("lng"))
+    if lat is None or lng is None:
+        return None
+    return lat, lng
+
+
+def _repair_place_coordinates(
+    *,
+    name: str,
+    address: object,
+    original_lat: float,
+    original_lng: float,
+    destination_name: str,
+    destination_center: tuple[float, float] | None,
+    radius_km: float,
+    cache: dict[str, tuple[float, float]],
+) -> tuple[float, float] | None:
+    if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED or destination_center is None:
+        return None
+    queries = _coordinate_repair_queries(name=name, address=address, destination_name=destination_name)
+    cache_key = _normalize_name("|".join(queries))
+    if cache_key in cache:
+        return cache[cache_key]
+    for query in queries:
+        try:
+            response = httpx.get(
+                f"{settings.DATA_SERVICE_URL}/api/geocode/search",
+                params={
+                    "q": query,
+                    "results": 3,
+                    "bias_lat": destination_center[0],
+                    "bias_lon": destination_center[1],
+                },
+                timeout=1.8,
+            )
+            if response.status_code != 200:
+                continue
+            items = response.json()
+        except (httpx.HTTPError, ValueError, TypeError):
+            continue
+        if not isinstance(items, list) or not items:
+            continue
+        for item in items[:3]:
+            if _is_destination_only_geocode_result(item, name, destination_name):
+                continue
+            if not _geocode_item_matches_place(item, name):
+                continue
+            lat = _float_or_none(item.get("lat"))
+            lng = _float_or_none(item.get("lon") or item.get("lng"))
+            if lat is None or lng is None:
+                continue
+            if _haversine_km(lat, lng, destination_center[0], destination_center[1]) > radius_km:
+                continue
+            cache[cache_key] = (lat, lng)
+            return cache[cache_key]
+    return None
+
+
+def _coordinate_repair_queries(*, name: str, address: object, destination_name: str) -> list[str]:
+    address_text = str(address or "").strip()
+    clean_name = _clean_geocode_place_name(name)
+    names = [clean_name]
+    base_name = clean_name.split(" - ", 1)[0].strip()
+    if base_name and base_name not in names:
+        names.append(base_name)
+    spaced_name = base_name.replace("PortAventura", "Port Aventura").strip()
+    if spaced_name and spaced_name not in names:
+        names.append(spaced_name)
+    compact_words = ["main entrance", "entrance", "branch"]
+    for word in compact_words:
+        lowered = base_name.lower()
+        if word in lowered:
+            cleaned = base_name[: lowered.find(word)].strip(" -,:")
+            if cleaned and cleaned not in names:
+                names.append(cleaned)
+    for suffix in (" world",):
+        lowered = base_name.lower()
+        if lowered.endswith(suffix):
+            cleaned = base_name[: -len(suffix)].strip(" -,:")
+            spaced_cleaned = cleaned.replace("PortAventura", "Port Aventura").strip()
+            for value in (cleaned, spaced_cleaned):
+                if value and value not in names:
+                    names.append(value)
+
+    queries: list[str] = []
+    for candidate_name in names:
+        plain_query = ", ".join(part for part in [candidate_name, destination_name] if part)
+        if plain_query not in queries:
+            queries.append(plain_query)
+        parts = [candidate_name]
+        if address_text:
+            parts.append(address_text)
+        parts.append(destination_name)
+        query = ", ".join(part for part in parts if part)
+        if query not in queries:
+            queries.append(query)
+    return queries
+
+
+def _clean_geocode_place_name(name: str) -> str:
+    cleaned = re.sub(r"\([^)]*\)", "", name).strip()
+    cleaned = re.sub(r"\b(external view|plaza|viewpoint|view point|main entrance|entrance)\b", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" -,:")
+    return cleaned or name.strip()
+
+
+def _is_destination_only_geocode_result(item: dict, place_name: str, destination_name: str) -> bool:
+    result_name = _normalize_name(str(item.get("name") or ""))
+    normalized_place = _normalize_name(place_name)
+    normalized_destination = _normalize_name(destination_name.split(",")[0])
+    if not result_name or result_name == normalized_place:
+        return False
+    return result_name == normalized_destination
+
+
+def _geocode_item_matches_place(item: dict, place_name: str) -> bool:
+    result_text = _normalize_name(
+        " ".join(str(item.get(key) or "") for key in ("name", "fullAddress", "address", "display_name"))
+    )
+    if not result_text:
+        return False
+    place_text = _normalize_name(place_name)
+    compact_result = result_text.replace(" ", "")
+    compact_place = place_text.replace(" ", "")
+    if compact_place and compact_place in compact_result:
+        return True
+    tokens = {
+        token
+        for token in re.findall(r"[\w']+", place_text)
+        if len(token) >= 4 and token not in _GEOCODE_PLACE_STOPWORDS
+    }
+    if not tokens:
+        return True
+    return any(token in result_text or token.replace("'", "") in compact_result for token in tokens)
+
+
+def _coordinate_radius_km(request: ItineraryGenerateRequest) -> float:
+    destination_text = f"{request.destination_text or ''}".lower()
+    if (
+        "koh " in destination_text
+        or "ko " in destination_text
+        or "island" in destination_text
+        or "остров" in destination_text
+    ):
+        return 45.0
+    if request.duration_days >= 7:
+        return 45.0
+    if request.duration_days >= 4:
+        return 35.0
+    return 12.0
+
+
+def _unverified_coordinate_radius_km(radius_km: float) -> float:
+    if radius_km >= 45.0:
+        return radius_km
+    if radius_km >= 35.0:
+        return 18.0
+    return 5.0
+
+
 def _max_places_per_day(pace: str | None) -> int:
     normalized = str(pace or "").lower()
     if normalized in {"slow", "relaxed", "low"}:
@@ -467,17 +938,45 @@ def _external_route_request(request: ItineraryGenerateRequest, trigger: str) -> 
     return request.model_copy(update={"variant_count": 1})
 
 
-def _is_complete_external_route(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> bool:
+def _active_day_count(request: ItineraryGenerateRequest) -> int:
+    return request.duration_days - len(_rest_days(request.duration_days, request.rest_days_count))
+
+
+def _is_complete_external_route(
+    days: list[ItineraryDay],
+    request: ItineraryGenerateRequest,
+    destination_center: tuple[float, float] | None,
+) -> bool:
     if len(days) != request.duration_days:
         return False
+    active_places = [place for day in days if str(day.theme or "").lower() != "rest" for place in day.places]
+    if destination_center is not None and active_places:
+        median_lat = sorted(float(place.lat) for place in active_places if place.lat is not None)[
+            len(active_places) // 2
+        ]
+        median_lng = sorted(float(place.lng) for place in active_places if place.lng is not None)[
+            len(active_places) // 2
+        ]
+        if _haversine_km(
+            median_lat, median_lng, destination_center[0], destination_center[1]
+        ) > _route_cluster_radius_km(request):
+            return False
     for day in days:
         if str(day.theme or "").lower() == "rest":
             continue
-        if len(day.places) < _min_places_per_day(request.pace):
+        if len(day.places) < _validated_min_places_per_day(request.pace):
             return False
         if any(place.lat is None or place.lng is None for place in day.places):
             return False
     return True
+
+
+def _route_cluster_radius_km(request: ItineraryGenerateRequest) -> float:
+    return max(6.0, _coordinate_radius_km(request) * 0.7)
+
+
+def _validated_min_places_per_day(pace: str | None) -> int:
+    return max(2, _min_places_per_day(pace) - 1)
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

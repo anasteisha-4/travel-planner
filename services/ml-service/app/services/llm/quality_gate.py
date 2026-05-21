@@ -66,8 +66,8 @@ class LLMQualityGate:
             prompt=ITINERARY_QUALITY_TEMPLATE,
             prompt_version=ITINERARY_QUALITY_PROMPT_VERSION,
             context=context,
-            max_tokens=3200,
-            timeout_seconds=max(settings.LLM_TIMEOUT_SECONDS, 30.0),
+            max_tokens=2400,
+            timeout_seconds=min(max(settings.LLM_TIMEOUT_SECONDS, 8.0), 12.0),
             max_retries=0,
         )
 
@@ -199,6 +199,8 @@ class LLMQualityGate:
                 prompt_version=prompt_version,
             )
         except (json.JSONDecodeError, ValidationError):
+            if request.max_retries == 0:
+                raise
             retry_request = LLMRequest(
                 model=request.model,
                 temperature=0,

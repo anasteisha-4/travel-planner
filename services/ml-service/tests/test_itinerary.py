@@ -476,7 +476,7 @@ def test_itinerary_quality_reviews_all_default_variants(client: TestClient, monk
     assert [variant["quality_review"]["status"] for variant in data["variants"]] == ["ok", "ok", "ok"]
 
 
-def test_rejected_catalog_variants_trigger_single_external_replacement(
+def test_rejected_catalog_variants_keep_catalog_variants_without_external_replacement(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
     reject_review = LLMQualityReview(
@@ -536,9 +536,9 @@ def test_rejected_catalog_variants_trigger_single_external_replacement(
 
     assert resp.status_code == 200
     data = resp.json()
-    assert calls == 1
-    assert data["source"] == "llm-external-draft"
-    assert [variant["route_signature"] for variant in data["variants"]] == ["external-single"]
+    assert calls == 0
+    assert data["source"] == "optimized-heuristic"
+    assert [variant["route_signature"] for variant in data["variants"]] == ["variant-0", "variant-1", "variant-2"]
 
 
 def test_itinerary_candidate_poi_is_added_as_external_candidate(
@@ -889,6 +889,7 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
         ]
     }
     monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", False)
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
     monkeypatch.setattr(
         "app.services.llm.external_route.get_provider",
@@ -958,6 +959,7 @@ def test_manual_destination_external_route_requests_single_variant_schema(
             return super().complete(request)
 
     monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", False)
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
     monkeypatch.setattr(
         "app.services.llm.external_route.get_provider",
@@ -978,7 +980,131 @@ def test_manual_destination_external_route_requests_single_variant_schema(
     request = captured_requests[0]
     assert request.json_schema["schema"]["properties"]["variants"]["maxItems"] == 1
     assert request.max_tokens <= 4500
+    assert request.timeout_seconds <= 24.0
     assert json.loads(request.messages[1].content)["context"]["trip"]["variant_count"] == 1
+
+
+def test_external_route_repairs_coordinates_and_travel_minutes(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    captured_geocode_queries = []
+    payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Salou route",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "coast",
+                        "places": [
+                            {
+                                "name": "Font Lluminosa",
+                                "category": "viewpoint",
+                                "lat": 41.0701,
+                                "lng": 1.1600,
+                                "address": "Passeig de Jaume I",
+                                "arrival_time": "09:30",
+                                "departure_time": "10:20",
+                                "visit_duration_minutes": 50,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Specific Salou landmark.",
+                                "confidence": 0.9,
+                            },
+                            {
+                                "name": "Torre Vella de Salou",
+                                "category": "culture",
+                                "lat": 41.0695,
+                                "lng": 1.1610,
+                                "address": "Carrer de l'Arquebisbe Pere de Cardona",
+                                "arrival_time": "10:40",
+                                "departure_time": "11:40",
+                                "visit_duration_minutes": 60,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Historic Salou site.",
+                                "confidence": 0.88,
+                            },
+                            {
+                                "name": "Parc Municipal de Salou",
+                                "category": "nature",
+                                "lat": 41.0700,
+                                "lng": 1.1620,
+                                "address": "Carrer de Barbastre",
+                                "arrival_time": "12:05",
+                                "departure_time": "13:05",
+                                "visit_duration_minutes": 60,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Central green stop.",
+                                "confidence": 0.84,
+                            },
+                            {
+                                "name": "Platja de Llevant",
+                                "category": "beach",
+                                "lat": 41.0690,
+                                "lng": 1.1630,
+                                "address": "Passeig de Jaume I",
+                                "arrival_time": "13:30",
+                                "departure_time": "14:30",
+                                "visit_duration_minutes": 60,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Main beach promenade on land.",
+                                "confidence": 0.84,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    class GeocodeResponse:
+        status_code = 200
+
+        def __init__(self, lat: float, lon: float, name: str):
+            self.lat = lat
+            self.lon = lon
+            self.name = name
+
+        def json(self):
+            return [{"lat": self.lat, "lon": self.lon, "name": self.name}]
+
+    corrected = {
+        "Font Lluminosa": (41.0764, 1.1419),
+        "Torre Vella de Salou": (41.0783, 1.1308),
+        "Parc Municipal de Salou": (41.0738, 1.1486),
+        "Platja de Llevant": (41.0760, 1.1438),
+    }
+
+    def fake_geocode(_url, params, timeout):
+        captured_geocode_queries.append((params, timeout))
+        for name, coords in corrected.items():
+            if name in params["q"]:
+                return GeocodeResponse(*coords, name=name)
+        return GeocodeResponse(41.0760, 1.1410, name="Salou")
+
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
+    monkeypatch.setattr("app.services.llm.external_route.httpx.get", fake_geocode)
+    monkeypatch.setattr(
+        "app.services.llm.external_route.get_provider", lambda: FakeProvider(responses=[json.dumps(payload)])
+    )
+
+    resp = client.post(
+        "/api/v1/itinerary",
+        json={
+            "destination_text": "Salou",
+            "duration_days": 1,
+            "start_date": "2026-06-10",
+            "variant_count": 1,
+            "allow_external_route": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    places = resp.json()["days"][0]["places"]
+    assert places[0]["lat"] == 41.0764
+    assert places[0]["lng"] == 1.1419
+    assert places[1]["travel_from_previous_minutes"] > 0
+    assert len(captured_geocode_queries) == 5
 
 
 def test_manual_destination_regenerate_rejects_same_external_signature(
@@ -1052,6 +1178,7 @@ def test_manual_destination_regenerate_rejects_same_external_signature(
         ),
     ]
     monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", False)
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
     monkeypatch.setattr("app.services.llm.external_route.get_provider", lambda: FakeProvider(responses=responses))
 

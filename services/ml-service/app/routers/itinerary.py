@@ -188,10 +188,14 @@ def _review_response(
         return response
 
     destination_info = _destination_info(response.destination_id) if request.destination_id else None
+    if response.source == "llm-external-draft":
+        return response
     if not settings.LLM_QUALITY_ENABLED:
         return response
 
     variants = response.variants or [response]
+    if variants and all(variant.source == "llm-external-draft" for variant in variants):
+        return response
     review_limit = max(0, min(settings.LLM_ITINERARY_REVIEW_VARIANTS, len(variants), request.variant_count))
     reviewed_variants: list[ItineraryGenerateResponse] = []
 
@@ -221,20 +225,6 @@ def _review_response(
             itinerary_id=variant.route_signature or str(variant.variant_index),
             context=context,
         )
-        if variant.source != "external-fallback" and _review_requests_external_route(review):
-            external = generate_external_route(
-                db=db,
-                user_id=user_id,
-                trip_id=request.trip_id,
-                request=_with_external_route_allowed(request),
-                profile=profile,
-                destination_info=destination_info,
-                trigger="llm_reject_regenerate",
-            )
-            if external is not None:
-                replacement_variants = _response_variants(external)
-                first_replacement = replacement_variants[0]
-                return first_replacement.model_copy(update={"variants": replacement_variants[:1]})
         adjusted = apply_itinerary_quality_review(variant, review, db=db)
         priced_itinerary = adjusted.itinerary
         final_review = _review_after_repairs(review, adjusted)
@@ -291,10 +281,19 @@ def _prefer_non_rejected_variants(variants: list[ItineraryGenerateResponse]) -> 
     }
     return sorted(
         variants,
-        key=lambda variant: rank.get(
-            variant.quality_review.status if variant.quality_review else LLMReviewStatus.skipped, 2
+        key=lambda variant: (
+            rank.get(variant.quality_review.status if variant.quality_review else LLMReviewStatus.skipped, 2),
+            *_route_fullness_rank(variant),
         ),
     )
+
+
+def _route_fullness_rank(variant: ItineraryGenerateResponse) -> tuple[int, int]:
+    active_days = [day for day in variant.days if str(day.theme or "").lower() != "rest"]
+    if not active_days:
+        return (0, 0)
+    place_counts = [len(day.places) for day in active_days]
+    return (-sum(place_counts), -min(place_counts))
 
 
 def _review_requests_external_route(review: LLMQualityReview) -> bool:

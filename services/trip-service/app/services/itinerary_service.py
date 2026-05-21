@@ -118,6 +118,17 @@ def _signature(days: list[dict]) -> str:
     return hashlib.sha1("|".join(poi_ids).encode("utf-8")).hexdigest()[:24]
 
 
+def _route_score_summary(variant: dict, days_payload: list[dict]) -> dict:
+    summary = dict(variant.get("score_summary") or variant.get("stats") or {})
+    items = [item for day in days_payload for item in day.get("items", day.get("places", []))]
+    summary.setdefault("total_pois", len(items))
+    summary.setdefault(
+        "travel_overhead_minutes",
+        sum(max(0, int(item.get("travel_from_previous_minutes") or 0)) for item in items),
+    )
+    return summary
+
+
 def _normalized_days_for_trip(trip: models.Trip, days_payload: list[dict], constraints: dict) -> list[dict]:
     by_day: dict[int, dict] = {}
     for index, payload in enumerate(days_payload):
@@ -307,7 +318,7 @@ def _persist_variant(
         model_version=str(variant.get("model_version") or "heuristic-itinerary-v2"),
         route_signature=str(variant.get("route_signature") or _signature(days_payload)),
         constraints=constraints,
-        score_summary=variant.get("score_summary") or variant.get("stats") or {},
+        score_summary=_route_score_summary(variant, days_payload),
     )
     db.add(itinerary)
     db.flush()

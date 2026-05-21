@@ -404,6 +404,29 @@ def test_external_llm_route_response_is_persisted_as_one_variant_for_catalog_tri
     assert generated.json()[0]["route_signature"] == "llm-external-0"
 
 
+def test_external_route_persists_travel_overhead_from_items(client, auth_headers, trip_data, monkeypatch):
+    trip_id = _create_trip(client, auth_headers, trip_data)
+    body = _ml_response_with_day_timeline()
+    body["variants"][0]["source"] = "llm-external-draft"
+    body["variants"][0]["model_version"] = "llm-external-route:qwen3.6-35b-a3b/latest"
+    body["variants"][0]["score_summary"] = {"external_route_used": True}
+    response = Mock()
+    response.json.return_value = body
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
+
+    generated = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json={"variant_count": 1, "allow_external_route": True},
+        headers=auth_headers,
+    )
+
+    assert generated.status_code == 201
+    summary = generated.json()[0]["score_summary"]
+    assert summary["external_route_used"] is True
+    assert summary["travel_overhead_minutes"] == 50
+
+
 def test_generate_preserves_ml_no_feasible_error(client, auth_headers, trip_data, monkeypatch):
     trip_id = _create_trip(client, auth_headers, trip_data)
     response = Mock()

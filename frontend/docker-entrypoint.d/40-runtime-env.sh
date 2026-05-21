@@ -10,7 +10,7 @@ escape_js_string() {
   first=1
   env | sort | while IFS='=' read -r name value; do
     case "$name" in
-      VITE_*)
+      VITE_API_URL|VITE_GRAFANA_DASHBOARD_URL)
         if [ "$first" -eq 0 ]; then
           printf ',\n'
         fi

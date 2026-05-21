@@ -144,9 +144,6 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_URL
-        - VITE_YANDEX_MAPS_API_TOKEN
-        - VITE_GEOAPIFY_API_KEY
-        - VITE_YANDEX_GEOSUGGEST_API_KEY
         - VITE_GRAFANA_DASHBOARD_URL
     container_name: travel-planner-frontend
     env_file:

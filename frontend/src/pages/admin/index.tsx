@@ -1,3 +1,4 @@
+import { getRuntimeEnv } from '@/shared/lib/runtime-env';
 import {
   Badge,
   Button,
@@ -31,11 +32,10 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { getRuntimeEnv } from '@/shared/lib/runtime-env';
 import {
-  createMLDatasetSnapshot,
   approveLLMCandidateDestination,
   approveLLMCandidatePOI,
+  createMLDatasetSnapshot,
   getAdminEvents,
   getBudgetDebug,
   getDashboardSummary,
@@ -57,9 +57,9 @@ import {
   updateFeatureFlag,
   type AdminEvent,
   type EventsFilters,
-  type LLMCandidatePOIApprovePayload,
   type LLMCandidateDestination,
   type LLMCandidatePOI,
+  type LLMCandidatePOIApprovePayload,
   type LLMReviewLog,
 } from './api';
 
@@ -151,7 +151,9 @@ const CandidatePOICard = ({
     address: candidate.address ?? '',
     source_url: String(candidate.payload.source_url ?? ''),
     official_url: String(candidate.payload.official_url ?? ''),
-    suggested_visit_duration_minutes: String(candidate.payload.suggested_visit_duration_minutes ?? ''),
+    suggested_visit_duration_minutes: String(
+      candidate.payload.suggested_visit_duration_minutes ?? ''
+    ),
     opening_hours: String(candidate.payload.opening_hours ?? ''),
     estimated_price: typeof priceEstimate === 'number' ? String(priceEstimate) : '',
     estimated_price_currency: String(priceCurrency ?? ''),
@@ -213,19 +215,87 @@ const CandidatePOICard = ({
             <div>Price checked: {String(candidate.payload.price_checked_at ?? '-')}</div>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
-            <Input value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} placeholder="Название" disabled={isBusy} />
-            <Input value={draft.name_ru} onChange={(event) => updateDraft('name_ru', event.target.value)} placeholder="Русское название" disabled={isBusy} />
-            <Input value={draft.category} onChange={(event) => updateDraft('category', event.target.value)} placeholder="Категория" disabled={isBusy} />
-            <Input value={draft.suggested_visit_duration_minutes} onChange={(event) => updateDraft('suggested_visit_duration_minutes', event.target.value)} placeholder="Минуты посещения" disabled={isBusy} />
-            <Input value={draft.lat} onChange={(event) => updateDraft('lat', event.target.value)} placeholder="Lat" disabled={isBusy} />
-            <Input value={draft.lng} onChange={(event) => updateDraft('lng', event.target.value)} placeholder="Lng" disabled={isBusy} />
-            <Input className="md:col-span-2" value={draft.address} onChange={(event) => updateDraft('address', event.target.value)} placeholder="Адрес" disabled={isBusy} />
-            <Input value={draft.source_url} onChange={(event) => updateDraft('source_url', event.target.value)} placeholder="Source URL" disabled={isBusy} />
-            <Input value={draft.official_url} onChange={(event) => updateDraft('official_url', event.target.value)} placeholder="Official URL" disabled={isBusy} />
-            <Input value={draft.opening_hours} onChange={(event) => updateDraft('opening_hours', event.target.value)} placeholder="Часы работы" disabled={isBusy} />
-            <Input value={draft.estimated_price} onChange={(event) => updateDraft('estimated_price', event.target.value)} placeholder="Цена" disabled={isBusy} />
-            <Input value={draft.estimated_price_currency} onChange={(event) => updateDraft('estimated_price_currency', event.target.value)} placeholder="Валюта цены" disabled={isBusy} />
-            <Input value={draft.price_source_url} onChange={(event) => updateDraft('price_source_url', event.target.value)} placeholder="Источник цены" disabled={isBusy} />
+            <Input
+              value={draft.name}
+              onChange={(event) => updateDraft('name', event.target.value)}
+              placeholder="Название"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.name_ru}
+              onChange={(event) => updateDraft('name_ru', event.target.value)}
+              placeholder="Русское название"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.category}
+              onChange={(event) => updateDraft('category', event.target.value)}
+              placeholder="Категория"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.suggested_visit_duration_minutes}
+              onChange={(event) =>
+                updateDraft('suggested_visit_duration_minutes', event.target.value)
+              }
+              placeholder="Минуты посещения"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.lat}
+              onChange={(event) => updateDraft('lat', event.target.value)}
+              placeholder="Lat"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.lng}
+              onChange={(event) => updateDraft('lng', event.target.value)}
+              placeholder="Lng"
+              disabled={isBusy}
+            />
+            <Input
+              className="md:col-span-2"
+              value={draft.address}
+              onChange={(event) => updateDraft('address', event.target.value)}
+              placeholder="Адрес"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.source_url}
+              onChange={(event) => updateDraft('source_url', event.target.value)}
+              placeholder="Source URL"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.official_url}
+              onChange={(event) => updateDraft('official_url', event.target.value)}
+              placeholder="Official URL"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.opening_hours}
+              onChange={(event) => updateDraft('opening_hours', event.target.value)}
+              placeholder="Часы работы"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.estimated_price}
+              onChange={(event) => updateDraft('estimated_price', event.target.value)}
+              placeholder="Цена"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.estimated_price_currency}
+              onChange={(event) => updateDraft('estimated_price_currency', event.target.value)}
+              placeholder="Валюта цены"
+              disabled={isBusy}
+            />
+            <Input
+              value={draft.price_source_url}
+              onChange={(event) => updateDraft('price_source_url', event.target.value)}
+              placeholder="Источник цены"
+              disabled={isBusy}
+            />
           </div>
           {sourceUrl && (
             <a
@@ -297,7 +367,8 @@ const CandidateDestinationCard = ({
   isBusy: boolean;
 }) => {
   const sourceUrls = fieldList(candidate.payload.source_urls);
-  const initialNameRu = typeof candidate.payload.name_ru === 'string' ? candidate.payload.name_ru : '';
+  const initialNameRu =
+    typeof candidate.payload.name_ru === 'string' ? candidate.payload.name_ru : '';
   const [nameRu, setNameRu] = useState(initialNameRu);
   const [region, setRegion] = useState(candidate.region ?? String(candidate.payload.region ?? ''));
   const mapUrl =
@@ -330,7 +401,10 @@ const CandidateDestinationCard = ({
             <div>Review: {candidate.review_comment ?? '-'}</div>
           </div>
           <div className="grid gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground" htmlFor={`candidate-destination-name-ru-${candidate.id}`}>
+            <label
+              className="text-xs font-semibold text-muted-foreground"
+              htmlFor={`candidate-destination-name-ru-${candidate.id}`}
+            >
               Русское название
             </label>
             <Input
@@ -342,7 +416,10 @@ const CandidateDestinationCard = ({
             />
           </div>
           <div className="grid gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground" htmlFor={`candidate-destination-region-${candidate.id}`}>
+            <label
+              className="text-xs font-semibold text-muted-foreground"
+              htmlFor={`candidate-destination-region-${candidate.id}`}
+            >
               Регион
             </label>
             <Input
@@ -382,7 +459,8 @@ const CandidateDestinationCard = ({
             value={{
               reason: candidate.payload.reason,
               source_urls: candidate.payload.source_urls,
-              route_note: 'Одобрение добавляет направление в каталог и связывает POI-кандидаты этой поездки.',
+              route_note:
+                'Одобрение добавляет направление в каталог и связывает POI-кандидаты этой поездки.',
             }}
             maxHeight="max-h-44"
           />
@@ -740,7 +818,8 @@ export const AdminPage = () => {
       if (action === 'reject') return rejectLLMCandidateDestination(id);
       return markLLMCandidateDestinationNeedsData(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-llm-candidate-destination'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin-llm-candidate-destination'] }),
   });
 
   const summary = summaryQuery.data;
@@ -762,7 +841,9 @@ export const AdminPage = () => {
 
     navigator.serviceWorker
       .getRegistrations()
-      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then((registrations) =>
+        Promise.all(registrations.map((registration) => registration.unregister()))
+      )
       .finally(navigate);
   };
 
@@ -849,9 +930,6 @@ export const AdminPage = () => {
               Debug
             </TabsTrigger>
           </TabsList>
-          <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-            Desktop console. Минимальная ширина рассчитана на рабочий монитор, не на мобильный flow.
-          </div>
         </aside>
 
         <section className="min-w-0">
@@ -1183,7 +1261,9 @@ export const AdminPage = () => {
                 key={candidate.id}
                 candidate={candidate}
                 isBusy={candidateActionMutation.isPending}
-                onApprove={(id, payload) => candidateActionMutation.mutate({ id, action: 'approve', payload })}
+                onApprove={(id, payload) =>
+                  candidateActionMutation.mutate({ id, action: 'approve', payload })
+                }
                 onReject={(id) => candidateActionMutation.mutate({ id, action: 'reject' })}
                 onNeedsData={(id) => candidateActionMutation.mutate({ id, action: 'needs_data' })}
               />

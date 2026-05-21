@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 
-import { getRuntimeEnv } from '../runtime-env'
 import type { YMaps3 } from './types'
 
 const SCRIPT_ID = 'yandex-maps-v3-script'
@@ -16,11 +15,9 @@ const loadYandexMaps = (): Promise<void> => {
       return
     }
 
-    const apiKey = getRuntimeEnv('VITE_YANDEX_MAPS_API_TOKEN')
-
     const script = document.createElement('script')
     script.id = SCRIPT_ID
-    script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`
+    script.src = '/api/maps/yandex/v3?lang=ru_RU'
     script.async = true
     script.onload = () => {
       window.ymaps3.ready.then(resolve).catch(reject)

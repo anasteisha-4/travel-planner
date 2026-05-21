@@ -239,6 +239,20 @@ const scoreNumber = (summary: Record<string, unknown> | null, key: string) => {
   return typeof value === 'number' ? value : 0;
 };
 
+const getTravelMinutes = (itinerary: Itinerary) => {
+  const summaryValue = scoreNumber(itinerary.score_summary, 'travel_overhead_minutes');
+  if (summaryValue > 0) return summaryValue;
+  return itinerary.days.reduce(
+    (total, day) =>
+      total +
+      getVisibleItems(day).reduce(
+        (dayTotal, item) => dayTotal + Math.max(0, item.travel_from_previous_minutes ?? 0),
+        0
+      ),
+    0
+  );
+};
+
 const scoreMaybeNumber = (summary: Record<string, unknown> | null, key: string) => {
   const value = summary?.[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -362,9 +376,11 @@ const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
           {formatDuration(item.duration_minutes)}
         </span>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-          {openingLabel(item.opening_status)}
-        </span>
+        {openingLabel(item.opening_status) && (
+          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+            {openingLabel(item.opening_status)}
+          </span>
+        )}
       </div>
     </div>
   </div>
@@ -506,7 +522,7 @@ const ItineraryPreviewSheet = ({
     open={open}
     onOpenChange={onOpenChange}
     title={`Вариант ${itinerary.variant_index + 1}`}
-    description={`${getPlacesCount(itinerary)} ${formatPlaces(getPlacesCount(itinerary))}, ${scoreNumber(itinerary.score_summary, 'travel_overhead_minutes')} мин в пути`}
+    description={`${getPlacesCount(itinerary)} ${formatPlaces(getPlacesCount(itinerary))}, ${getTravelMinutes(itinerary)} мин в пути`}
     className="max-h-[92dvh]"
     bodyClassName="pb-4"
     footer={
@@ -1248,7 +1264,7 @@ const ApprovedItinerary = ({
         <div className="trip-info-card px-3 py-3">
           <Route className="mb-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
           <p className="text-[20px] font-extrabold leading-none text-stone-900 dark:text-white">
-            {scoreNumber(itinerary.score_summary, 'travel_overhead_minutes')}
+            {getTravelMinutes(itinerary)}
           </p>
           <p className="mt-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
             мин пути

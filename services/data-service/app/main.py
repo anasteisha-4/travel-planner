@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.observability import add_observability
 from app.observability import store as observability_store
-from app.routers import destinations, internal
+from app.routers import destinations, geocode, internal, maps
 
 app = FastAPI(title="Triply Data Service", version="1.0.0", docs_url="/docs")
 add_observability(app, "data-service")
@@ -21,6 +21,8 @@ app.add_middleware(
 )
 
 app.include_router(destinations.router, prefix="/api")
+app.include_router(geocode.router, prefix="/api")
+app.include_router(maps.router, prefix="/api")
 app.include_router(internal.router, prefix="/internal")
 
 
