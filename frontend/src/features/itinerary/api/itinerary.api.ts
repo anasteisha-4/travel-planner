@@ -1,6 +1,7 @@
 import { apiClient } from '@/shared/api';
 import type {
   Itinerary,
+  ItineraryGenerationJob,
   ItineraryGenerateRequest,
   ItineraryItem,
   ItineraryItemMoveRequest,
@@ -17,13 +18,13 @@ export const itineraryApi = {
     return data;
   },
 
-  generate: async (tripId: string, params: ItineraryGenerateRequest): Promise<Itinerary[]> => {
-    const { data } = await apiClient.post<Itinerary[]>(`/api/trips/${tripId}/itinerary/generate`, params);
+  generate: async (tripId: string, params: ItineraryGenerateRequest): Promise<ItineraryGenerationJob> => {
+    const { data } = await apiClient.post<ItineraryGenerationJob>(`/api/trips/${tripId}/itinerary/generate`, params);
     return data;
   },
 
-  regenerate: async (tripId: string, params: ItineraryRegenerateRequest): Promise<Itinerary[]> => {
-    const { data } = await apiClient.post<Itinerary[]>(`/api/trips/${tripId}/itinerary/regenerate`, params);
+  regenerate: async (tripId: string, params: ItineraryRegenerateRequest): Promise<ItineraryGenerationJob> => {
+    const { data } = await apiClient.post<ItineraryGenerationJob>(`/api/trips/${tripId}/itinerary/regenerate`, params);
     return data;
   },
 

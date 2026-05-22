@@ -150,7 +150,7 @@ jobs:
 
             # Deploy updated services
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps \
-              auth-service trip-service data-service ml-service analytics-service frontend
+              auth-service trip-service data-service ml-service analytics-service grafana frontend
 
             # --- Alembic migrations ---
             # Trigger: any new migration file in any service

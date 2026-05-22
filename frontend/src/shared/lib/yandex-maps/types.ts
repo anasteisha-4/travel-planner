@@ -44,7 +44,7 @@ export type YMapInstance = {
   destroy(): void
   addChild(child: YMapChild): void
   removeChild(child: YMapChild): void
-  update(props: { location: YMapLocationRequest }): void
+  update(props: Partial<YMapProps>): void
 }
 
 export type YMaps3 = {

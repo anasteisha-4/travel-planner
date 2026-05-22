@@ -1,6 +1,7 @@
 import type { PlaceVisit } from '@/entities/place';
 import type { LngLat, LngLatBounds, YMapChild, YMapInstance } from '@/shared/lib';
 import { useGeocode, useYandexMaps } from '@/shared/lib';
+import { useTheme } from '@/shared/ui';
 import { Loader2, Route } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -55,6 +56,7 @@ export const PlaceMap = ({
   flyToCoords,
 }: PlaceMapProps) => {
   const { isReady } = useYandexMaps();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<YMapInstance | null>(null);
   const markersRef = useRef<YMapChild[]>([]);
@@ -96,6 +98,7 @@ export const PlaceMap = ({
       const { YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapListener } = ymaps3;
       const map = new YMap(containerRef.current, {
         location: { center: mapCenter, zoom: places.length > 0 ? 13 : 10 },
+        theme: resolvedTheme,
       });
       map.addChild(new YMapDefaultSchemeLayer());
       map.addChild(new YMapDefaultFeaturesLayer());
@@ -114,6 +117,7 @@ export const PlaceMap = ({
     }
 
     const map = mapRef.current;
+    map.update({ theme: resolvedTheme });
 
     markersRef.current.forEach((m) => map.removeChild(m));
     markersRef.current = [];
@@ -157,7 +161,7 @@ export const PlaceMap = ({
         });
       }
     }
-  }, [isReady, mapCenter, places, selectedId, showRoute]);
+  }, [isReady, mapCenter, places, resolvedTheme, selectedId, showRoute]);
 
   useEffect(() => {
     if (!flyToCoords || !mapRef.current) return;

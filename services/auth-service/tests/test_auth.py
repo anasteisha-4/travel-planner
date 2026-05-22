@@ -1,4 +1,5 @@
 import unittest.mock
+from urllib.parse import parse_qs, urlparse
 
 
 class TestRegister:
@@ -74,6 +75,38 @@ class TestLogin:
         )
         assert response.status_code == 400
         assert "Incorrect credentials" in response.json()["message"]
+
+
+class TestYandexAuthorize:
+    """GET /api/auth/yandex/authorize"""
+
+    def test_yandex_authorize_uses_canonical_www_redirect_for_apex_origin(self, client, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "YANDEX_CLIENT_ID", "test-client-id")
+        monkeypatch.setattr(settings, "YANDEX_REDIRECT_URI", "https://www.triply-ai.ru/auth/yandex/callback")
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://www.triply-ai.ru")
+        monkeypatch.setattr(settings, "CORS_ORIGINS", "https://triply-ai.ru,https://www.triply-ai.ru")
+
+        response = client.get("/api/auth/yandex/authorize?origin=https%3A%2F%2Ftriply-ai.ru", follow_redirects=False)
+
+        assert response.status_code == 307
+        redirect_query = parse_qs(urlparse(response.headers["location"]).query)
+        assert redirect_query["redirect_uri"] == ["https://www.triply-ai.ru/auth/yandex/callback"]
+
+    def test_yandex_authorize_keeps_allowed_local_origin(self, client, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "YANDEX_CLIENT_ID", "test-client-id")
+        monkeypatch.setattr(settings, "YANDEX_REDIRECT_URI", "http://localhost/auth/yandex/callback")
+        monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost")
+        monkeypatch.setattr(settings, "CORS_ORIGINS", "http://localhost:5173")
+
+        response = client.get("/api/auth/yandex/authorize?origin=http%3A%2F%2Flocalhost%3A5173", follow_redirects=False)
+
+        assert response.status_code == 307
+        redirect_query = parse_qs(urlparse(response.headers["location"]).query)
+        assert redirect_query["redirect_uri"] == ["http://localhost:5173/auth/yandex/callback"]
 
 
 class TestRefresh:

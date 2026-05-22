@@ -1,7 +1,7 @@
 import hashlib
 import math
 import random
-from datetime import time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -11,8 +11,13 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.config import settings
+from app.database import SessionLocal
 from app.exceptions import AppException
+from app.services.analytics_events import emit_itinerary_quality_event
 from app.services.place_service import _validate_coordinates
+from app.services.push_service import send_push_to_user
+
+MAX_ITINERARY_DAYS = 31
 
 
 def _verify_trip_ownership(db: Session, trip_id: UUID, user_id: UUID) -> models.Trip:
@@ -46,6 +51,15 @@ def _verify_item_ownership(db: Session, item_id: UUID, user_id: UUID) -> models.
 
 def _duration_days(trip: models.Trip) -> int:
     return max(1, (trip.end_date - trip.start_date).days + 1)
+
+
+def _validate_generation_duration(trip: models.Trip) -> None:
+    if _duration_days(trip) > MAX_ITINERARY_DAYS:
+        raise AppException(
+            status_code=422,
+            code="ITINERARY_DURATION_TOO_LONG",
+            message="Itinerary generation supports trips up to 31 days.",
+        )
 
 
 def _rest_days_count(trip: models.Trip, requested: int | None = None) -> int:
@@ -162,10 +176,141 @@ def get_itinerary_state(db: Session, user_id: UUID, trip_id: UUID) -> schemas.It
     )
     approved = next((item for item in itineraries if item.status == "approved"), None)
     drafts = [item for item in itineraries if item.status == "draft"][:3]
+    latest_generation_job = (
+        db.query(models.ItineraryGenerationJob)
+        .filter(
+            models.ItineraryGenerationJob.trip_id == trip_id,
+            models.ItineraryGenerationJob.user_id == user_id,
+        )
+        .order_by(models.ItineraryGenerationJob.created_at.desc())
+        .first()
+    )
+    generation_job = (
+        latest_generation_job
+        if latest_generation_job and latest_generation_job.status in {"queued", "running", "failed"}
+        else None
+    )
     return schemas.ItineraryStateResponse(
         approved=to_response(db, approved) if approved else None,
         drafts=[to_response(db, draft) for draft in drafts],
+        generation_job=generation_job,
     )
+
+
+def enqueue_itinerary_generation(
+    db: Session,
+    user_id: UUID,
+    trip_id: UUID,
+    data: schemas.ItineraryGenerateRequest | schemas.ItineraryRegenerateRequest,
+    mode: str,
+) -> models.ItineraryGenerationJob:
+    trip = _verify_trip_ownership(db, trip_id, user_id)
+    _validate_generation_duration(trip)
+    active_job = (
+        db.query(models.ItineraryGenerationJob)
+        .filter(
+            models.ItineraryGenerationJob.trip_id == trip_id,
+            models.ItineraryGenerationJob.user_id == user_id,
+            models.ItineraryGenerationJob.status.in_(("queued", "running")),
+        )
+        .order_by(models.ItineraryGenerationJob.created_at.desc())
+        .first()
+    )
+    if active_job:
+        return active_job
+
+    job = models.ItineraryGenerationJob(
+        trip_id=trip_id,
+        user_id=user_id,
+        status="queued",
+        mode=mode,
+        request_payload=data.model_dump(mode="json"),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def run_itinerary_generation_job(job_id: UUID, authorization: str | None) -> None:
+    db = SessionLocal()
+    try:
+        job = db.query(models.ItineraryGenerationJob).filter(models.ItineraryGenerationJob.id == job_id).first()
+        if not job or job.status not in {"queued", "running"}:
+            return
+        job.status = "running"
+        job.started_at = datetime.now(UTC)
+        db.commit()
+
+        if job.mode == "regenerate":
+            request = schemas.ItineraryRegenerateRequest.model_validate(job.request_payload)
+        else:
+            request = schemas.ItineraryGenerateRequest.model_validate(job.request_payload)
+
+        itineraries = generate_itineraries(db, job.user_id, job.trip_id, request, authorization)
+        responses = [to_response(db, item) for item in itineraries]
+        for item in responses:
+            emit_itinerary_quality_event(
+                "itinerary_candidate_generated",
+                {
+                    "trip_id": str(job.trip_id),
+                    "itinerary_id": str(item.id),
+                    "template_version": item.model_version,
+                    "ranker_version": item.model_version,
+                    "days": len(item.days),
+                    "places": sum(len(day.items) for day in item.days),
+                    "route_signature": item.route_signature,
+                    "variant_index": item.variant_index,
+                    "regenerated": job.mode == "regenerate",
+                },
+                entity_type="itinerary",
+                entity_id=item.id,
+                authorization=authorization,
+            )
+
+        job.status = "completed"
+        job.result_itinerary_ids = [str(item.id) for item in itineraries]
+        job.completed_at = datetime.now(UTC)
+        db.commit()
+        send_push_to_user(
+            db,
+            job.user_id,
+            {
+                "title": "Маршрут готов",
+                "body": "Мы собрали маршрут поездки. Можно посмотреть варианты и утвердить подходящий.",
+                "url": f"/trips/{job.trip_id}/itinerary",
+                "tag": f"itinerary-{job.trip_id}",
+            },
+        )
+    except AppException as exc:
+        job = db.query(models.ItineraryGenerationJob).filter(models.ItineraryGenerationJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error_code = exc.code
+            job.error_message = exc.message
+            job.completed_at = datetime.now(UTC)
+            db.commit()
+            send_push_to_user(
+                db,
+                job.user_id,
+                {
+                    "title": "Маршрут не собрался",
+                    "body": "Поменяйте параметры или направление поездки и попробуйте ещё раз.",
+                    "url": f"/trips/{job.trip_id}/itinerary",
+                    "tag": f"itinerary-{job.trip_id}",
+                },
+            )
+    except Exception as exc:
+        job = db.query(models.ItineraryGenerationJob).filter(models.ItineraryGenerationJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error_code = "ITINERARY_UNAVAILABLE"
+            job.error_message = "Itinerary generation failed"
+            job.completed_at = datetime.now(UTC)
+            db.commit()
+        raise exc
+    finally:
+        db.close()
 
 
 def generate_itineraries(
@@ -176,6 +321,7 @@ def generate_itineraries(
     authorization: str | None,
 ) -> list[models.TripItinerary]:
     trip = _verify_trip_ownership(db, trip_id, user_id)
+    _validate_generation_duration(trip)
 
     seed_base = random.randint(10_000, 9_999_999)
     has_approved_itinerary = (

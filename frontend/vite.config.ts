@@ -62,6 +62,7 @@ export default defineConfig(({ command, mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         workbox: {
+          importScripts: ['push-listener.js'],
           navigateFallbackDenylist: [/^\/grafana(?:\/.*)?$/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           globIgnores: ['**/env.js'],
@@ -169,6 +170,11 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
         },
         '/api/profile': {
+          target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/api/push': {
           target: isDev ? 'http://localhost:8002' : 'http://trip-service:8000',
           changeOrigin: true,
           secure: false,

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { createClientUuid } from '../lib/uuid';
 
 type EventType =
   | 'app_opened'
@@ -106,7 +107,7 @@ let frontendObservabilityInitialized = false;
 const getSessionId = (): string => {
   let id = sessionStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = createClientUuid();
     sessionStorage.setItem(SESSION_KEY, id);
   }
   return id;
@@ -202,7 +203,7 @@ export const sendEvent = (
   if (!isAnalyticsEnabled()) return;
 
   queue.push({
-    event_id: crypto.randomUUID(),
+    event_id: createClientUuid(),
     event_type: eventType,
     event_version: EVENT_VERSION,
     entity_type: entityType,

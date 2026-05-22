@@ -9,6 +9,7 @@ import {
   HAPTIC_SINGLE_ERROR,
   useHapticFeedback,
 } from '@/shared/lib/useHapticFeedback';
+import { ensurePushNotifications } from '@/shared/lib';
 import { invalidateProfileDependentQueries } from '@/shared/lib/profile-dependent-queries';
 
 import { onboardingV2Api } from '../api/onboarding-v2.api';
@@ -169,6 +170,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
       play(HAPTIC_SINGLE_CONFIRM);
       qc.setQueryData(['profile'], updated);
       invalidateProfileDependentQueries(qc);
+      void ensurePushNotifications().catch(() => false);
       onComplete();
     },
     onError: () => {

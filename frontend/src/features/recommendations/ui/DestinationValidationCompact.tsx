@@ -164,9 +164,6 @@ export const DestinationValidationCompact = ({
             <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
               Проверка направления
             </p>
-            <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
-              Проверяем визу, сезон, бюджет и риск
-            </p>
           </div>
           <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 text-[11px] font-extrabold text-primary">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

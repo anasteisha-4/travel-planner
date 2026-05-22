@@ -39,6 +39,8 @@ def build_itinerary_context(
         "variant": {
             "variant_index": itinerary.variant_index,
             "route_signature": itinerary.route_signature,
+            "source": itinerary.source,
+            "score_summary": itinerary.score_summary,
             "derived_metrics": {"total_visit_minutes": total_visit_minutes},
             "days": [
                 {
@@ -49,9 +51,12 @@ def build_itinerary_context(
                             "id": str(place.id),
                             "name": place.name,
                             "category": place.category,
+                            "lat": round(float(place.lat), 6) if place.lat is not None else None,
+                            "lng": round(float(place.lng), 6) if place.lng is not None else None,
                             "opening_status": place.opening_status,
                             "arrival_time": place.arrival_time,
                             "departure_time": place.departure_time,
+                            "travel_from_previous_minutes": place.travel_from_previous_minutes,
                             "visit_duration_minutes": place.visit_duration_minutes,
                         }
                         for place in day.places

@@ -127,6 +127,31 @@ class TripItinerary(BaseModel):
     score_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
+class ItineraryGenerationJob(BaseModel):
+    __tablename__ = "itinerary_generation_jobs"
+    trip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued", index=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="generate")
+    request_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_itinerary_ids: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class PushSubscription(BaseModel):
+    __tablename__ = "push_subscriptions"
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class TripItineraryDay(BaseModel):
     __tablename__ = "trip_itinerary_days"
     itinerary_id: Mapped[uuid.UUID] = mapped_column(

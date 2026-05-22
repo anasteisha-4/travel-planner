@@ -10,7 +10,7 @@ class ItineraryGenerateRequest(BaseModel):
     trip_id: uuid.UUID | None = None
     destination_id: uuid.UUID | None = None
     destination_text: str | None = Field(default=None, max_length=200)
-    duration_days: int = Field(..., ge=1, le=30)
+    duration_days: int = Field(..., ge=1, le=31)
     start_date: date
     preferred_activities: list[str] | None = None
     variant_count: int = Field(default=1, ge=1, le=3)
@@ -18,7 +18,7 @@ class ItineraryGenerateRequest(BaseModel):
     pace: str = "standard"
     day_start_time: str = "09:30"
     day_end_time: str = "19:00"
-    rest_days_count: int = Field(default=0, ge=0, le=30)
+    rest_days_count: int = Field(default=0, ge=0, le=31)
     exclude_signature: str | None = None
     trip_budget: float | None = Field(default=None, ge=0)
     currency: str = "USD"

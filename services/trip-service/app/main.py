@@ -6,7 +6,7 @@ from app.config import settings
 from app.exceptions import AppException
 from app.observability import add_observability
 from app.observability import store as observability_store
-from app.routers import expenses, itinerary, places, profile, trips
+from app.routers import expenses, itinerary, places, profile, push, trips
 
 app = FastAPI(
     title="Travel Planner Trip Service",
@@ -33,6 +33,7 @@ app.include_router(itinerary.router, prefix="/api/trips", tags=["Itinerary"])
 app.include_router(expenses.router, prefix="/api", tags=["Expenses"])
 app.include_router(places.router, prefix="/api", tags=["Places"])
 app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
+app.include_router(push.router, prefix="/api/push", tags=["Push"])
 
 
 @app.exception_handler(AppException)

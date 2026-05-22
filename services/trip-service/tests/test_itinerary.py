@@ -194,6 +194,23 @@ def _ml_itinerary_call(post_mock):
     return next(call for call in post_mock.call_args_list if "/api/v1/itinerary" in call.args[0])
 
 
+def _start_generation(client, auth_headers, trip_id, payload):
+    response = client.post(
+        f"/api/trips/{trip_id}/itinerary/generate",
+        json=payload,
+        headers=auth_headers,
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] in {"queued", "completed"}
+    return response.json()
+
+
+def _draft_itineraries(client, auth_headers, trip_id):
+    state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
+    assert state.status_code == 200
+    return state.json()["drafts"]
+
+
 def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeypatch):
     trip_id = _create_trip(client, auth_headers, trip_data)
     response = Mock()
@@ -202,13 +219,8 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     post_mock = Mock(return_value=response)
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", post_mock)
 
-    generated = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1, "pace": "standard"},
-        headers=auth_headers,
-    )
-    assert generated.status_code == 201
-    itinerary = generated.json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1, "pace": "standard"})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     assert itinerary["status"] == "draft"
     assert _ml_itinerary_call(post_mock).kwargs["json"]["duration_days"] == 14
     assert _ml_itinerary_call(post_mock).kwargs["json"]["trip_notes"] == trip_data["notes"]
@@ -249,13 +261,8 @@ def test_regenerate_approved_catalog_trip_requests_one_variant_and_keeps_approve
     post_mock = Mock(side_effect=post_side_effect)
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", post_mock)
 
-    generated = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    )
-    assert generated.status_code == 201
-    approved_id = generated.json()[0]["id"]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    approved_id = _draft_itineraries(client, auth_headers, trip_id)[0]["id"]
     approved = client.post(f"/api/trips/{trip_id}/itinerary/{approved_id}/approve", headers=auth_headers)
     assert approved.status_code == 200
 
@@ -265,8 +272,7 @@ def test_regenerate_approved_catalog_trip_requests_one_variant_and_keeps_approve
         headers=auth_headers,
     )
 
-    assert regenerated.status_code == 201
-    assert regenerated.json()[0]["route_signature"] == "sig-b"
+    assert regenerated.status_code == 202
     regenerate_payload = next(
         call.kwargs["json"] for call in post_mock.call_args_list if call.kwargs["json"].get("exclude_signature")
     )
@@ -301,8 +307,10 @@ def test_generate_rejects_variants_with_empty_active_days(client, auth_headers, 
         headers=auth_headers,
     )
 
-    assert generated.status_code == 422
-    assert generated.json()["error"] == "ITINERARY_NO_FEASIBLE_ROUTE"
+    assert generated.status_code == 202
+    state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
+    assert state.json()["generation_job"]["status"] == "failed"
+    assert state.json()["generation_job"]["error_code"] == "ITINERARY_NO_FEASIBLE_ROUTE"
 
 
 def test_generate_manual_destination_can_persist_external_route(client, auth_headers, trip_data, monkeypatch):
@@ -359,8 +367,8 @@ def test_generate_manual_destination_can_persist_external_route(client, auth_hea
         headers=auth_headers,
     )
 
-    assert generated.status_code == 201
-    itinerary = generated.json()[0]
+    assert generated.status_code == 202
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     assert itinerary["score_summary"]["external_route_used"] is True
     item = itinerary["days"][0]["items"][0]
     assert item["poi_id"] is None
@@ -399,9 +407,10 @@ def test_external_llm_route_response_is_persisted_as_one_variant_for_catalog_tri
         headers=auth_headers,
     )
 
-    assert generated.status_code == 201
-    assert len(generated.json()) == 1
-    assert generated.json()[0]["route_signature"] == "llm-external-0"
+    assert generated.status_code == 202
+    drafts = _draft_itineraries(client, auth_headers, trip_id)
+    assert len(drafts) == 1
+    assert drafts[0]["route_signature"] == "llm-external-0"
 
 
 def test_external_route_persists_travel_overhead_from_items(client, auth_headers, trip_data, monkeypatch):
@@ -421,8 +430,8 @@ def test_external_route_persists_travel_overhead_from_items(client, auth_headers
         headers=auth_headers,
     )
 
-    assert generated.status_code == 201
-    summary = generated.json()[0]["score_summary"]
+    assert generated.status_code == 202
+    summary = _draft_itineraries(client, auth_headers, trip_id)[0]["score_summary"]
     assert summary["external_route_used"] is True
     assert summary["travel_overhead_minutes"] == 50
 
@@ -448,8 +457,10 @@ def test_generate_preserves_ml_no_feasible_error(client, auth_headers, trip_data
         headers=auth_headers,
     )
 
-    assert generated.status_code == 422
-    assert generated.json()["error"] == "ITINERARY_NO_FEASIBLE_ROUTE"
+    assert generated.status_code == 202
+    state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
+    assert state.json()["generation_job"]["status"] == "failed"
+    assert state.json()["generation_job"]["error_code"] == "ITINERARY_NO_FEASIBLE_ROUTE"
 
 
 def test_itinerary_item_edit_remove_and_visit(client, auth_headers, trip_data, monkeypatch):
@@ -458,11 +469,8 @@ def test_itinerary_item_edit_remove_and_visit(client, auth_headers, trip_data, m
     response.json.return_value = _ml_response()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     client.post(f"/api/trips/{trip_id}/itinerary/{itinerary['id']}/approve", headers=auth_headers)
     item_id = itinerary["days"][0]["items"][0]["id"]
 
@@ -502,14 +510,8 @@ def test_external_candidate_poi_is_persisted_but_cannot_be_visited(client, auth_
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
 
-    generated = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    )
-
-    assert generated.status_code == 201
-    items = generated.json()[0]["days"][0]["items"]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    items = _draft_itineraries(client, auth_headers, trip_id)[0]["days"][0]["items"]
     external = next(item for item in items if item["name"] == "Quiet tea house")
     assert external["poi_id"] is None
     assert external["source"] == "external_candidate"
@@ -529,11 +531,8 @@ def test_itinerary_item_time_edit_shifts_following_items(client, auth_headers, t
     response.json.return_value = _ml_response_with_day_timeline()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     item_id = itinerary["days"][0]["items"][0]["id"]
 
     patched = client.patch(
@@ -571,11 +570,8 @@ def test_itinerary_item_swap_recalculates_day_route(client, auth_headers, trip_d
     response.json.return_value = _ml_response_with_day_timeline()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     first_item_id = itinerary["days"][0]["items"][0]["id"]
     last_item_id = itinerary["days"][0]["items"][2]["id"]
 
@@ -602,11 +598,8 @@ def test_itinerary_item_swap_between_days_recalculates_both_days(client, auth_he
     response.json.return_value = _ml_response_with_day_timeline()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     day_one_second_id = itinerary["days"][0]["items"][1]["id"]
     day_two_first_id = itinerary["days"][1]["items"][0]["id"]
 
@@ -633,11 +626,8 @@ def test_itinerary_item_move_between_days_inserts_without_swapping(client, auth_
     response.json.return_value = _ml_response_with_day_timeline()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     moved_item_id = itinerary["days"][0]["items"][1]["id"]
     target_day_id = itinerary["days"][1]["id"]
 
@@ -664,11 +654,8 @@ def test_trip_parameter_change_resets_itinerary_state(client, auth_headers, trip
     response.json.return_value = _ml_response()
     response.raise_for_status.return_value = None
     monkeypatch.setattr("app.services.itinerary_service.httpx.post", Mock(return_value=response))
-    itinerary = client.post(
-        f"/api/trips/{trip_id}/itinerary/generate",
-        json={"variant_count": 1},
-        headers=auth_headers,
-    ).json()[0]
+    _start_generation(client, auth_headers, trip_id, {"variant_count": 1})
+    itinerary = _draft_itineraries(client, auth_headers, trip_id)[0]
     client.post(f"/api/trips/{trip_id}/itinerary/{itinerary['id']}/approve", headers=auth_headers)
 
     updated = client.put(

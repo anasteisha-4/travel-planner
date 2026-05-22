@@ -3,6 +3,7 @@ import { itineraryApi } from '../api/itinerary.api';
 import type {
   Itinerary,
   ItineraryGenerateRequest,
+  ItineraryGenerationJob,
   ItineraryItem,
   ItineraryItemMoveRequest,
   ItineraryItemSwapRequest,
@@ -14,11 +15,24 @@ import type {
 
 export const itineraryQueryKey = (tripId: string) => ['trip-itinerary', tripId] as const;
 
+const hasActiveGenerationJob = (state: ItineraryState | undefined) =>
+  state?.generation_job?.status === 'queued' || state?.generation_job?.status === 'running';
+
+const setGenerationJob = (
+  state: ItineraryState | undefined,
+  job: ItineraryGenerationJob,
+): ItineraryState => ({
+  approved: state?.approved ?? null,
+  drafts: state?.drafts ?? [],
+  generation_job: job,
+});
+
 const replaceApprovedItinerary = (state: ItineraryState | undefined, itinerary: Itinerary): ItineraryState | undefined => {
   if (!state) return state;
   return {
     approved: state.approved?.id === itinerary.id ? itinerary : state.approved,
     drafts: state.drafts.map((draft) => (draft.id === itinerary.id ? itinerary : draft)),
+    generation_job: state.generation_job,
   };
 };
 
@@ -41,6 +55,7 @@ const patchItemInState = (
   return {
     approved: patchItinerary(state.approved),
     drafts: state.drafts.map((draft) => patchItinerary(draft) ?? draft),
+    generation_job: state.generation_job,
   };
 };
 
@@ -49,6 +64,7 @@ export const useItineraryState = (tripId: string) =>
     queryKey: itineraryQueryKey(tripId),
     queryFn: () => itineraryApi.getState(tripId),
     staleTime: 30 * 1000,
+    refetchInterval: (query) => (hasActiveGenerationJob(query.state.data) ? 5000 : false),
   });
 
 export const useGenerateItinerary = (tripId: string) => {
@@ -56,7 +72,10 @@ export const useGenerateItinerary = (tripId: string) => {
 
   return useMutation({
     mutationFn: (params: ItineraryGenerateRequest) => itineraryApi.generate(tripId, params),
-    onSuccess: () => {
+    onSuccess: (job) => {
+      queryClient.setQueryData<ItineraryState>(itineraryQueryKey(tripId), (state) =>
+        setGenerationJob(state, job)
+      );
       void queryClient.invalidateQueries({ queryKey: itineraryQueryKey(tripId) });
     },
   });
@@ -67,7 +86,10 @@ export const useRegenerateItinerary = (tripId: string) => {
 
   return useMutation({
     mutationFn: (params: ItineraryRegenerateRequest) => itineraryApi.regenerate(tripId, params),
-    onSuccess: () => {
+    onSuccess: (job) => {
+      queryClient.setQueryData<ItineraryState>(itineraryQueryKey(tripId), (state) =>
+        setGenerationJob(state, job)
+      );
       void queryClient.invalidateQueries({ queryKey: itineraryQueryKey(tripId) });
     },
   });
@@ -144,6 +166,7 @@ export const useAddItineraryItem = (tripId: string) => {
         return {
           approved: addItem(state.approved),
           drafts: state.drafts.map((draft) => addItem(draft) ?? draft),
+          generation_job: state.generation_job,
         };
       });
     },
@@ -173,6 +196,7 @@ export const useRemoveItineraryItem = (tripId: string) => {
         return {
           approved: removeItem(state.approved),
           drafts: state.drafts.map((draft) => removeItem(draft) ?? draft),
+          generation_job: state.generation_job,
         };
       });
     },

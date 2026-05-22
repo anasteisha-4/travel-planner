@@ -7,6 +7,7 @@ import { Drawer as DrawerPrimitive } from 'vaul';
 export const Drawer = ({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
   <DrawerPrimitive.Root
     fixed
+    handleOnly
     repositionInputs={false}
     scrollLockTimeout={0}
     {...props}
@@ -27,12 +28,20 @@ export const DrawerClose = ({ ...props }: React.ComponentProps<typeof DrawerPrim
 
 export const DrawerHandle = ({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Handle>) => (
   <DrawerPrimitive.Handle
-    className={cn('mx-auto mb-5 mt-3 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-slate-600/80', className)}
+    className={cn(
+      'mx-auto flex h-11 w-full shrink-0 touch-none items-start justify-center pt-3',
+      className
+    )}
     {...props}
-  />
+  >
+    {children ?? (
+      <span className="h-1 w-10 rounded-full bg-slate-300/80 dark:bg-slate-600/80" />
+    )}
+  </DrawerPrimitive.Handle>
 );
 
 export const DrawerOverlay = React.forwardRef<

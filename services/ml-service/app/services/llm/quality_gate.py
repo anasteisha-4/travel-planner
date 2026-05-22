@@ -58,6 +58,8 @@ class LLMQualityGate:
         itinerary_id: str,
         context: dict,
     ) -> LLMQualityReview:
+        day_count = len((context.get("variant") or {}).get("days") or []) if isinstance(context, dict) else 0
+        timeout_budget = min(max(settings.LLM_TIMEOUT_SECONDS, 8.0), 20.0 if day_count > 10 else 12.0)
         return self.review(
             db=db,
             user_id=user_id,
@@ -67,7 +69,7 @@ class LLMQualityGate:
             prompt_version=ITINERARY_QUALITY_PROMPT_VERSION,
             context=context,
             max_tokens=2400,
-            timeout_seconds=min(max(settings.LLM_TIMEOUT_SECONDS, 8.0), 12.0),
+            timeout_seconds=timeout_budget,
             max_retries=0,
         )
 

@@ -89,6 +89,7 @@ def _normalize_variant(request: ItineraryGenerateRequest, payload: dict) -> Itin
             activity_tags=[],
             has_template=False,
             message=str(error),
+            score_summary={"reason_code": payload.get("reason_code"), "fallback_reason": payload.get("reason_code")},
         )
 
     days = [
@@ -188,15 +189,11 @@ def _review_response(
         return response
 
     destination_info = _destination_info(response.destination_id) if request.destination_id else None
-    if response.source == "llm-external-draft":
-        return response
     if not settings.LLM_QUALITY_ENABLED:
         return response
 
     variants = response.variants or [response]
-    if variants and all(variant.source == "llm-external-draft" for variant in variants):
-        return response
-    review_limit = max(0, min(settings.LLM_ITINERARY_REVIEW_VARIANTS, len(variants), request.variant_count))
+    review_limit = len(variants)
     reviewed_variants: list[ItineraryGenerateResponse] = []
 
     for index, variant in enumerate(variants):
@@ -536,18 +533,26 @@ def generate_itinerary(
             timeout=5.0,
         )
         response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 0
+        if status_code in {404, 409, 422}:
+            external = generate_external_route(
+                db=db,
+                user_id=user_id,
+                trip_id=request.trip_id,
+                request=_with_external_route_allowed(request),
+                profile=profile,
+                destination_info=_destination_info(request.destination_id),
+                trigger=f"data_service_http_{status_code}",
+            )
+            if external is not None:
+                return _review_response(db=db, user_id=user_id, profile=profile, request=request, response=external)
+        raise AppException(
+            status_code=503,
+            code="ITINERARY_UNAVAILABLE",
+            message="Itinerary generation is temporarily unavailable.",
+        ) from exc
     except httpx.HTTPError as exc:
-        external = generate_external_route(
-            db=db,
-            user_id=user_id,
-            trip_id=request.trip_id,
-            request=_with_external_route_allowed(request),
-            profile=profile,
-            destination_info=_destination_info(request.destination_id),
-            trigger="data_service_no_feasible",
-        )
-        if external is not None:
-            return _review_response(db=db, user_id=user_id, profile=profile, request=request, response=external)
         raise AppException(
             status_code=503,
             code="ITINERARY_UNAVAILABLE",
@@ -558,6 +563,9 @@ def generate_itinerary(
     if not normalized.has_template or not normalized.days or _has_empty_active_day(normalized):
         message = normalized.message or ""
         trigger = "data_service_no_feasible" if "feasible" in message.lower() else "data_service_no_template"
+        reason_code = str((normalized.score_summary or {}).get("reason_code") or "")
+        if reason_code:
+            trigger = f"{trigger}:{reason_code}"
         if _has_empty_active_day(normalized):
             trigger = "data_service_no_feasible"
         external = generate_external_route(

@@ -3,7 +3,9 @@
 import hashlib
 import math
 import random
+import re
 from datetime import datetime, time, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import func
@@ -12,6 +14,33 @@ from sqlalchemy.orm import Session
 from app.lib import OpeningHoursParser
 from app.models import NameTranslationEntity
 from app.services.name_translation_service import load_translations, poi_display_payload
+
+_LOW_SIGNAL_NAMES = {
+    "book",
+    "книга",
+    "family",
+    "семья",
+    "love stone",
+    "камень любви",
+    "direction sign",
+    "указатель направлений",
+    "strange girl",
+    "странная девушка",
+}
+
+_CATEGORY_PRIOR = {
+    "heritage": 1.1,
+    "museum": 1.0,
+    "historic": 0.9,
+    "viewpoint": 0.8,
+    "nature": 0.75,
+    "beach": 0.75,
+    "food": 0.55,
+    "urban": 0.35,
+    "shopping": 0.25,
+    "culture": 0.2,
+    "nightlife": 0.15,
+}
 
 
 def generate_itinerary(
@@ -30,7 +59,17 @@ def generate_itinerary(
     trip_budget: float | None = None,
     people_count: int = 1,
 ) -> dict:
-    from app.models import POI, Trajectory
+    from app.models import POI, Destination, DestinationPopularity, Trajectory
+
+    destination = db.query(Destination).filter(Destination.id == destination_id).first()
+    destination_center = (float(destination.lat), float(destination.lng)) if destination else None
+    destination_radius_km = _destination_radius_km(destination)
+    travel_month = int(start_date.month) if start_date else datetime.now().month
+    destination_popularity = (
+        db.query(DestinationPopularity)
+        .filter(DestinationPopularity.destination_id == destination_id, DestinationPopularity.month == travel_month)
+        .first()
+    )
 
     trajectories = (
         db.query(Trajectory)
@@ -40,12 +79,6 @@ def generate_itinerary(
         .all()
     )
 
-    if not trajectories:
-        return {
-            "error": "No itinerary template available for this destination.",
-            "destination_id": destination_id,
-        }
-
     all_poi_ids = sorted(
         {
             poi_id
@@ -54,38 +87,40 @@ def generate_itinerary(
             for poi_id in day_data.get("poi_ids", [])
         }
     )
-    template_pois = db.query(POI).filter(POI.id.in_(all_poi_ids)).all()
+    template_pois = db.query(POI).filter(POI.id.in_(all_poi_ids)).all() if all_poi_ids else []
     supplemental_pois = (
         db.query(POI)
         .filter(POI.destination_id == destination_id, POI.lat.isnot(None), POI.lng.isnot(None))
         .order_by(POI.popularity_score.desc().nullslast())
-        .limit(300)
+        .limit(_candidate_query_limit(duration_days, pace, rest_days_count))
         .all()
     )
-    poi_map = {str(p.id): p for p in [*template_pois, *supplemental_pois]}
-    templates = select_best_templates(
-        trajectories=trajectories,
-        duration_days=duration_days,
+    trajectory_prior = _trajectory_prior_counts(trajectories)
+    candidate_pois = _ranked_destination_pois(
+        _dedupe_pois([*template_pois, *supplemental_pois]),
         preferred_activities=preferred_activities,
-        poi_map=poi_map,
+        destination_center=destination_center,
+        destination_radius_km=destination_radius_km,
         start_date=start_date,
+        trip_budget=trip_budget,
+        people_count=people_count,
+        trajectory_prior=trajectory_prior,
+        crowd_index=float(destination_popularity.crowd_index) if destination_popularity else None,
     )
-    if not templates:
+    if not candidate_pois:
         return {
-            "error": "No itinerary template available for this destination.",
+            "error": "No usable POI pool available for this destination.",
+            "reason_code": "no_usable_poi_pool",
             "destination_id": destination_id,
         }
 
-    poi_translations = load_translations(db, NameTranslationEntity.poi, [p.id for p in poi_map.values()])
+    poi_translations = load_translations(db, NameTranslationEntity.poi, [p.id for p in candidate_pois])
     variants = []
     seed = int(variant_seed or 7301)
-    attempts = max(variant_count * 3, variant_count)
+    attempts = max(variant_count * 5, variant_count)
     for offset in range(attempts):
-        template = templates[offset % len(templates)]
-        variant = build_variant(
-            template=template,
-            poi_map=poi_map,
-            supplemental_pois=supplemental_pois,
+        variant = build_personalized_variant(
+            candidate_pois=candidate_pois,
             translations=poi_translations,
             destination_id=destination_id,
             duration_days=duration_days,
@@ -99,6 +134,9 @@ def generate_itinerary(
             rest_days_count=rest_days_count,
             trip_budget=trip_budget,
             people_count=people_count,
+            destination_popularity=destination_popularity,
+            trajectories_available=bool(trajectories),
+            trajectory_prior=trajectory_prior,
         )
         if variant is None:
             continue
@@ -113,6 +151,7 @@ def generate_itinerary(
     if not variants:
         return {
             "error": "No feasible itinerary for the selected trip parameters.",
+            "reason_code": "insufficient_feasible_poi_after_constraints",
             "destination_id": destination_id,
             "duration_days": duration_days,
             "variants": [],
@@ -154,15 +193,44 @@ def is_usable_poi(poi: Any) -> bool:
     return bool(name and getattr(poi, "lat", None) is not None and getattr(poi, "lng", None) is not None)
 
 
+def _name_quality_score(name: str) -> float:
+    normalized = " ".join(name.casefold().replace('"', "").split())
+    if not normalized:
+        return -2.0
+    score = 0.0
+    if normalized in _LOW_SIGNAL_NAMES:
+        score -= 2.0
+    if len(normalized) <= 4:
+        score -= 0.5
+    if re.fullmatch(r"[а-яёa-z]+", normalized) and len(normalized) <= 8:
+        score -= 0.55
+    if re.search(r"\b[а-яё]\.\s*[а-яё]\.|\b[a-z]\.\s*[a-z]\.", normalized, re.I):
+        score -= 1.0
+    if re.search(r"\b(ту|tu|boeing|airbus|yak|як|ил|il)-?\d", normalized, re.I):
+        score -= 1.0
+    if re.search(r"\b(street|улица|ул\.?|avenue|road)\b.*\d|\d+,\s*[a-zа-яё ]+$", normalized, re.I):
+        score -= 2.0
+    if re.search(r"\b(building|house of|complex|корпус|здание)\b", normalized, re.I):
+        score -= 0.45
+    if re.search(r"\b(museum|музей|gallery|галерея|theatre|театр|cathedral|собор|park|парк)\b", normalized, re.I):
+        score += 0.45
+    if len(normalized.split()) >= 2:
+        score += 0.2
+    return score
+
+
 def poi_quality_score(poi: Any, visit_dt: datetime | None = None) -> float:
     if not is_usable_poi(poi):
         return -2.0
     score = 1.0
+    name = str(getattr(poi, "name", "") or "").strip()
+    score += _name_quality_score(name)
+    score += _CATEGORY_PRIOR.get(str(getattr(poi, "category", "") or "").lower(), 0.0)
     if getattr(poi, "visit_duration_minutes", None):
         score += 0.25
     if getattr(poi, "popularity_score", None) is not None:
-        score += min(0.4, max(0.0, float(poi.popularity_score)) / 2.5)
-    if str(getattr(poi, "name", "") or "").strip().lower() in {"untitled place", "unknown", "без названия"}:
+        score += min(0.9, max(0.0, float(poi.popularity_score)) / 1.4)
+    if name.lower() in {"untitled place", "unknown", "без названия"}:
         score -= 0.4
     opening_hours = getattr(poi, "opening_hours", None)
     if visit_dt is not None and opening_hours:
@@ -286,12 +354,295 @@ def rest_day_numbers(duration_days: int, rest_days_count: int) -> set[int]:
     return positions
 
 
+def _destination_radius_km(destination: Any | None) -> float:
+    if destination is None:
+        return 35.0
+    name = str(getattr(destination, "name", "") or "").casefold()
+    radius_m = int(getattr(destination, "radius_m", 0) or 0)
+    base = max(12.0, min(60.0, radius_m / 1000 * 1.6 if radius_m else 35.0))
+    if any(token in name for token in ("island", "islands", "canary", "остров")):
+        return max(base, 120.0)
+    return base
+
+
+def _candidate_query_limit(duration_days: int, pace: str, rest_days_count: int) -> int:
+    max_per_day = {"relaxed": 3, "standard": 4, "intense": 5}.get(pace, 4)
+    active_days = max(1, duration_days - min(rest_days_count, duration_days))
+    return max(300, min(1800, active_days * max_per_day * 18))
+
+
+def _dedupe_pois(pois: list[Any]) -> list[Any]:
+    result = []
+    seen: set[str] = set()
+    for poi in pois:
+        key = str(getattr(poi, "id", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(poi)
+    return result
+
+
+def _trajectory_prior_counts(trajectories: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for trajectory in trajectories:
+        for day_data in trajectory.sequence_of_poi or []:
+            for poi_id in day_data.get("poi_ids", []):
+                key = str(poi_id)
+                counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _ranked_destination_pois(
+    pois: list[Any],
+    *,
+    preferred_activities: list[str],
+    destination_center: tuple[float, float] | None,
+    destination_radius_km: float,
+    start_date: datetime | None,
+    trip_budget: float | None,
+    people_count: int,
+    trajectory_prior: dict[str, int] | None = None,
+    crowd_index: float | None = None,
+) -> list[Any]:
+    visit_dt = visit_datetime(start_date, 0) if start_date else None
+    ranked: list[tuple[float, Any]] = []
+    prior = trajectory_prior or {}
+    for poi in pois:
+        if not is_usable_poi(poi):
+            continue
+        distance_penalty = 0.0
+        if destination_center is not None:
+            distance = haversine_km(float(poi.lat), float(poi.lng), destination_center[0], destination_center[1])
+            if distance > destination_radius_km:
+                continue
+            distance_penalty = min(1.2, distance / max(destination_radius_km, 1.0))
+        score = (
+            poi_relevance_score(poi, preferred_activities, visit_dt, trip_budget, people_count)
+            - distance_penalty
+            + min(0.7, prior.get(str(getattr(poi, "id", "")), 0) * 0.18)
+        )
+        if crowd_index is not None and crowd_index >= 0.72 and float(getattr(poi, "popularity_score", 0) or 0) < 0.35:
+            score -= 0.25
+        if score < 1.65:
+            continue
+        ranked.append((score, poi))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [poi for _score, poi in ranked]
+
+
+def _fallback_templates_from_poi(
+    *,
+    supplemental_pois: list[Any],
+    duration_days: int,
+    preferred_activities: list[str],
+    pace: str,
+    rest_days_count: int,
+) -> list[Any]:
+    active_days = [
+        day for day in range(1, duration_days + 1) if day not in rest_day_numbers(duration_days, rest_days_count)
+    ]
+    if not active_days:
+        active_days = list(range(1, duration_days + 1))
+    max_per_day = {"relaxed": 3, "standard": 4, "intense": 5}.get(pace, 4)
+    required = len(active_days) * max_per_day
+    pool = supplemental_pois[: max(required * 2, required + 12)]
+    if len(pool) < max(1, len(active_days) * 2):
+        return []
+
+    sequences = []
+    offset = 0
+    for day_number in active_days:
+        day_pois = pool[offset : offset + max_per_day]
+        offset += max_per_day
+        sequences.append(
+            {
+                "day": day_number,
+                "theme": _theme_for_pois(day_pois, preferred_activities),
+                "poi_ids": [str(poi.id) for poi in day_pois],
+            }
+        )
+    return [
+        SimpleNamespace(
+            duration_days=duration_days,
+            activity_tags=preferred_activities or sorted({_category_for(poi) for poi in pool[:required]})[:5],
+            sequence_of_poi=sequences,
+        )
+    ]
+
+
+def _category_for(poi: Any) -> str:
+    return str(getattr(poi, "category", "") or "urban").lower()
+
+
+def _theme_for_pois(pois: list[Any], preferred_activities: list[str]) -> str:
+    categories = [_category_for(poi) for poi in pois]
+    for preference in preferred_activities:
+        if str(preference).lower() in categories:
+            return str(preference).lower()
+    return max(set(categories), key=categories.count) if categories else "urban"
+
+
 def template_day_payload(template: Any, active_day_idx: int) -> dict:
     if active_day_idx < len(template.sequence_of_poi):
         return template.sequence_of_poi[active_day_idx]
     if template.sequence_of_poi:
         return template.sequence_of_poi[active_day_idx % len(template.sequence_of_poi)]
     return {"day": active_day_idx + 1, "theme": "free", "poi_ids": []}
+
+
+def build_personalized_variant(
+    *,
+    candidate_pois: list[Any],
+    translations: dict,
+    destination_id: str,
+    duration_days: int,
+    preferred_activities: list[str],
+    start_date: datetime | None,
+    variant_seed: int,
+    variant_index: int,
+    pace: str,
+    day_start_time: time,
+    day_end_time: time,
+    rest_days_count: int,
+    trip_budget: float | None,
+    people_count: int,
+    destination_popularity: Any | None,
+    trajectories_available: bool,
+    trajectory_prior: dict[str, int],
+) -> dict | None:
+    rng = random.Random(variant_seed)
+    max_per_day = {"relaxed": 3, "standard": 4, "intense": 5}.get(pace, 4)
+    min_per_day = max(2, max_per_day - 1)
+    rest_days = rest_day_numbers(duration_days, rest_days_count)
+    active_day_numbers = [day for day in range(1, duration_days + 1) if day not in rest_days]
+    if not active_day_numbers:
+        active_day_numbers = list(range(1, duration_days + 1))
+    required_min_poi = len(active_day_numbers) * min_per_day
+    if len(candidate_pois) < required_min_poi:
+        return None
+
+    candidates = _variant_candidate_order(candidate_pois, rng=rng, variant_index=variant_index)
+    used_poi_ids: set[str] = set()
+    days = []
+    total_score = 0.0
+    total_travel = 0
+    opening_warnings = 0
+
+    for day_idx in range(duration_days):
+        day_number = day_idx + 1
+        if day_number in rest_days:
+            days.append(
+                {
+                    "day": day_number,
+                    "day_number": day_number,
+                    "theme": "rest",
+                    "start_time": None,
+                    "end_time": None,
+                    "places": [],
+                    "items": [],
+                    "total_score": 0.0,
+                }
+            )
+            continue
+
+        day_items, day_score, day_travel, day_opening_warnings = schedule_day(
+            candidates=candidates,
+            translations=translations,
+            start_date=start_date,
+            day_idx=day_idx,
+            day_start_time=day_start_time,
+            day_end_time=day_end_time,
+            preferred_activities=preferred_activities,
+            trip_budget=trip_budget,
+            people_count=people_count,
+            max_per_day=max_per_day,
+            used_poi_ids=used_poi_ids,
+        )
+        if len(day_items) < min_per_day:
+            return None
+        total_score += day_score
+        total_travel += day_travel
+        opening_warnings += day_opening_warnings
+        days.append(
+            {
+                "day": day_number,
+                "day_number": day_number,
+                "theme": _theme_for_items(day_items, preferred_activities),
+                "start_time": day_start_time.isoformat(timespec="minutes"),
+                "end_time": day_end_time.isoformat(timespec="minutes"),
+                "places": day_items,
+                "items": day_items,
+                "total_score": round(day_score, 4),
+            }
+        )
+
+    signature = route_signature(days)
+    total_poi = sum(len(day["items"]) for day in days)
+    return {
+        "destination_id": destination_id,
+        "duration_days": duration_days,
+        "variant_index": variant_index,
+        "variant_seed": variant_seed,
+        "route_signature": signature,
+        "model_version": "orienteering-heuristic-v2",
+        "days": days,
+        "activity_tags": preferred_activities or _top_route_categories(days),
+        "source": "personalized-orienteering-heuristic",
+        "has_template": True,
+        "score_summary": {
+            "algorithm": "greedy_team_orienteering_with_time_windows_v2",
+            "mathematical_model": "maximize weighted POI utility subject to day time windows, rest days, deduplication, route-distance penalties, budget and opening-hour constraints",
+            "objective_weights": {
+                "preference_match": 1.4,
+                "poi_popularity_quality": 1.9,
+                "category_prior": 1.1,
+                "trajectory_prior": 0.18,
+                "route_distance_penalty": "min(2.0, distance_km / 12)",
+                "destination_crowd_penalty": 0.25,
+            },
+            "total_pois": total_poi,
+            "total_score": round(total_score, 4),
+            "travel_overhead_minutes": total_travel,
+            "opening_hours_warnings": opening_warnings,
+            "opening_hours_violations": opening_warnings,
+            "rest_days_count": len(rest_days),
+            "avg_relevance": round(total_score / max(total_poi, 1), 4),
+            "candidate_pool_size": len(candidate_pois),
+            "trajectories_available": trajectories_available,
+            "trajectory_prior_poi_count": len(trajectory_prior),
+            "destination_crowd_index": float(destination_popularity.crowd_index) if destination_popularity else None,
+            "destination_popularity_source": "destination_popularity" if destination_popularity else "not_available",
+            "fallback_reason": None,
+        },
+    }
+
+
+def _variant_candidate_order(candidate_pois: list[Any], *, rng: random.Random, variant_index: int) -> list[Any]:
+    if variant_index <= 0:
+        return list(candidate_pois)
+    window = min(len(candidate_pois), max(12, variant_index * 8))
+    head = list(candidate_pois[:window])
+    tail = list(candidate_pois[window:])
+    rng.shuffle(head)
+    return sorted(head, key=lambda poi: round(float(getattr(poi, "popularity_score", 0) or 0), 1), reverse=True) + tail
+
+
+def _theme_for_items(items: list[dict], preferred_activities: list[str]) -> str:
+    categories = [str(item.get("category") or "urban").lower() for item in items]
+    for preference in preferred_activities:
+        if str(preference).lower() in categories:
+            return str(preference).lower()
+    return max(set(categories), key=categories.count) if categories else "urban"
+
+
+def _top_route_categories(days: list[dict]) -> list[str]:
+    counts: dict[str, int] = {}
+    for day in days:
+        for item in day.get("items", []):
+            category = str(item.get("category") or "urban").lower()
+            counts[category] = counts.get(category, 0) + 1
+    return [category for category, _count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:5]]
 
 
 def build_variant(
@@ -432,7 +783,7 @@ def _seeded_candidate_pool(scored_candidates: list[tuple[float, float, Any]], *,
     flexible = [item for item in top if best_score - item[0] <= 1.25]
     lower_quality = [item for item in top if best_score - item[0] > 1.25]
     rng.shuffle(flexible)
-    ordered = sorted(flexible, key=lambda item: (round(item[0], 1), item[1]), reverse=True) + lower_quality
+    ordered = sorted(flexible, key=lambda item: (round(item[0] * 2) / 2, item[1]), reverse=True) + lower_quality
     return [item[2] for item in ordered]
 
 
@@ -456,7 +807,19 @@ def schedule_day(
     total_score = 0.0
     total_travel = 0
     opening_warnings = 0
-    for poi in candidates:
+    remaining = list(candidates)
+    used_categories: set[str] = set()
+    while remaining and len(result) < max_per_day:
+        poi = _select_next_day_poi(
+            remaining=remaining,
+            previous=prev,
+            arrival_base=current_dt,
+            preferred_activities=preferred_activities,
+            trip_budget=trip_budget,
+            people_count=people_count,
+            used_categories=used_categories,
+        )
+        remaining.remove(poi)
         if len(result) >= max_per_day:
             break
         key = str(poi.id)
@@ -485,11 +848,45 @@ def schedule_day(
         )
         result.append(payload)
         used_poi_ids.add(key)
+        used_categories.add(_category_for(poi))
         total_score += score
         total_travel += travel_minutes
         current_dt = departure_dt + timedelta(minutes=20)
         prev = poi
     return result, total_score, total_travel, opening_warnings
+
+
+def _select_next_day_poi(
+    *,
+    remaining: list[Any],
+    previous: Any | None,
+    arrival_base: datetime,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+    used_categories: set[str],
+) -> Any:
+    best: tuple[float, Any] | None = None
+    for poi in remaining:
+        travel_minutes = estimate_travel_minutes(previous, poi) if previous else 0
+        score = poi_relevance_score(
+            poi,
+            preferred_activities,
+            arrival_base + timedelta(minutes=travel_minutes),
+            trip_budget,
+            people_count,
+        )
+        if previous is not None:
+            distance = haversine_km(float(previous.lat), float(previous.lng), float(poi.lat), float(poi.lng))
+            score -= min(2.0, distance / 12.0)
+        category = _category_for(poi)
+        if category in used_categories:
+            score -= 0.35
+        elif used_categories:
+            score += 0.25
+        if best is None or score > best[0]:
+            best = (score, poi)
+    return best[1] if best is not None else remaining[0]
 
 
 def _with_supplemental_candidates(

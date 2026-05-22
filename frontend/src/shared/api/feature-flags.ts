@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { createClientUuid } from '../lib/uuid';
 
 type EvaluatedFlag = {
   key: string;
@@ -18,7 +19,7 @@ let cachedFlags: Record<string, EvaluatedFlag> = {};
 const getAnonymousId = (): string => {
   let id = localStorage.getItem(ANONYMOUS_ID_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = createClientUuid();
     localStorage.setItem(ANONYMOUS_ID_KEY, id);
   }
   return id;

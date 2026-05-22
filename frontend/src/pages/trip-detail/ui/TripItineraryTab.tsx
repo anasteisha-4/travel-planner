@@ -16,6 +16,7 @@ import {
 import { useMapSearch } from '@/features/places';
 import { sendEvent } from '@/shared/api';
 import {
+  ensurePushNotifications,
   useGeocode,
   useReverseGeocode,
   useYandexMaps,
@@ -25,7 +26,7 @@ import {
   type YMapInstance,
 } from '@/shared/lib';
 import type { LLMQualityReview } from '@/shared/model';
-import { AdaptiveSheet, Button, Input } from '@/shared/ui';
+import { AdaptiveSheet, Button, Input, useTheme } from '@/shared/ui';
 import {
   closestCenter,
   DndContext,
@@ -333,7 +334,7 @@ const ItineraryGenerationLoader = ({
             {mode === 'generate' ? 'Собираю маршрут' : 'Собираю новый вариант'}
           </p>
           <p className="mt-1 text-[12px] font-semibold leading-relaxed text-stone-500 dark:text-stone-400">
-            Проверяю дни, время и последовательность точек. Это может занять немного времени
+            Генерация может занять время. Мы пришлем уведомление, когда маршрут будет готов
           </p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {[0, 1, 2].map((index) => (
@@ -359,6 +360,16 @@ const ItineraryGenerationLoader = ({
     </div>
   );
 };
+
+const ItineraryRegenerationOverlay = ({
+  messageIndex,
+}: {
+  messageIndex: number;
+}) => (
+  <div className="absolute inset-0 z-40 flex touch-none items-start justify-center bg-white/68 px-4 pt-4 backdrop-blur-[2px] dark:bg-black/52">
+    <ItineraryGenerationLoader mode="regenerate" messageIndex={messageIndex} />
+  </div>
+);
 
 const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
   <div className="flex gap-2 rounded-xl bg-stone-50 px-2.5 py-2 dark:bg-[hsl(var(--surface-muted))]/60">
@@ -561,6 +572,7 @@ const ItineraryPreviewSheet = ({
 
 const DayRouteMap = ({ points }: { points: DayMapPoint[] }) => {
   const { isReady } = useYandexMaps();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<YMapInstance | null>(null);
   const markersRef = useRef<YMapChild[]>([]);
@@ -580,6 +592,7 @@ const DayRouteMap = ({ points }: { points: DayMapPoint[] }) => {
       const { YMap, YMapDefaultFeaturesLayer, YMapDefaultSchemeLayer } = ymaps3;
       const map = new YMap(containerRef.current, {
         location: { center: mapCenter, zoom: points.length > 1 ? 13 : 15 },
+        theme: resolvedTheme,
       });
       map.addChild(new YMapDefaultSchemeLayer());
       map.addChild(new YMapDefaultFeaturesLayer());
@@ -587,6 +600,7 @@ const DayRouteMap = ({ points }: { points: DayMapPoint[] }) => {
     }
 
     const map = mapRef.current;
+    map.update({ theme: resolvedTheme });
     markersRef.current.forEach((marker) => map.removeChild(marker));
     markersRef.current = [];
     if (routeRef.current) {
@@ -623,7 +637,7 @@ const DayRouteMap = ({ points }: { points: DayMapPoint[] }) => {
             : { center: points[0].coords, zoom: 15 },
       });
     }
-  }, [activeSelectedId, isReady, points]);
+  }, [activeSelectedId, isReady, points, resolvedTheme]);
 
   useEffect(
     () => () => {
@@ -755,6 +769,7 @@ const ItineraryPlacePickerMap = ({
   onSelectCandidate: (candidate: ItineraryPlaceCandidate) => void;
 }) => {
   const { isReady } = useYandexMaps();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<YMapInstance | null>(null);
   const markersRef = useRef<YMapChild[]>([]);
@@ -785,6 +800,7 @@ const ItineraryPlacePickerMap = ({
       const { YMap, YMapDefaultFeaturesLayer, YMapDefaultSchemeLayer, YMapListener } = ymaps3;
       const map = new YMap(containerRef.current, {
         location: { center: mapCenter, zoom: points.length > 0 ? 13 : 11 },
+        theme: resolvedTheme,
       });
       map.addChild(new YMapDefaultSchemeLayer());
       map.addChild(new YMapDefaultFeaturesLayer());
@@ -804,6 +820,7 @@ const ItineraryPlacePickerMap = ({
     }
 
     const map = mapRef.current;
+    map.update({ theme: resolvedTheme });
     markersRef.current.forEach((marker) => map.removeChild(marker));
     markersRef.current = [];
     if (routeRef.current) {
@@ -853,7 +870,7 @@ const ItineraryPlacePickerMap = ({
             : { center: mapCenter, zoom: points.length === 1 ? 15 : 11 },
       });
     }
-  }, [candidate, isReady, mapCenter, points]);
+  }, [candidate, isReady, mapCenter, points, resolvedTheme]);
 
   useEffect(
     () => () => {
@@ -1355,6 +1372,7 @@ export const TripItineraryTab = () => {
   const unvisitMutation = useUnvisitItineraryItem(trip.id);
   const approved = stateQuery.data?.approved ?? null;
   const drafts = stateQuery.data?.drafts ?? [];
+  const generationJob = stateQuery.data?.generation_job ?? null;
   const current = approved ?? drafts[0] ?? null;
   const [dropTargetDayId, setDropTargetDayId] = useState<string | null>(null);
   const trackedViewedKeys = useRef<Set<string>>(new Set());
@@ -1368,16 +1386,23 @@ export const TripItineraryTab = () => {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } })
   );
-  const generationError =
-    generateMutation.isError || regenerateMutation.isError
+  const generationError = generationJob?.status === 'failed'
+    ? itineraryErrorMessage({ response: { data: { error: generationJob.error_code, message: generationJob.error_message } } })
+    : generateMutation.isError || regenerateMutation.isError
       ? itineraryErrorMessage(generateMutation.error ?? regenerateMutation.error)
       : null;
-  const generationMode = generateMutation.isPending
+  const isGenerationActive = generationJob?.status === 'queued' || generationJob?.status === 'running';
+  const generationMode = isGenerationActive
+    ? generationJob.mode === 'regenerate'
+      ? 'regenerate'
+      : 'generate'
+    : generateMutation.isPending
     ? 'generate'
     : regenerateMutation.isPending
       ? 'regenerate'
       : null;
   const isBusy =
+    isGenerationActive ||
     generateMutation.isPending ||
     regenerateMutation.isPending ||
     approveMutation.isPending ||
@@ -1387,6 +1412,7 @@ export const TripItineraryTab = () => {
     addMutation.isPending ||
     visitMutation.isPending ||
     unvisitMutation.isPending;
+  const isRegenerationLocked = generationMode === 'regenerate' && Boolean(current);
 
   const itinerarySummary = useMemo(
     () => ({
@@ -1413,29 +1439,21 @@ export const TripItineraryTab = () => {
     );
   }, [current, durationDays, trip.destination_id, trip.id]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    await ensurePushNotifications().catch(() => false);
     const variantCount = trip.destination_id ? 3 : 1;
     generateMutation.mutate(
       { variant_count: variantCount, pace: 'standard', allow_external_route: true },
       {
-        onSuccess: (items) => {
-          const first = items[0];
-          sendEvent(
-            'itinerary_variant_generated',
-            { trip_id: trip.id, variants_count: items.length },
-            'trip',
-            trip.id
-          );
+        onSuccess: (job) => {
           sendEvent(
             'itinerary_generated',
             {
               trip_id: trip.id,
+              job_id: job.id,
               destination_id: trip.destination_id,
               duration_days: durationDays,
-              days_count: first?.days.length ?? 0,
-              places_count: first ? getPlacesCount(first) : 0,
-              has_template: true,
-              variants_count: items.length,
+              mode: job.mode,
             },
             'trip',
             trip.id
@@ -1445,7 +1463,8 @@ export const TripItineraryTab = () => {
     );
   };
 
-  const handleRegenerate = () => {
+  const handleRegenerate = async () => {
+    await ensurePushNotifications().catch(() => false);
     const variantCount = approved || !trip.destination_id ? 1 : 3;
     regenerateMutation.mutate(
       {
@@ -1455,17 +1474,14 @@ export const TripItineraryTab = () => {
         allow_external_route: true,
       },
       {
-        onSuccess: (items) => {
-          const first = items[0];
+        onSuccess: (job) => {
           sendEvent(
             'itinerary_regenerated',
             {
               trip_id: trip.id,
+              job_id: job.id,
               destination_id: trip.destination_id,
               duration_days: durationDays,
-              days_count: first?.days.length ?? 0,
-              places_count: first ? getPlacesCount(first) : 0,
-              variants_count: items.length,
             },
             'trip',
             trip.id
@@ -1650,116 +1666,131 @@ export const TripItineraryTab = () => {
   };
 
   return (
-    <div className="no-scrollbar flex-1 overflow-y-auto pb-24 pt-4">
+    <div
+      className={cn(
+        'no-scrollbar flex-1 pb-24 pt-4',
+        isRegenerationLocked ? 'overflow-hidden' : 'overflow-y-auto'
+      )}
+    >
       <div className="relative flex flex-col gap-3">
-        {stateQuery.isPending && (
-          <div className="trip-info-card flex items-center gap-3 px-4 py-4">
-            <Loader2 className="h-4 w-4 animate-spin text-[#2563EB]" />
-            <p className="text-[14px] font-semibold text-stone-500 dark:text-stone-400">
-              Загружаю маршрут...
-            </p>
-          </div>
+        {isRegenerationLocked && (
+          <ItineraryRegenerationOverlay messageIndex={loadingMessageIndex} />
         )}
-        {generationError && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
-            <p className="text-[14px] font-bold text-amber-800 dark:text-amber-200">
-              Поменяйте параметры или направление поездки
-            </p>
-            <p className="mt-1 text-[12px] font-semibold leading-relaxed text-amber-700 dark:text-amber-300">
-              {generationError}
-            </p>
-          </div>
-        )}
-        {generationMode && (
+        {generationMode && !isRegenerationLocked && (
           <ItineraryGenerationLoader mode={generationMode} messageIndex={loadingMessageIndex} />
         )}
-        {!generationMode && !stateQuery.isPending && !approved && drafts.length === 0 && (
-          <EmptyState onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
-        )}
-        {!approved && drafts.length > 0 && (
-          <div className="flex flex-col gap-3 px-4 py-3">
-            <div className="trip-info-card-muted flex gap-3 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
-              <Info className="h-3.5 w-3.5" />
-              Выбранный маршрут можно отредактировать после утверждения
+        <div
+          className={cn(
+            'flex flex-col gap-3',
+            isRegenerationLocked && 'pointer-events-none select-none opacity-35'
+          )}
+        >
+          {stateQuery.isPending && (
+            <div className="trip-info-card flex items-center gap-3 px-4 py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-[#2563EB]" />
+              <p className="text-[14px] font-semibold text-stone-500 dark:text-stone-400">
+                Загружаю маршрут...
+              </p>
             </div>
-            {drafts.map((itinerary) => (
-              <VariantCard
-                key={itinerary.id}
-                itinerary={itinerary}
-                onApprove={handleApprove}
-                isLoading={approveMutation.isPending}
-              />
-            ))}
-            <Button
-              variant="outline"
-              className="h-[48px] rounded-2xl text-[14px] font-bold"
-              onClick={handleRegenerate}
-              disabled={isBusy}
+          )}
+          {generationError && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
+              <p className="text-[14px] font-bold text-amber-800 dark:text-amber-200">
+                Поменяйте параметры или направление поездки
+              </p>
+              <p className="mt-1 text-[12px] font-semibold leading-relaxed text-amber-700 dark:text-amber-300">
+                {generationError}
+              </p>
+            </div>
+          )}
+          {!generationMode && !stateQuery.isPending && !approved && drafts.length === 0 && (
+            <EmptyState onGenerate={handleGenerate} isLoading={generateMutation.isPending || isGenerationActive} />
+          )}
+          {!approved && drafts.length > 0 && (
+            <div className="flex flex-col gap-3 px-4 py-3">
+              <div className="trip-info-card-muted flex gap-3 text-[11px] font-semibold text-stone-400 dark:text-stone-500">
+                <Info className="h-3.5 w-3.5" />
+                Выбранный маршрут можно отредактировать после утверждения
+              </div>
+              {drafts.map((itinerary) => (
+                <VariantCard
+                  key={itinerary.id}
+                  itinerary={itinerary}
+                  onApprove={handleApprove}
+                  isLoading={approveMutation.isPending}
+                />
+              ))}
+              <Button
+                variant="outline"
+                className="h-[48px] rounded-2xl text-[14px] font-bold"
+                onClick={handleRegenerate}
+                disabled={isBusy}
+              >
+                {regenerateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Собрать другие варианты
+              </Button>
+            </div>
+          )}
+          {approved && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDropTargetDayId(null)}
             >
-              {regenerateMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Собрать другие варианты
-            </Button>
-          </div>
-        )}
-        {approved && (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setDropTargetDayId(null)}
-          >
-            <ApprovedItinerary
-              itinerary={approved}
-              onRegenerate={handleRegenerate}
-              isRegenerating={regenerateMutation.isPending}
-              dropTargetDayId={dropTargetDayId}
-            >
-              {(day) => (
-                <div className="flex flex-col gap-2">
-                  <DayRouteMapButton day={day} />
-                  <DayDropArea day={day}>
-                    <SortableContext
-                      items={getVisibleItems(day).map((item) => item.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {getVisibleItems(day).length > 0 &&
-                        getVisibleItems(day).map((item, index) => (
-                          <ItemRow
-                            key={item.id}
-                            item={item}
-                            index={index}
-                            isActiveTrip={trip.status === 'active'}
-                            onPin={handlePin}
-                            onRemove={handleRemove}
-                            onVisit={handleVisit}
-                            onUnvisit={handleUnvisit}
-                            onTimeChange={handleTimeChange}
-                            isBusy={isBusy}
-                          />
-                        ))}
-                    </SortableContext>
-                  </DayDropArea>
-                  <AddPlaceInline
-                    day={day}
-                    destination={trip.destination}
-                    onAdd={handleAdd}
-                    isLoading={addMutation.isPending}
-                  />
-                </div>
-              )}
-            </ApprovedItinerary>
-          </DndContext>
-        )}
-        {current && (
-          <div className="sr-only">
-            {itinerarySummary.generated_days_count} {itinerarySummary.remaining_poi_count}
-          </div>
-        )}
+              <ApprovedItinerary
+                itinerary={approved}
+                onRegenerate={handleRegenerate}
+                isRegenerating={regenerateMutation.isPending}
+                dropTargetDayId={dropTargetDayId}
+              >
+                {(day) => (
+                  <div className="flex flex-col gap-2">
+                    <DayRouteMapButton day={day} />
+                    <DayDropArea day={day}>
+                      <SortableContext
+                        items={getVisibleItems(day).map((item) => item.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {getVisibleItems(day).length > 0 &&
+                          getVisibleItems(day).map((item, index) => (
+                            <ItemRow
+                              key={item.id}
+                              item={item}
+                              index={index}
+                              isActiveTrip={trip.status === 'active'}
+                              onPin={handlePin}
+                              onRemove={handleRemove}
+                              onVisit={handleVisit}
+                              onUnvisit={handleUnvisit}
+                              onTimeChange={handleTimeChange}
+                              isBusy={isBusy}
+                            />
+                          ))}
+                      </SortableContext>
+                    </DayDropArea>
+                    <AddPlaceInline
+                      day={day}
+                      destination={trip.destination}
+                      onAdd={handleAdd}
+                      isLoading={addMutation.isPending}
+                    />
+                  </div>
+                )}
+              </ApprovedItinerary>
+            </DndContext>
+          )}
+          {current && (
+            <div className="sr-only">
+              {itinerarySummary.generated_days_count} {itinerarySummary.remaining_poi_count}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

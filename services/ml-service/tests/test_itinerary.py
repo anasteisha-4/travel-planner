@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.schemas.itinerary import ItineraryGenerateRequest
 from app.schemas.llm_quality import (
     LLMCandidatePOI,
     LLMQualityReview,
@@ -19,6 +20,7 @@ from app.schemas.llm_quality import (
     LLMReviewSeverity,
     LLMReviewStatus,
 )
+from app.services.llm.external_route import _normalize_external_variants
 from app.services.llm.prompts import compact_json
 from app.services.llm.providers import FakeProvider
 from app.services.llm.quality_gate import LLMQualityGate
@@ -1105,6 +1107,67 @@ def test_external_route_repairs_coordinates_and_travel_minutes(client: TestClien
     assert places[0]["lng"] == 1.1419
     assert places[1]["travel_from_previous_minutes"] > 0
     assert len(captured_geocode_queries) == 5
+
+
+def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytest.MonkeyPatch):
+    payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Unconfirmed coast",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "coast",
+                        "places": [
+                            {
+                                "name": f"Risky Place {index}",
+                                "category": "viewpoint",
+                                "lat": 41.07 + index / 1000,
+                                "lng": 1.16 + index / 1000,
+                                "address": "Coast",
+                                "arrival_time": f"{9 + index}:30",
+                                "departure_time": f"{10 + index}:20",
+                                "visit_duration_minutes": 50,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Specific but unverified.",
+                                "confidence": 0.8,
+                            }
+                            for index in range(4)
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    class DestinationOnlyResponse:
+        status_code = 200
+
+        def json(self):
+            return [{"lat": 41.076, "lon": 1.141, "name": "Salou"}]
+
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.llm.external_route.httpx.get", lambda *_args, **_kwargs: DestinationOnlyResponse()
+    )
+
+    variants = _normalize_external_variants(
+        payload=payload,
+        destination_id=DEST_ID,
+        destination_name="Salou",
+        destination_center=(41.076, 1.141),
+        trip_id=None,
+        request=ItineraryGenerateRequest(
+            destination_text="Salou",
+            duration_days=1,
+            start_date=date(2026, 6, 10),
+            allow_external_route=True,
+        ),
+        trigger="manual_destination",
+    )
+
+    assert variants == []
 
 
 def test_manual_destination_regenerate_rejects_same_external_signature(

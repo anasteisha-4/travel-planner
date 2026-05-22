@@ -1,4 +1,5 @@
 export * from './client';
+export * from './push';
 export {
   sendAppOpened,
   sendBudgetEvent,

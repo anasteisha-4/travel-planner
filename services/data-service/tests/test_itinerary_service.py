@@ -3,7 +3,9 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from app.services.itinerary_service import (
+    _ranked_destination_pois,
     _seeded_candidate_pool,
+    build_personalized_variant,
     build_variant,
     dedupe_poi_ids,
     rest_day_numbers,
@@ -149,6 +151,24 @@ def test_seeded_candidate_pool_varies_close_candidates_without_promoting_weak_it
     assert "poi-4" not in second[:3]
 
 
+def test_ranked_destination_pois_filters_low_signal_catalog_noise():
+    good = _poi("good", name="Novosibirsk State Art Museum", popularity_score=0.9)
+    weak = _poi("weak", name="Книга", popularity_score=0.1)
+    address_like = _poi("address", name="Lenin Street 22, Novosibirsk", popularity_score=0.1)
+
+    ranked = _ranked_destination_pois(
+        [weak, address_like, good],
+        preferred_activities=["culture"],
+        destination_center=(55.75, 37.62),
+        destination_radius_km=30,
+        start_date=datetime(2026, 6, 10),
+        trip_budget=None,
+        people_count=1,
+    )
+
+    assert ranked == [good]
+
+
 def test_build_variant_supplements_short_template_days_to_standard_density():
     template = _trajectory(1, ["culture"], ["poi-1", "poi-2"])
     poi_map = {f"poi-{index}": _poi(f"poi-{index}", name=f"POI {index}", opening_hours=None) for index in range(1, 7)}
@@ -174,3 +194,42 @@ def test_build_variant_supplements_short_template_days_to_standard_density():
 
     assert variant is not None
     assert len(variant["days"][0]["items"]) == 4
+
+
+def test_personalized_orienteering_variant_supports_month_long_routes():
+    pois = [
+        _poi(
+            f"poi-{index}",
+            name=f"Major Museum {index}",
+            lat=55.70 + index / 10000,
+            lng=37.50 + index / 10000,
+            popularity_score=0.9,
+            opening_hours=None,
+        )
+        for index in range(140)
+    ]
+
+    variant = build_personalized_variant(
+        candidate_pois=pois,
+        translations={},
+        destination_id="11111111-1111-1111-1111-111111111111",
+        duration_days=31,
+        preferred_activities=["culture"],
+        start_date=datetime(2026, 6, 10),
+        variant_seed=42,
+        variant_index=0,
+        pace="standard",
+        day_start_time=datetime.strptime("09:30", "%H:%M").time(),
+        day_end_time=datetime.strptime("19:00", "%H:%M").time(),
+        rest_days_count=0,
+        trip_budget=None,
+        people_count=1,
+        destination_popularity=None,
+        trajectories_available=False,
+        trajectory_prior={},
+    )
+
+    assert variant is not None
+    assert variant["duration_days"] == 31
+    assert all(len(day["items"]) >= 3 for day in variant["days"])
+    assert variant["score_summary"]["algorithm"] == "greedy_team_orienteering_with_time_windows_v2"

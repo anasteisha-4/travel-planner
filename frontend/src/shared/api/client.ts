@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 
+import { createClientUuid } from '../lib/uuid';
 import { getRuntimeEnv } from '../lib/runtime-env';
 
 type ApiRequestMetadata = {
@@ -69,7 +70,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   const instrumentedConfig = config as InstrumentedAxiosRequestConfig;
-  const requestId = crypto.randomUUID();
+  const requestId = createClientUuid();
   instrumentedConfig.metadata = {
     startedAt: performance.now(),
     requestId,

@@ -14,6 +14,21 @@ export type ItineraryRegenerateRequest = ItineraryGenerateRequest & {
   exclude_signature?: string | null;
 };
 
+export type ItineraryGenerationJob = {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | string;
+  mode: 'generate' | 'regenerate' | string;
+  error_code: string | null;
+  error_message: string | null;
+  result_itinerary_ids: string[] | null;
+  created_at: string;
+  updated_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
 export type ItineraryItemUpdate = {
   day_id?: string;
   arrival_time?: string;
@@ -105,4 +120,5 @@ export type Itinerary = {
 export type ItineraryState = {
   approved: Itinerary | null;
   drafts: Itinerary[];
+  generation_job: ItineraryGenerationJob | null;
 };

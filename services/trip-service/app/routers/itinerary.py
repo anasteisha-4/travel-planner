@@ -1,13 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
 from app.deps import get_current_user_id
 from app.services import itinerary_service
-from app.services.analytics_events import emit_itinerary_quality_event
 
 router = APIRouter()
 
@@ -21,65 +20,34 @@ def get_itinerary_state(
     return itinerary_service.get_itinerary_state(db, user_id, trip_id)
 
 
-@router.post("/{trip_id}/itinerary/generate", response_model=list[schemas.ItineraryResponse], status_code=201)
+@router.post("/{trip_id}/itinerary/generate", response_model=schemas.ItineraryGenerationJobResponse, status_code=202)
 def generate_itinerary(
     trip_id: UUID,
     data: schemas.ItineraryGenerateRequest,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    itineraries = itinerary_service.generate_itineraries(db, user_id, trip_id, data, authorization)
-    responses = [itinerary_service.to_response(db, item) for item in itineraries]
-    for item in responses:
-        emit_itinerary_quality_event(
-            "itinerary_candidate_generated",
-            {
-                "trip_id": str(trip_id),
-                "itinerary_id": str(item.id),
-                "template_version": item.model_version,
-                "ranker_version": item.model_version,
-                "days": len(item.days),
-                "places": sum(len(day.items) for day in item.days),
-                "route_signature": item.route_signature,
-                "variant_index": item.variant_index,
-            },
-            entity_type="itinerary",
-            entity_id=item.id,
-            authorization=authorization,
-        )
-    return responses
+    job = itinerary_service.enqueue_itinerary_generation(db, user_id, trip_id, data, "generate")
+    if job.status == "queued" and job.started_at is None:
+        background_tasks.add_task(itinerary_service.run_itinerary_generation_job, job.id, authorization)
+    return job
 
 
-@router.post("/{trip_id}/itinerary/regenerate", response_model=list[schemas.ItineraryResponse], status_code=201)
+@router.post("/{trip_id}/itinerary/regenerate", response_model=schemas.ItineraryGenerationJobResponse, status_code=202)
 def regenerate_itinerary(
     trip_id: UUID,
     data: schemas.ItineraryRegenerateRequest,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
     user_id: UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    itineraries = itinerary_service.generate_itineraries(db, user_id, trip_id, data, authorization)
-    responses = [itinerary_service.to_response(db, item) for item in itineraries]
-    for item in responses:
-        emit_itinerary_quality_event(
-            "itinerary_candidate_generated",
-            {
-                "trip_id": str(trip_id),
-                "itinerary_id": str(item.id),
-                "template_version": item.model_version,
-                "ranker_version": item.model_version,
-                "days": len(item.days),
-                "places": sum(len(day.items) for day in item.days),
-                "route_signature": item.route_signature,
-                "variant_index": item.variant_index,
-                "regenerated": True,
-            },
-            entity_type="itinerary",
-            entity_id=item.id,
-            authorization=authorization,
-        )
-    return responses
+    job = itinerary_service.enqueue_itinerary_generation(db, user_id, trip_id, data, "regenerate")
+    if job.status == "queued" and job.started_at is None:
+        background_tasks.add_task(itinerary_service.run_itinerary_generation_job, job.id, authorization)
+    return job
 
 
 @router.post("/{trip_id}/itinerary/{itinerary_id}/approve", response_model=schemas.ItineraryResponse)

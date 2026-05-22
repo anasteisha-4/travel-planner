@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
     ML_SERVICE_URL: str = "http://ml-service:8000"
     ML_SERVICE_TIMEOUT_SECONDS: float = 180.0
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:admin@triply.local"
 
     class Config:
         env_file = find_env_file()

@@ -614,9 +614,16 @@ def _normalize_external_places(
             repaired = None
         if repaired is not None:
             lat, lng = repaired
-        elif destination_center is not None and _haversine_km(
-            lat, lng, destination_center[0], destination_center[1]
-        ) > _unverified_coordinate_radius_km(radius_km):
+        elif (
+            (
+                settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
+                and destination_center is not None
+                and _needs_coordinate_evidence(raw_place, name)
+            )
+            or destination_center is not None
+            and _haversine_km(lat, lng, destination_center[0], destination_center[1])
+            > _unverified_coordinate_radius_km(radius_km)
+        ):
             continue
         if any(
             existing.lat is not None
@@ -661,6 +668,17 @@ def _normalize_external_places(
         )
         seen_names.add(normalized_name)
     return _repair_external_travel_minutes(places)
+
+
+def _needs_coordinate_evidence(raw_place: dict, name: str) -> bool:
+    confidence = _float_or_none(raw_place.get("confidence"))
+    category = _normalize_name(str(raw_place.get("category") or ""))
+    normalized_name = _normalize_name(name)
+    if confidence is None or confidence < 0.9:
+        return True
+    if any(token in category for token in ("beach", "view", "park", "nature", "coast", "water")):
+        return True
+    return bool(any(token in normalized_name for token in ("beach", "playa", "platja")))
 
 
 def _repair_external_travel_minutes(places: list[ItineraryPlace]) -> list[ItineraryPlace]:

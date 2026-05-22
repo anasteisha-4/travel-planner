@@ -3,6 +3,7 @@ Authentication router - login, register, refresh tokens, password change
 """
 
 import uuid
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, Header
@@ -18,6 +19,8 @@ from app.email import send_password_reset_email
 from app.exceptions import AppException
 
 router = APIRouter()
+
+YANDEX_CALLBACK_PATH = "/auth/yandex/callback"
 
 
 class LoginRequest(BaseModel):
@@ -42,6 +45,58 @@ class PasswordChangeRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+def _origin_from_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+
+def _host_without_www(origin: str | None) -> str | None:
+    if not origin:
+        return None
+    parsed = urlparse(origin)
+    host = parsed.hostname
+    if not host:
+        return None
+    return host[4:] if host.startswith("www.") else host
+
+
+def _same_domain_with_optional_www(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    left_parsed = urlparse(left)
+    right_parsed = urlparse(right)
+    return (
+        left_parsed.scheme == right_parsed.scheme
+        and left_parsed.port == right_parsed.port
+        and _host_without_www(left) == _host_without_www(right)
+    )
+
+
+def _allowed_oauth_origins() -> set[str]:
+    origins = {_origin_from_url(origin.strip()) for origin in settings.CORS_ORIGINS.split(",")}
+    origins.add(_origin_from_url(settings.FRONTEND_URL))
+    origins.add(_origin_from_url(settings.YANDEX_REDIRECT_URI))
+    return {origin for origin in origins if origin}
+
+
+def _resolve_yandex_redirect_uri(origin_or_redirect_uri: str | None) -> str | None:
+    configured_redirect_uri = settings.YANDEX_REDIRECT_URI
+    configured_origin = _origin_from_url(configured_redirect_uri)
+    request_origin = _origin_from_url(origin_or_redirect_uri)
+
+    if request_origin and configured_origin and _same_domain_with_optional_www(request_origin, configured_origin):
+        return configured_redirect_uri
+
+    if request_origin and request_origin in _allowed_oauth_origins():
+        return f"{request_origin}{YANDEX_CALLBACK_PATH}"
+
+    return configured_redirect_uri
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -120,19 +175,14 @@ def yandex_authorize(origin: str | None = None):
     if not settings.YANDEX_CLIENT_ID:
         raise AppException(status_code=500, code="INTERNAL_ERROR", message="Yandex OAuth not configured")
 
-    # Validation: only allow dynamic redirect_uri if the origin is in CORS_ORIGINS
-    allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
-
-    if origin and origin in allowed_origins:
-        redirect_uri = f"{origin}/auth/yandex/callback"
-    else:
-        # Fallback to the default configured redirect URI
-        redirect_uri = settings.YANDEX_REDIRECT_URI
-
+    redirect_uri = _resolve_yandex_redirect_uri(origin)
     if not redirect_uri:
         raise AppException(status_code=500, code="INTERNAL_ERROR", message="Redirect URI not configured")
 
-    url = f"https://oauth.yandex.ru/authorize?response_type=code&client_id={settings.YANDEX_CLIENT_ID}&redirect_uri={redirect_uri}"
+    url = (
+        "https://oauth.yandex.ru/authorize"
+        f"?response_type=code&client_id={settings.YANDEX_CLIENT_ID}&redirect_uri={quote(redirect_uri, safe='')}"
+    )
     return RedirectResponse(url)
 
 
@@ -148,8 +198,9 @@ async def yandex_callback(request: YandexCallbackRequest, db: Session = Depends(
         raise AppException(status_code=500, code="INTERNAL_ERROR", message="Yandex OAuth not configured")
 
     token_url = "https://oauth.yandex.ru/token"
-    # Use dynamic redirect_uri if provided by frontend
-    effective_redirect_uri = request.redirect_uri or settings.YANDEX_REDIRECT_URI
+    effective_redirect_uri = _resolve_yandex_redirect_uri(request.redirect_uri)
+    if not effective_redirect_uri:
+        raise AppException(status_code=500, code="INTERNAL_ERROR", message="Redirect URI not configured")
 
     data = {
         "grant_type": "authorization_code",

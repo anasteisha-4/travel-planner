@@ -195,7 +195,7 @@ class ItineraryGenerateRequest(BaseModel):
     day_start_time: time = time(9, 30)
     day_end_time: time = time(19, 0)
     preferred_activities: list[str] | None = None
-    rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+    rest_days_count: Annotated[int, Field(ge=0, le=31)] | None = None
     allow_external_route: bool = False
 
 
@@ -206,7 +206,7 @@ class ItineraryRegenerateRequest(BaseModel):
     day_start_time: time = time(9, 30)
     day_end_time: time = time(19, 0)
     preferred_activities: list[str] | None = None
-    rest_days_count: Annotated[int, Field(ge=0, le=30)] | None = None
+    rest_days_count: Annotated[int, Field(ge=0, le=31)] | None = None
     allow_external_route: bool = False
 
 
@@ -301,6 +301,50 @@ class ItineraryResponse(BaseModel):
 class ItineraryStateResponse(BaseModel):
     approved: ItineraryResponse | None = None
     drafts: list[ItineraryResponse] = Field(default_factory=list)
+    generation_job: "ItineraryGenerationJobResponse | None" = None
+
+
+class ItineraryGenerationJobResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    user_id: UUID
+    status: str
+    mode: str
+    error_code: str | None
+    error_message: str | None
+    result_itinerary_ids: list[str] | None
+    created_at: datetime
+    updated_at: datetime | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+    class Config:
+        from_attributes = True
+
+
+class VapidPublicKeyResponse(BaseModel):
+    public_key: str
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: str | None = None
+
+
+class PushSubscriptionResponse(BaseModel):
+    id: UUID
+    endpoint: str
+    created_at: datetime
+    updated_at: datetime | None
+
+    class Config:
+        from_attributes = True
 
 
 class UserProfileCreate(BaseModel):
