@@ -99,6 +99,31 @@ def _resolve_yandex_redirect_uri(origin_or_redirect_uri: str | None) -> str | No
     return configured_redirect_uri
 
 
+def _redirect_uri_with_host(redirect_uri: str, host: str) -> str:
+    parsed = urlparse(redirect_uri)
+    netloc = host
+    if parsed.port:
+        netloc = f"{host}:{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def _paired_www_redirect_uri(redirect_uri: str) -> str | None:
+    parsed = urlparse(redirect_uri)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+
+    paired_host = parsed.hostname[4:] if parsed.hostname.startswith("www.") else f"www.{parsed.hostname}"
+    return _redirect_uri_with_host(redirect_uri, paired_host)
+
+
+def _yandex_redirect_uri_candidates(redirect_uri: str) -> list[str]:
+    candidates = [redirect_uri]
+    paired_redirect_uri = _paired_www_redirect_uri(redirect_uri)
+    if paired_redirect_uri and paired_redirect_uri not in candidates:
+        candidates.append(paired_redirect_uri)
+    return candidates
+
+
 @router.post("/register", response_model=TokenResponse)
 def register(request: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user"""
@@ -183,7 +208,7 @@ def yandex_authorize(origin: str | None = None):
         "https://oauth.yandex.ru/authorize"
         f"?response_type=code&client_id={settings.YANDEX_CLIENT_ID}&redirect_uri={quote(redirect_uri, safe='')}"
     )
-    return RedirectResponse(url)
+    return RedirectResponse(url, status_code=302)
 
 
 class YandexCallbackRequest(BaseModel):
@@ -202,20 +227,25 @@ async def yandex_callback(request: YandexCallbackRequest, db: Session = Depends(
     if not effective_redirect_uri:
         raise AppException(status_code=500, code="INTERNAL_ERROR", message="Redirect URI not configured")
 
-    data = {
-        "grant_type": "authorization_code",
-        "code": request.code,
-        "client_id": settings.YANDEX_CLIENT_ID,
-        "client_secret": settings.YANDEX_CLIENT_SECRET,
-        "redirect_uri": effective_redirect_uri,
-    }
-
     async with httpx.AsyncClient() as client:
-        token_resp = await client.post(token_url, data=data)
-        if token_resp.status_code != 200:
-            raise AppException(status_code=400, code="BAD_REQUEST", message="Failed to get Yandex token")
+        access_token = None
+        for redirect_uri in _yandex_redirect_uri_candidates(effective_redirect_uri):
+            token_resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": request.code,
+                    "client_id": settings.YANDEX_CLIENT_ID,
+                    "client_secret": settings.YANDEX_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                },
+            )
+            if token_resp.status_code == 200:
+                access_token = token_resp.json().get("access_token")
+                break
 
-        access_token = token_resp.json().get("access_token")
+        if not access_token:
+            raise AppException(status_code=400, code="BAD_REQUEST", message="Failed to get Yandex token")
 
         info_url = "https://login.yandex.ru/info"
         info_resp = await client.get(info_url, headers={"Authorization": f"OAuth {access_token}"})

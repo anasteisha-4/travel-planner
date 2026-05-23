@@ -322,7 +322,7 @@ const ItineraryGenerationLoader = ({
       : ['Ищу другой порядок', 'Обновляю точки', 'Проверяю маршрут'];
 
   return (
-    <div className="trip-info-card absolute left-0 top-0 z-30 overflow-hidden p-4">
+    <div className="trip-info-card overflow-hidden p-4">
       <div className="absolute inset-x-0 top-0 h-1" />
       <div className="flex items-start gap-3">
         <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/30">
@@ -361,16 +361,25 @@ const ItineraryGenerationLoader = ({
   );
 };
 
-const ItineraryRegenerationOverlay = ({
+const ItineraryGenerationStickyLayer = ({
+  mode,
   messageIndex,
 }: {
+  mode: 'generate' | 'regenerate';
   messageIndex: number;
 }) => (
-  <div className="absolute inset-0 z-40 flex touch-none items-start justify-center bg-white/68 px-4 pt-4 backdrop-blur-[2px] dark:bg-black/52">
-    <ItineraryGenerationLoader mode="regenerate" messageIndex={messageIndex} />
+  <div className="sticky top-0 z-50 h-0 px-4 pt-4">
+    <ItineraryGenerationLoader mode={mode} messageIndex={messageIndex} />
   </div>
 );
 
+const ItineraryRegenerationOverlay = ({ messageIndex }: { messageIndex: number }) => (
+  <div className="sticky top-0 z-40 h-0">
+    <div className="bg-white/68 dark:bg-black/52 min-h-[100dvh] px-4 pt-4 backdrop-blur-[2px]">
+      <ItineraryGenerationLoader mode="regenerate" messageIndex={messageIndex} />
+    </div>
+  </div>
+);
 const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
   <div className="flex gap-2 rounded-xl bg-stone-50 px-2.5 py-2 dark:bg-[hsl(var(--surface-muted))]/60">
     <div className="w-[48px] shrink-0 text-[11px] font-extrabold leading-5 text-stone-500 dark:text-stone-400">
@@ -1386,20 +1395,25 @@ export const TripItineraryTab = () => {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } })
   );
-  const isGenerationActive = generationJob?.status === 'queued' || generationJob?.status === 'running';
+  const isGenerationActive =
+    generationJob?.status === 'queued' || generationJob?.status === 'running';
   const generationMode = isGenerationActive
     ? generationJob.mode === 'regenerate'
       ? 'regenerate'
       : 'generate'
     : generateMutation.isPending
-    ? 'generate'
-    : regenerateMutation.isPending
-      ? 'regenerate'
-      : null;
+      ? 'generate'
+      : regenerateMutation.isPending
+        ? 'regenerate'
+        : null;
   const generationError = generationMode
     ? null
     : generationJob?.status === 'failed'
-      ? itineraryErrorMessage({ response: { data: { error: generationJob.error_code, message: generationJob.error_message } } })
+      ? itineraryErrorMessage({
+          response: {
+            data: { error: generationJob.error_code, message: generationJob.error_message },
+          },
+        })
       : generateMutation.isError || regenerateMutation.isError
         ? itineraryErrorMessage(generateMutation.error ?? regenerateMutation.error)
         : null;
@@ -1535,7 +1549,7 @@ export const TripItineraryTab = () => {
       setLoadingMessageIndex((current) => current + 1);
     }, 2200);
     return () => window.clearInterval(intervalId);
-  });
+  }, []);
 
   const handleDragOver = (event: DragOverEvent) => {
     const activeId = String(event.active.id);
@@ -1670,17 +1684,16 @@ export const TripItineraryTab = () => {
   return (
     <div
       className={cn(
-        'no-scrollbar flex-1 pb-24 pt-4',
+        'no-scrollbar relative flex-1 pb-24 pt-4',
         isRegenerationLocked ? 'overflow-hidden' : 'overflow-y-auto'
       )}
     >
+      {isRegenerationLocked && <ItineraryRegenerationOverlay messageIndex={loadingMessageIndex} />}
+
+      {generationMode && !isRegenerationLocked && (
+        <ItineraryGenerationStickyLayer mode={generationMode} messageIndex={loadingMessageIndex} />
+      )}
       <div className="relative flex flex-col gap-3">
-        {isRegenerationLocked && (
-          <ItineraryRegenerationOverlay messageIndex={loadingMessageIndex} />
-        )}
-        {generationMode && !isRegenerationLocked && (
-          <ItineraryGenerationLoader mode={generationMode} messageIndex={loadingMessageIndex} />
-        )}
         <div
           className={cn(
             'flex flex-col gap-3',
@@ -1706,7 +1719,10 @@ export const TripItineraryTab = () => {
             </div>
           )}
           {!generationMode && !stateQuery.isPending && !approved && drafts.length === 0 && (
-            <EmptyState onGenerate={handleGenerate} isLoading={generateMutation.isPending || isGenerationActive} />
+            <EmptyState
+              onGenerate={handleGenerate}
+              isLoading={generateMutation.isPending || isGenerationActive}
+            />
           )}
           {!approved && drafts.length > 0 && (
             <div className="flex flex-col gap-3 px-4 py-3">

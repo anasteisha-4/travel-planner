@@ -16,6 +16,20 @@ class OpeningHoursParser:
     DAYS_MAPPING = {"Mo": 0, "Tu": 1, "We": 2, "Th": 3, "Fr": 4, "Sa": 5, "Su": 6}
 
     @staticmethod
+    def _parse_time(hour: str, minute: str, *, is_close: bool = False) -> time | None:
+        hour_int = int(hour)
+        minute_int = int(minute)
+        if minute_int < 0 or minute_int > 59:
+            return None
+        if hour_int == 24 and is_close:
+            return time(23, 59)
+        if hour_int > 24 and is_close:
+            return time(23, 59)
+        if hour_int < 0 or hour_int > 23:
+            return None
+        return time(hour_int, minute_int)
+
+    @staticmethod
     def is_open(opening_hours: str | None, dt: datetime) -> bool:
         """
         Check if POI is open at given datetime.
@@ -50,16 +64,10 @@ class OpeningHoursParser:
             current_day = dt.weekday()
             current_time = dt.time()
 
-            h_close_int = int(h_close)
-            m_close_int = int(m_close)
-
-            # Handle 24:00 (midnight boundary) — treat as 23:59
-            if h_close_int == 24:
-                h_close_int = 23
-                m_close_int = 59
-
-            open_time = time(int(h_open), int(m_open))
-            close_time = time(h_close_int, m_close_int)
+            open_time = OpeningHoursParser._parse_time(h_open, m_open)
+            close_time = OpeningHoursParser._parse_time(h_close, m_close, is_close=True)
+            if open_time is None or close_time is None:
+                return True
 
             # Check if day is in range
             day_in_range = (
@@ -80,16 +88,10 @@ class OpeningHoursParser:
             h_open, m_open, h_close, m_close = match.groups()
             current_time = dt.time()
 
-            h_close_int = int(h_close)
-            m_close_int = int(m_close)
-
-            # Handle 24:00 (midnight boundary)
-            if h_close_int == 24:
-                h_close_int = 23
-                m_close_int = 59
-
-            open_time = time(int(h_open), int(m_open))
-            close_time = time(h_close_int, m_close_int)
+            open_time = OpeningHoursParser._parse_time(h_open, m_open)
+            close_time = OpeningHoursParser._parse_time(h_close, m_close, is_close=True)
+            if open_time is None or close_time is None:
+                return True
             return open_time <= current_time < close_time
 
         # Handle "off" days: "Su off", "Mo off"

@@ -2,6 +2,7 @@ import random
 from datetime import date, datetime
 from types import SimpleNamespace
 
+from app.lib.opening_hours_parser import OpeningHoursParser
 from app.services.itinerary_service import (
     _ranked_destination_pois,
     _seeded_candidate_pool,
@@ -53,6 +54,11 @@ def test_dedupe_poi_ids_skips_existing_and_day_duplicates():
 
 def test_visit_datetime_accepts_date_from_api_query_params():
     assert visit_datetime(date(2026, 5, 22), 1) == datetime(2026, 5, 23, 12, 0)
+
+
+def test_opening_hours_parser_accepts_late_close_hours_from_osm():
+    assert OpeningHoursParser.is_open("Mo-Su 18:00-26:00", datetime(2026, 6, 10, 20, 0))
+    assert OpeningHoursParser.is_open("Fr-Su 12:00-24:45", datetime(2026, 6, 12, 20, 0))
 
 
 def test_rest_day_numbers_are_evenly_distributed_and_exact():

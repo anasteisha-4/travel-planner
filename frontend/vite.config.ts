@@ -62,6 +62,9 @@ export default defineConfig(({ command, mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
           importScripts: ['push-listener.js'],
           navigateFallbackDenylist: [/^\/grafana(?:\/.*)?$/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],

@@ -3,6 +3,7 @@ import type { LngLat } from '../yandex-maps/types'
 
 const GEOCODE_SEARCH_URL = '/api/geocode/search'
 const GEOCODE_REVERSE_URL = '/api/geocode/reverse'
+const COORD_PRECISION = 5
 
 export type GeocoderResult = {
   name: string
@@ -25,14 +26,16 @@ const trackGeocodeApi = (
   })
 }
 
+const normalizeCoord = (value: number): string => value.toFixed(COORD_PRECISION)
+
 export const searchAddress = async (query: string, results = 5, bias?: LngLat): Promise<GeocoderResult[]> => {
   const params = new URLSearchParams({
     q: query,
     results: String(results),
   })
   if (bias) {
-    params.set('bias_lon', String(bias[0]))
-    params.set('bias_lat', String(bias[1]))
+    params.set('bias_lon', normalizeCoord(bias[0]))
+    params.set('bias_lat', normalizeCoord(bias[1]))
   }
   try {
     const startedAt = performance.now()
@@ -48,8 +51,8 @@ export const searchAddress = async (query: string, results = 5, bias?: LngLat): 
 
 export const reverseGeocode = async (lat: number, lon: number): Promise<string | null> => {
   const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lon),
+    lat: normalizeCoord(lat),
+    lon: normalizeCoord(lon),
   })
   try {
     const startedAt = performance.now()

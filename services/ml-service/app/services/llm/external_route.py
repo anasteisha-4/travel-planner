@@ -160,7 +160,9 @@ def generate_external_route(
     destination_name = _destination_name(request, destination_info)
     destination_id = request.destination_id or uuid.uuid5(uuid.NAMESPACE_URL, f"triply:external:{destination_name}")
     effective_request = _external_route_request(request, trigger)
-    destination_center = _destination_center(destination_info) or _geocode_destination_center(destination_name)
+    geocoded_destination = None if destination_info else _geocode_destination_context(destination_name)
+    destination_center = _destination_center(destination_info) or _destination_center(geocoded_destination)
+    destination_name = _destination_name_with_geocode_context(destination_name, geocoded_destination)
     provider = get_provider()
 
     result = _generate_external_route_attempt(
@@ -172,26 +174,23 @@ def generate_external_route(
         trip_id=trip_id,
         request=effective_request,
         trigger=trigger,
+        coordinate_repair_enabled=settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED,
     )
     if result is not None:
         return result
 
     if settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
-        original_repair_enabled = settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
-        try:
-            settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED = False
-            relaxed_result = _generate_external_route_attempt(
-                provider=get_provider(),
-                destination_id=destination_id,
-                destination_name=destination_name,
-                destination_info=destination_info,
-                destination_center=destination_center,
-                trip_id=trip_id,
-                request=effective_request,
-                trigger=f"{trigger}_relaxed_coordinate_repair",
-            )
-        finally:
-            settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED = original_repair_enabled
+        relaxed_result = _generate_external_route_attempt(
+            provider=get_provider(),
+            destination_id=destination_id,
+            destination_name=destination_name,
+            destination_info=destination_info,
+            destination_center=destination_center,
+            trip_id=trip_id,
+            request=effective_request,
+            trigger=f"{trigger}_relaxed_coordinate_repair",
+            coordinate_repair_enabled=False,
+        )
         if relaxed_result is not None:
             return _mark_coordinate_repair_relaxed(relaxed_result)
 
@@ -208,6 +207,7 @@ def _generate_external_route_attempt(
     trip_id: uuid.UUID | None,
     request: ItineraryGenerateRequest,
     trigger: str,
+    coordinate_repair_enabled: bool,
 ) -> ItineraryGenerateResponse | None:
     if _active_day_count(request) > 4:
         return _generate_external_route_chunks(
@@ -219,6 +219,7 @@ def _generate_external_route_attempt(
             trip_id=trip_id,
             request=request,
             trigger=trigger,
+            coordinate_repair_enabled=coordinate_repair_enabled,
         )
 
     return _generate_external_route_single(
@@ -230,6 +231,7 @@ def _generate_external_route_attempt(
         trip_id=trip_id,
         request=request,
         trigger=trigger,
+        coordinate_repair_enabled=coordinate_repair_enabled,
     )
 
 
@@ -260,6 +262,7 @@ def _generate_external_route_single(
     trip_id: uuid.UUID | None,
     request: ItineraryGenerateRequest,
     trigger: str,
+    coordinate_repair_enabled: bool,
     timeout_cap_seconds: float | None = None,
     max_attempts: int = 2,
 ) -> ItineraryGenerateResponse | None:
@@ -305,6 +308,7 @@ def _generate_external_route_single(
             trip_id=trip_id,
             request=request,
             trigger=trigger,
+            coordinate_repair_enabled=coordinate_repair_enabled,
         )
         if variants:
             return variants[0].model_copy(update={"variants": variants})
@@ -321,6 +325,7 @@ def _generate_external_route_chunks(
     trip_id: uuid.UUID | None,
     request: ItineraryGenerateRequest,
     trigger: str,
+    coordinate_repair_enabled: bool,
 ) -> ItineraryGenerateResponse | None:
     rest_days = _rest_days(request.duration_days, request.rest_days_count)
     active_days = [day for day in range(1, request.duration_days + 1) if day not in rest_days]
@@ -374,8 +379,9 @@ def _generate_external_route_chunks(
                 trip_id=trip_id,
                 request=chunk_request,
                 trigger=f"{trigger}_chunk",
-                timeout_cap_seconds=20.0,
-                max_attempts=1,
+                coordinate_repair_enabled=coordinate_repair_enabled,
+                timeout_cap_seconds=28.0,
+                max_attempts=2,
             ),
         )
 
@@ -383,7 +389,7 @@ def _generate_external_route_chunks(
     for chunk_index in sorted(chunk_futures):
         day_numbers, future = chunk_futures[chunk_index]
         try:
-            chunk = future.result(timeout=24.0)
+            chunk = future.result(timeout=36.0)
         except Exception:
             chunk = None
         if chunk is None:
@@ -511,6 +517,7 @@ def _normalize_external_variants(
     trip_id: uuid.UUID | None,
     request: ItineraryGenerateRequest,
     trigger: str,
+    coordinate_repair_enabled: bool,
 ) -> list[ItineraryGenerateResponse]:
     raw_variants = payload.get("variants")
     if not isinstance(raw_variants, list):
@@ -525,6 +532,7 @@ def _normalize_external_variants(
             destination_name=destination_name,
             destination_center=destination_center,
             request=request,
+            coordinate_repair_enabled=coordinate_repair_enabled,
         )
         if not _is_complete_external_route(days, request, destination_center):
             continue
@@ -571,6 +579,7 @@ def _normalize_external_days(
     destination_name: str,
     destination_center: tuple[float, float] | None,
     request: ItineraryGenerateRequest,
+    coordinate_repair_enabled: bool,
 ) -> list[ItineraryDay]:
     if not isinstance(raw_days, list):
         return []
@@ -613,6 +622,7 @@ def _normalize_external_days(
             coordinate_cache=coordinate_cache,
             radius_km=_coordinate_radius_km(request),
             seen_names=seen_names,
+            coordinate_repair_enabled=coordinate_repair_enabled,
         )
         days.append(
             ItineraryDay(
@@ -637,6 +647,7 @@ def _normalize_external_places(
     coordinate_cache: dict[str, tuple[float, float]],
     radius_km: float,
     seen_names: set[str],
+    coordinate_repair_enabled: bool,
 ) -> list[ItineraryPlace]:
     if not isinstance(raw_places, list):
         return []
@@ -655,26 +666,31 @@ def _normalize_external_places(
             continue
         candidate_rows.append((index, raw_place, name, normalized_name, lat, lng))
 
-    repair_futures = {
-        index: _GEOCODE_EXECUTOR.submit(
-            _repair_place_coordinates,
-            name=name,
-            address=raw_place.get("address"),
-            original_lat=lat,
-            original_lng=lng,
-            destination_name=destination_name,
-            destination_center=destination_center,
-            radius_km=radius_km,
-            cache=coordinate_cache,
-        )
-        for index, raw_place, name, _normalized_name, lat, lng in candidate_rows
-    }
+    repair_futures = {}
+    if coordinate_repair_enabled:
+        repair_futures = {
+            index: _GEOCODE_EXECUTOR.submit(
+                _repair_place_coordinates,
+                name=name,
+                address=raw_place.get("address"),
+                original_lat=lat,
+                original_lng=lng,
+                destination_name=destination_name,
+                destination_center=destination_center,
+                radius_km=radius_km,
+                cache=coordinate_cache,
+                coordinate_repair_enabled=coordinate_repair_enabled,
+            )
+            for index, raw_place, name, _normalized_name, lat, lng in candidate_rows
+        }
 
     for index, raw_place, name, normalized_name, lat, lng in candidate_rows:
-        try:
-            repaired = repair_futures[index].result(timeout=2.2)
-        except Exception:
-            repaired = None
+        repaired = None
+        if index in repair_futures:
+            try:
+                repaired = repair_futures[index].result(timeout=2.2)
+            except Exception:
+                repaired = None
         if repaired is not None:
             lat, lng = repaired
         elif _should_reject_unrepaired_coordinate(
@@ -684,6 +700,7 @@ def _normalize_external_places(
             lng=lng,
             destination_center=destination_center,
             radius_km=radius_km,
+            coordinate_repair_enabled=coordinate_repair_enabled,
         ):
             continue
         if any(
@@ -747,6 +764,7 @@ def _should_reject_unrepaired_coordinate(
     lng: float,
     destination_center: tuple[float, float] | None,
     radius_km: float,
+    coordinate_repair_enabled: bool | None = None,
 ) -> bool:
     if destination_center is None:
         return False
@@ -755,7 +773,9 @@ def _should_reject_unrepaired_coordinate(
         return True
     if distance_km > _unverified_coordinate_radius_km(radius_km):
         return True
-    if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
+    if coordinate_repair_enabled is None:
+        coordinate_repair_enabled = settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
+    if not coordinate_repair_enabled:
         return False
     confidence = _float_or_none(raw_place.get("confidence"))
     return _needs_coordinate_evidence(raw_place, name) and (confidence is None or confidence < 0.75)
@@ -831,13 +851,52 @@ def _destination_center(destination_info: dict | None) -> tuple[float, float] | 
     return lat, lng
 
 
+def _destination_name_with_geocode_context(destination_name: str, geocoded: dict[str, Any] | None) -> str:
+    if not geocoded:
+        return destination_name
+    address = str(geocoded.get("fullAddress") or "").strip()
+    if not address:
+        return destination_name
+    normalized_name = _normalize_name(destination_name)
+    normalized_address = _normalize_name(address)
+    if normalized_name and normalized_name in normalized_address:
+        country = _country_context_from_address(address)
+        if country and country not in destination_name:
+            return f"{destination_name}, {country}"[:200]
+    return destination_name
+
+
+def _country_context_from_address(address: str) -> str | None:
+    normalized = _normalize_name(address)
+    if "испания" in normalized or "spain" in normalized or "españa" in normalized:
+        return "Испания"
+    if "франция" in normalized or "france" in normalized:
+        return "Франция"
+    if "италия" in normalized or "italy" in normalized:
+        return "Италия"
+    if "турция" in normalized or "turkey" in normalized:
+        return "Турция"
+    if "великобритания" in normalized or "united kingdom" in normalized or "uk" in normalized:
+        return "Великобритания"
+    if "япония" in normalized or "japan" in normalized:
+        return "Япония"
+    if "сша" in normalized or "usa" in normalized or "united states" in normalized:
+        return "США"
+    return None
+
+
 def _geocode_destination_center(destination_name: str) -> tuple[float, float] | None:
+    selected = _geocode_destination_context(destination_name)
+    return _destination_center(selected)
+
+
+def _geocode_destination_context(destination_name: str) -> dict[str, Any] | None:
     if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
         return None
     try:
         response = httpx.get(
             f"{settings.DATA_SERVICE_URL}/api/geocode/search",
-            params={"q": destination_name, "results": 1},
+            params={"q": destination_name, "results": 5},
             timeout=3.0,
         )
         if response.status_code != 200:
@@ -847,11 +906,59 @@ def _geocode_destination_center(destination_name: str) -> tuple[float, float] | 
         return None
     if not isinstance(items, list) or not items:
         return None
-    lat = _float_or_none(items[0].get("lat"))
-    lng = _float_or_none(items[0].get("lon") or items[0].get("lng"))
-    if lat is None or lng is None:
+    selected = _select_destination_geocode_match(destination_name, items)
+    if selected is None:
         return None
-    return lat, lng
+    return {
+        **selected,
+        "lng": selected.get("lon") or selected.get("lng"),
+    }
+
+
+def _select_destination_geocode_match(destination_name: str, items: list[Any]) -> dict[str, Any] | None:
+    normalized_query = _normalize_name(destination_name)
+    query_tokens = {
+        token
+        for token in re.split(r"\s+|,", normalized_query)
+        if len(token) >= 4 and token not in {"spain", "испания", "france", "франция"}
+    }
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        lat = _float_or_none(item.get("lat"))
+        lng = _float_or_none(item.get("lon") or item.get("lng"))
+        if lat is None or lng is None:
+            continue
+        name = _normalize_name(str(item.get("name") or ""))
+        address = _normalize_name(str(item.get("fullAddress") or item.get("address") or ""))
+        haystack = f"{name} {address}"
+        score = 0.0
+        if name == normalized_query:
+            score += 12.0
+        if normalized_query and normalized_query in name:
+            score += 8.0
+        if normalized_query and normalized_query in address:
+            score += 6.0
+        if query_tokens:
+            matched = sum(1 for token in query_tokens if token in haystack)
+            score += matched * 5.0
+            if matched == 0:
+                score -= 10.0
+        if any(token in haystack for token in ("испания", "spain", "españa")):
+            score += 3.0
+        if any(token in haystack for token in ("франция", "france")):
+            score += 3.0
+        if any(token in haystack for token in ("россия", "russia", "украина", "ukraine")) and not any(
+            token in normalized_query for token in ("россия", "russia", "украина", "ukraine")
+        ):
+            score -= 4.0
+        score -= index * 0.1
+        scored.append((score, item))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return scored[0][1] if scored[0][0] > -5.0 else None
 
 
 def _repair_place_coordinates(
@@ -864,8 +971,9 @@ def _repair_place_coordinates(
     destination_center: tuple[float, float] | None,
     radius_km: float,
     cache: dict[str, tuple[float, float]],
+    coordinate_repair_enabled: bool,
 ) -> tuple[float, float] | None:
-    if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED or destination_center is None:
+    if not coordinate_repair_enabled or destination_center is None:
         return None
     queries = _coordinate_repair_queries(name=name, address=address, destination_name=destination_name)
     cache_key = _normalize_name("|".join(queries))

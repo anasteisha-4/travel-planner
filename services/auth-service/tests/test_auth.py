@@ -90,7 +90,7 @@ class TestYandexAuthorize:
 
         response = client.get("/api/auth/yandex/authorize?origin=https%3A%2F%2Ftriply-ai.ru", follow_redirects=False)
 
-        assert response.status_code == 307
+        assert response.status_code == 302
         redirect_query = parse_qs(urlparse(response.headers["location"]).query)
         assert redirect_query["redirect_uri"] == ["https://www.triply-ai.ru/auth/yandex/callback"]
 
@@ -104,9 +104,17 @@ class TestYandexAuthorize:
 
         response = client.get("/api/auth/yandex/authorize?origin=http%3A%2F%2Flocalhost%3A5173", follow_redirects=False)
 
-        assert response.status_code == 307
+        assert response.status_code == 302
         redirect_query = parse_qs(urlparse(response.headers["location"]).query)
         assert redirect_query["redirect_uri"] == ["http://localhost:5173/auth/yandex/callback"]
+
+    def test_yandex_redirect_uri_candidates_include_paired_www_domain(self):
+        from app.routers.auth import _yandex_redirect_uri_candidates
+
+        assert _yandex_redirect_uri_candidates("https://www.triply-ai.ru/auth/yandex/callback") == [
+            "https://www.triply-ai.ru/auth/yandex/callback",
+            "https://triply-ai.ru/auth/yandex/callback",
+        ]
 
 
 class TestRefresh:

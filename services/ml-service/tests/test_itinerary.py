@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.schemas.itinerary import ItineraryGenerateRequest
+from app.schemas.itinerary import ItineraryDay, ItineraryGenerateRequest, ItineraryGenerateResponse, ItineraryPlace
 from app.schemas.llm_quality import (
     LLMCandidatePOI,
     LLMQualityReview,
@@ -20,7 +20,13 @@ from app.schemas.llm_quality import (
     LLMReviewSeverity,
     LLMReviewStatus,
 )
-from app.services.llm.external_route import _normalize_external_variants, _should_reject_unrepaired_coordinate
+from app.services.llm.external_route import (
+    _destination_name_with_geocode_context,
+    _normalize_external_variants,
+    _select_destination_geocode_match,
+    _should_reject_unrepaired_coordinate,
+)
+from app.services.llm.itinerary_adjustment_policy import _remove_item
 from app.services.llm.prompts import compact_json
 from app.services.llm.providers import FakeProvider
 from app.services.llm.quality_gate import LLMQualityGate
@@ -1189,6 +1195,88 @@ def test_external_route_keeps_ordinary_unrepaired_city_poi_inside_radius(monkeyp
         destination_center=(41.074871, 1.054892),
         radius_km=35,
     )
+
+
+def test_destination_center_prefers_exact_city_over_first_fuzzy_match():
+    selected = _select_destination_geocode_match(
+        "Камбрильс",
+        [
+            {
+                "name": "Новгород-Северский район",
+                "fullAddress": "Новгород-Северский район, Карыльское, Украина",
+                "lat": 51.507072,
+                "lon": 32.993225,
+            },
+            {
+                "name": "Камбрильс",
+                "fullAddress": "Камбрильс, CT, Испания",
+                "lat": 41.081038,
+                "lon": 1.02649,
+            },
+        ],
+    )
+
+    assert selected is not None
+    assert selected["lat"] == 41.081038
+
+
+def test_manual_destination_name_uses_geocoded_full_address_context():
+    assert (
+        _destination_name_with_geocode_context(
+            "Камбрильс",
+            {"fullAddress": "Камбрильс, CT, Испания", "lat": 41.081038, "lng": 1.02649},
+        )
+        == "Камбрильс, Испания"
+    )
+
+
+def test_quality_removal_keeps_first_duplicate_and_avoids_sparse_days():
+    duplicate_id = uuid.uuid4()
+    other_id = uuid.uuid4()
+    itinerary = ItineraryGenerateResponse(
+        destination_id=DEST_ID,
+        duration_days=3,
+        days=[
+            ItineraryDay(
+                day=1,
+                day_number=1,
+                theme="culture",
+                places=[
+                    ItineraryPlace(id=duplicate_id, name="Duplicate", category="culture", lat=41.1, lng=1.1),
+                    ItineraryPlace(id=other_id, name="Other", category="food", lat=41.2, lng=1.2),
+                ],
+                items=[],
+            ),
+            ItineraryDay(
+                day=2,
+                day_number=2,
+                theme="culture",
+                places=[
+                    ItineraryPlace(id=uuid.uuid4(), name="Beach", category="beach", lat=41.0, lng=1.0),
+                    ItineraryPlace(id=duplicate_id, name="Duplicate", category="culture", lat=41.1, lng=1.1),
+                    ItineraryPlace(id=uuid.uuid4(), name="Market", category="food", lat=41.3, lng=1.3),
+                ],
+                items=[],
+            ),
+            ItineraryDay(
+                day=3,
+                day_number=3,
+                theme="culture",
+                places=[
+                    ItineraryPlace(id=uuid.uuid4(), name="Harbor", category="viewpoint", lat=41.4, lng=1.4),
+                    ItineraryPlace(id=duplicate_id, name="Duplicate", category="culture", lat=41.1, lng=1.1),
+                ],
+                items=[],
+            ),
+        ],
+        activity_tags=["culture"],
+    )
+
+    adjusted, did_apply = _remove_item(itinerary, duplicate_id)
+
+    assert did_apply is True
+    assert [len(day.places) for day in adjusted.days] == [2, 2, 2]
+    assert [sum(1 for place in day.places if place.id == duplicate_id) for day in adjusted.days] == [1, 0, 1]
 
 
 def test_manual_destination_regenerate_rejects_same_external_signature(

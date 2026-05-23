@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import httpx
@@ -15,6 +16,39 @@ YANDEX_PROXY_REFERER = "https://www.triply-ai.ru/"
 YANDEX_EXCLUDED_KINDS = {"street", "district"}
 GEOSUGGEST_EXCLUDED_TAGS = {"street", "district", "province", "country", "other"}
 GEOAPIFY_EXCLUDED_TYPES = {"street", "suburb", "district", "county", "state"}
+GEOCODE_CACHE_TTL_SECONDS = 24 * 60 * 60
+GEOCODE_CACHE_MAX_SIZE = 1024
+GEOCODE_CACHE_PRECISION = 5
+
+_geocode_cache: dict[str, tuple[float, Any]] = {}
+
+
+def _cache_get(key: str) -> Any | None:
+    cached = _geocode_cache.get(key)
+    if not cached:
+        return None
+    expires_at, value = cached
+    if expires_at <= time.monotonic():
+        _geocode_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value: Any) -> Any:
+    if len(_geocode_cache) >= GEOCODE_CACHE_MAX_SIZE:
+        oldest_key = next(iter(_geocode_cache))
+        _geocode_cache.pop(oldest_key, None)
+    _geocode_cache[key] = (time.monotonic() + GEOCODE_CACHE_TTL_SECONDS, value)
+    return value
+
+
+def _rounded_coord(value: float | None) -> str:
+    return "" if value is None else f"{value:.{GEOCODE_CACHE_PRECISION}f}"
+
+
+def _cache_key(provider: str, *parts: object) -> str:
+    normalized = [str(part).strip().lower() if isinstance(part, str) else str(part) for part in parts]
+    return f"{provider}:" + "|".join(normalized)
 
 
 async def _proxy_json_request(
@@ -96,6 +130,10 @@ def _parse_geoapify(feature: dict[str, Any]) -> dict[str, float | str] | None:
 async def _search_yandex(
     query: str, results: int, lon: float | None, lat: float | None
 ) -> list[dict[str, float | str]]:
+    cache_key = _cache_key("yandex-search", query, results, _rounded_coord(lon), _rounded_coord(lat))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     api_key = _yandex_geocoder_api_key()
     if not api_key:
         return []
@@ -124,12 +162,17 @@ async def _search_yandex(
         item = _parse_yandex(obj)
         if item:
             parsed.append(item)
-    return parsed
+    return _cache_set(cache_key, parsed)
 
 
 async def _search_yandex_geosuggest(
     query: str, results: int, lon: float | None, lat: float | None
 ) -> list[dict[str, float | str]]:
+    max_resolved_results = min(results, 3)
+    cache_key = _cache_key("yandex-geosuggest", query, max_resolved_results, _rounded_coord(lon), _rounded_coord(lat))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     api_key = _env_value("YANDEX_GEOSUGGEST_API_KEY", "VITE_YANDEX_GEOSUGGEST_API_KEY")
     if not api_key:
         return []
@@ -137,7 +180,7 @@ async def _search_yandex_geosuggest(
         "apikey": api_key,
         "text": query,
         "lang": "ru_RU",
-        "results": str(results),
+        "results": str(max_resolved_results),
         "types": "biz,house,locality,metro",
         "print_address": "1",
     }
@@ -154,7 +197,7 @@ async def _search_yandex_geosuggest(
         if not any(tag in GEOSUGGEST_EXCLUDED_TAGS for tag in item.get("tags", []))
     ]
     resolved: list[dict[str, float | str]] = []
-    for item in items:
+    for item in items[:max_resolved_results]:
         address = item.get("address", {}).get("formatted_address")
         if not address:
             continue
@@ -162,12 +205,16 @@ async def _search_yandex_geosuggest(
         if yandex_matches:
             yandex_matches[0]["name"] = item.get("title", {}).get("text") or yandex_matches[0]["name"]
             resolved.append(yandex_matches[0])
-    return resolved
+    return _cache_set(cache_key, resolved)
 
 
 async def _search_geoapify(
     query: str, results: int, lon: float | None, lat: float | None
 ) -> list[dict[str, float | str]]:
+    cache_key = _cache_key("geoapify-search", query, results, _rounded_coord(lon), _rounded_coord(lat))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     api_key = _env_value("GEOAPIFY_API_KEY", "VITE_GEOAPIFY_API_KEY")
     if not api_key:
         return []
@@ -185,7 +232,7 @@ async def _search_geoapify(
         item = _parse_geoapify(feature)
         if item and item["name"]:
             parsed.append(item)
-    return parsed
+    return _cache_set(cache_key, parsed)
 
 
 async def _reverse_yandex(lat: float, lon: float) -> str | None:
@@ -194,6 +241,10 @@ async def _reverse_yandex(lat: float, lon: float) -> str | None:
 
 
 async def _reverse_geoapify(lat: float, lon: float) -> str | None:
+    cache_key = _cache_key("geoapify-reverse", _rounded_coord(lon), _rounded_coord(lat))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     api_key = _env_value("GEOAPIFY_API_KEY", "VITE_GEOAPIFY_API_KEY")
     if not api_key:
         return None
@@ -217,7 +268,7 @@ async def _reverse_geoapify(lat: float, lon: float) -> str | None:
     if not feature:
         return None
     props = feature.get("properties", {})
-    return props.get("name") or props.get("address_line1")
+    return _cache_set(cache_key, props.get("name") or props.get("address_line1"))
 
 
 @router.get("/search")
@@ -227,18 +278,17 @@ async def search_geocode(
     bias_lon: float | None = Query(None, ge=-180, le=180),
     bias_lat: float | None = Query(None, ge=-90, le=90),
 ) -> list[dict[str, float | str]]:
-    use_yandex = bias_lon is not None and bias_lat is not None and _is_russia_or_cis(bias_lon, bias_lat)
-    if use_yandex:
-        yandex = await _search_yandex_geosuggest(q, results, bias_lon, bias_lat)
-        if yandex:
-            return yandex[:results]
-        yandex = await _search_yandex(q, results, bias_lon, bias_lat)
-        if yandex:
-            return yandex[:results]
     geoapify = await _search_geoapify(q, results, bias_lon, bias_lat)
     if geoapify:
         return geoapify[:results]
-    return (await _search_yandex(q, results, bias_lon, bias_lat))[:results]
+    yandex = await _search_yandex(q, results, bias_lon, bias_lat)
+    if yandex:
+        return yandex[:results]
+    if bias_lon is not None and bias_lat is not None and _is_russia_or_cis(bias_lon, bias_lat):
+        yandex_suggest = await _search_yandex_geosuggest(q, results, bias_lon, bias_lat)
+        if yandex_suggest:
+            return yandex_suggest[:results]
+    return []
 
 
 @router.get("/reverse")
@@ -246,8 +296,6 @@ async def reverse_geocode(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
 ) -> dict[str, str | None]:
-    if _is_russia_or_cis(lon, lat):
-        return {"name": await _reverse_yandex(lat, lon) or await _reverse_geoapify(lat, lon)}
     return {"name": await _reverse_geoapify(lat, lon) or await _reverse_yandex(lat, lon)}
 
 

@@ -96,12 +96,34 @@ def apply_itinerary_quality_review(
     )
 
 
-def _remove_item(itinerary: ItineraryGenerateResponse, target_id: uuid.UUID) -> tuple[ItineraryGenerateResponse, bool]:
+def _remove_item(
+    itinerary: ItineraryGenerateResponse,
+    target_id: uuid.UUID,
+    *,
+    min_active_day_places: int = 2,
+) -> tuple[ItineraryGenerateResponse, bool]:
     days = []
     did_apply = False
+    kept_first_match = False
+    total_matches = sum(1 for day in itinerary.days for place in day.places if place.id == target_id)
     for day in itinerary.days:
-        places = [place for place in day.places if place.id != target_id]
-        did_apply = did_apply or len(places) != len(day.places)
+        places = []
+        removed_from_day = False
+        is_active_day = str(day.theme or "").lower() != "rest"
+        matching_count = sum(1 for place in day.places if place.id == target_id)
+        for place in day.places:
+            if place.id != target_id:
+                places.append(place)
+                continue
+            if total_matches > 1 and not kept_first_match:
+                places.append(place)
+                kept_first_match = True
+                continue
+            if is_active_day and len(day.places) - matching_count < min_active_day_places:
+                places.append(place)
+                continue
+            removed_from_day = True
+        did_apply = did_apply or removed_from_day
         days.append(day.model_copy(update={"places": places, "items": places}))
     return itinerary.model_copy(update={"days": days}), did_apply
 
