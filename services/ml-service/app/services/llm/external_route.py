@@ -16,7 +16,6 @@ from app.services.llm.providers import LLMMessage, LLMProviderError, LLMRequest,
 
 EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v2"
 _GEOCODE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="external-route-geocode")
-_LLM_CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="external-route-llm-chunk")
 
 _GENERIC_NAME_PARTS = {
     "центральный район",
@@ -210,7 +209,7 @@ def _generate_external_route_attempt(
     coordinate_repair_enabled: bool,
 ) -> ItineraryGenerateResponse | None:
     if _active_day_count(request) > 4:
-        return _generate_external_route_chunks(
+        chunked = _generate_external_route_chunks(
             provider=provider,
             destination_id=destination_id,
             destination_name=destination_name,
@@ -221,6 +220,24 @@ def _generate_external_route_attempt(
             trigger=trigger,
             coordinate_repair_enabled=coordinate_repair_enabled,
         )
+        if chunked is not None:
+            return chunked
+        single_fallback = _generate_external_route_single(
+            provider=get_provider(),
+            destination_id=destination_id,
+            destination_name=destination_name,
+            destination_info=destination_info,
+            destination_center=destination_center,
+            trip_id=trip_id,
+            request=request,
+            trigger=f"{trigger}_single_fallback",
+            coordinate_repair_enabled=coordinate_repair_enabled,
+            timeout_cap_seconds=28.0,
+            max_attempts=1,
+        )
+        if single_fallback is not None:
+            return _mark_single_route_fallback(single_fallback)
+        return None
 
     return _generate_external_route_single(
         provider=provider,
@@ -244,6 +261,23 @@ def _mark_coordinate_repair_relaxed(response: ItineraryGenerateResponse) -> Itin
                 "score_summary": {
                     **dict(variant.score_summary or {}),
                     "external_route_coordinate_repair_relaxed": True,
+                }
+            }
+        )
+        for variant in (response.variants or [])
+    ]
+    return response.model_copy(update={"score_summary": summary, "variants": variants or response.variants})
+
+
+def _mark_single_route_fallback(response: ItineraryGenerateResponse) -> ItineraryGenerateResponse:
+    summary = dict(response.score_summary or {})
+    summary["external_route_single_fallback"] = True
+    variants = [
+        variant.model_copy(
+            update={
+                "score_summary": {
+                    **dict(variant.score_summary or {}),
+                    "external_route_single_fallback": True,
                 }
             }
         )
@@ -344,7 +378,7 @@ def _generate_external_route_chunks(
         for day_number in rest_days
     }
     seed_base = request.variant_seed or 0
-    chunk_futures = {}
+    seen_names: set[str] = set()
     for chunk_index, day_numbers in enumerate(day_chunks):
         if not day_numbers:
             continue
@@ -367,31 +401,19 @@ def _generate_external_route_chunks(
                 "trip_notes": chunk_notes,
             }
         )
-        chunk_futures[chunk_index] = (
-            day_numbers,
-            _LLM_CHUNK_EXECUTOR.submit(
-                _generate_external_route_single,
-                provider=get_provider(),
-                destination_id=destination_id,
-                destination_name=destination_name,
-                destination_info=destination_info,
-                destination_center=destination_center,
-                trip_id=trip_id,
-                request=chunk_request,
-                trigger=f"{trigger}_chunk",
-                coordinate_repair_enabled=coordinate_repair_enabled,
-                timeout_cap_seconds=28.0,
-                max_attempts=2,
-            ),
+        chunk = _generate_external_route_single(
+            provider=get_provider(),
+            destination_id=destination_id,
+            destination_name=destination_name,
+            destination_info=destination_info,
+            destination_center=destination_center,
+            trip_id=trip_id,
+            request=chunk_request,
+            trigger=f"{trigger}_chunk",
+            coordinate_repair_enabled=coordinate_repair_enabled,
+            timeout_cap_seconds=28.0,
+            max_attempts=2,
         )
-
-    seen_names: set[str] = set()
-    for chunk_index in sorted(chunk_futures):
-        day_numbers, future = chunk_futures[chunk_index]
-        try:
-            chunk = future.result(timeout=36.0)
-        except Exception:
-            chunk = None
         if chunk is None:
             return None
         chunk_days = [day for day in chunk.days if str(day.theme or "").lower() != "rest"]

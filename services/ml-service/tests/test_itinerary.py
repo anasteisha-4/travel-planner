@@ -25,6 +25,7 @@ from app.services.llm.external_route import (
     _normalize_external_variants,
     _select_destination_geocode_match,
     _should_reject_unrepaired_coordinate,
+    generate_external_route,
 )
 from app.services.llm.itinerary_adjustment_policy import _remove_item
 from app.services.llm.prompts import compact_json
@@ -1229,6 +1230,69 @@ def test_manual_destination_name_uses_geocoded_full_address_context():
         )
         == "Камбрильс, Испания"
     )
+
+
+def test_long_external_route_falls_back_to_single_route_when_chunks_fail(monkeypatch: pytest.MonkeyPatch):
+    def place(day: int, index: int) -> dict:
+        hour = 9 + index
+        return {
+            "name": f"Cambrils POI {day}-{index}",
+            "category": "culture",
+            "lat": 41.08 + day / 1000 + index / 1000,
+            "lng": 1.03 + day / 1000 + index / 1000,
+            "address": f"Address {day}-{index}",
+            "arrival_time": f"{hour:02d}:30",
+            "departure_time": f"{hour + 1:02d}:15",
+            "visit_duration_minutes": 45,
+            "travel_from_previous_minutes": 10 if index else 0,
+            "confidence": 0.86,
+        }
+
+    fallback_payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Single route fallback",
+                "days": [
+                    {
+                        "day_number": day,
+                        "theme": "culture",
+                        "places": [place(day, index) for index in range(3)],
+                    }
+                    for day in range(1, 6)
+                ],
+            }
+        ]
+    }
+    provider = FakeProvider(responses=["{}", "{}", json.dumps(fallback_payload)])
+    request = ItineraryGenerateRequest(
+        destination_text="Камбрильс",
+        duration_days=5,
+        start_date=date(2026, 6, 10),
+        allow_external_route=True,
+        variant_count=1,
+    )
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", False)
+    monkeypatch.setattr("app.services.llm.external_route.get_provider", lambda: provider)
+    monkeypatch.setattr(
+        "app.services.llm.external_route._geocode_destination_context",
+        lambda _name: {"fullAddress": "Камбрильс, CT, Испания", "lat": 41.081038, "lng": 1.02649},
+    )
+
+    response = generate_external_route(
+        db=None,
+        user_id=TEST_USER_ID,
+        trip_id=uuid.uuid4(),
+        request=request,
+        profile={},
+        destination_info=None,
+        trigger="manual_destination",
+    )
+
+    assert response is not None
+    assert response.score_summary["external_route_single_fallback"] is True
+    assert [len(day.places) for day in response.days] == [3, 3, 3, 3, 3]
 
 
 def test_quality_removal_keeps_first_duplicate_and_avoids_sparse_days():
