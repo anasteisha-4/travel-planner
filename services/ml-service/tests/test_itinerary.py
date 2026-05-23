@@ -191,6 +191,7 @@ def test_generate_itinerary_success(client: TestClient, monkeypatch: pytest.Monk
     params = data_service_call.kwargs["params"]
     assert ("preferred_activities", "culture") in params
     assert ("variant_count", 1) in params
+    assert data_service_call.kwargs["timeout"] == settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS
 
 
 def test_itinerary_quality_review_caution_and_notes_context(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -1382,6 +1383,25 @@ def test_generate_itinerary_data_service_failure(client: TestClient, monkeypatch
 
     assert resp.status_code == 503
     assert resp.json()["error"] == "ITINERARY_UNAVAILABLE"
+
+
+def test_generate_itinerary_retries_single_variant_after_data_service_timeout(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    response = Mock()
+    response.json.return_value = _itinerary_payload()
+    response.raise_for_status.return_value = None
+    post_mock = Mock(side_effect=[httpx.ReadTimeout("timed out"), response])
+    monkeypatch.setattr("app.routers.itinerary.httpx.post", post_mock)
+
+    resp = client.post("/api/v1/itinerary", json=_payload(variant_count=3))
+
+    assert resp.status_code == 200
+    variant_counts = [
+        next(value for key, value in call.kwargs["params"] if key == "variant_count")
+        for call in post_mock.call_args_list
+    ]
+    assert variant_counts == [3, 1]
 
 
 def test_generate_itinerary_requires_internal_secret(client: TestClient, monkeypatch: pytest.MonkeyPatch):

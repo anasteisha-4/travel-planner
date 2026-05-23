@@ -79,6 +79,30 @@ def _params(request: ItineraryGenerateRequest, activities: list[str]) -> list[tu
     return params
 
 
+def _request_data_service_itinerary(
+    request: ItineraryGenerateRequest,
+    activities: list[str],
+    secret: str,
+):
+    try:
+        return httpx.post(
+            f"{settings.DATA_SERVICE_URL}/internal/itinerary",
+            params=_params(request, activities),
+            headers={"X-Internal-Secret": secret},
+            timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS,
+        )
+    except httpx.TimeoutException:
+        if request.variant_count <= 1:
+            raise
+        single_variant_request = request.model_copy(update={"variant_count": 1})
+        return httpx.post(
+            f"{settings.DATA_SERVICE_URL}/internal/itinerary",
+            params=_params(single_variant_request, activities),
+            headers={"X-Internal-Secret": secret},
+            timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS,
+        )
+
+
 def _normalize_variant(request: ItineraryGenerateRequest, payload: dict) -> ItineraryGenerateResponse:
     error = payload.get("error")
     if error:
@@ -526,12 +550,7 @@ def generate_itinerary(
         )
 
     try:
-        response = httpx.post(
-            f"{settings.DATA_SERVICE_URL}/internal/itinerary",
-            params=_params(request, activities),
-            headers={"X-Internal-Secret": secret},
-            timeout=5.0,
-        )
+        response = _request_data_service_itinerary(request, activities, secret)
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code if exc.response is not None else 0

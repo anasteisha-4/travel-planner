@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     TRIP_SERVICE_URL: str = "http://trip-service:8000"
     DATA_SERVICE_URL: str = "http://data-service:8000"
     DATA_SERVICE_SECRET: str = ""
+    DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS: float = 25.0
     INTERNAL_API_SECRET: str = ""
     ANALYTICS_SERVICE_URL: str = "http://analytics-service:8000"
     TRAVELPAYOUTS_API_TOKEN: str = ""
