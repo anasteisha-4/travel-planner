@@ -20,7 +20,7 @@ from app.schemas.llm_quality import (
     LLMReviewSeverity,
     LLMReviewStatus,
 )
-from app.services.llm.external_route import _normalize_external_variants
+from app.services.llm.external_route import _normalize_external_variants, _should_reject_unrepaired_coordinate
 from app.services.llm.prompts import compact_json
 from app.services.llm.providers import FakeProvider
 from app.services.llm.quality_gate import LLMQualityGate
@@ -1131,7 +1131,7 @@ def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytes
                                 "visit_duration_minutes": 50,
                                 "travel_from_previous_minutes": 0,
                                 "reason": "Specific but unverified.",
-                                "confidence": 0.8,
+                                "confidence": 0.6,
                             }
                             for index in range(4)
                         ],
@@ -1168,6 +1168,27 @@ def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytes
     )
 
     assert variants == []
+
+
+def test_external_route_keeps_ordinary_unrepaired_city_poi_inside_radius(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+
+    assert not _should_reject_unrepaired_coordinate(
+        raw_place={"category": "museum", "confidence": 0.72},
+        name="Museu de Cambrils",
+        lat=41.075,
+        lng=1.055,
+        destination_center=(41.074871, 1.054892),
+        radius_km=35,
+    )
+    assert _should_reject_unrepaired_coordinate(
+        raw_place={"category": "viewpoint", "confidence": 0.6},
+        name="Mirador de la Punta",
+        lat=41.075,
+        lng=1.055,
+        destination_center=(41.074871, 1.054892),
+        radius_km=35,
+    )
 
 
 def test_manual_destination_regenerate_rejects_same_external_signature(

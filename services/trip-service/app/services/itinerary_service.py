@@ -404,6 +404,13 @@ def generate_itineraries(
     created: list[models.TripItinerary] = []
     for index, variant in enumerate(variants[:effective_variant_count]):
         created.append(_persist_variant(db, user_id, trip, variant, index, seed_base + index, payload))
+    if has_approved_itinerary and created:
+        db.query(models.TripItinerary).filter(
+            models.TripItinerary.trip_id == trip_id,
+            models.TripItinerary.user_id == user_id,
+            models.TripItinerary.status == "approved",
+        ).update({"status": "archived"}, synchronize_session=False)
+        created[0].status = "approved"
     db.commit()
     for item in created:
         db.refresh(item)

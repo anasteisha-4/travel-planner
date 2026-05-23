@@ -20,6 +20,12 @@ const subscriptionToPayload = (subscription: PushSubscription): PushSubscription
   };
 };
 
+const waitForServiceWorkerRegistration = async () =>
+  Promise.race<ServiceWorkerRegistration | null>([
+    navigator.serviceWorker.ready,
+    new Promise((resolve) => window.setTimeout(() => resolve(null), 2500)),
+  ]);
+
 export const ensurePushNotifications = async () => {
   if (!('Notification' in window)) {
     return false;
@@ -38,7 +44,8 @@ export const ensurePushNotifications = async () => {
   const publicKey = await pushApi.getVapidPublicKey();
   if (!publicKey) return false;
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await waitForServiceWorkerRegistration();
+  if (!registration) return false;
   const existing = await registration.pushManager.getSubscription();
   const subscription =
     existing ??

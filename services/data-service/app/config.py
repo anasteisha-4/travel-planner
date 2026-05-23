@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     INTERNAL_API_SECRET: str
     OPENTRIPMAP_API_KEY: str = ""
     YANDEX_MAPS_API_TOKEN: str = ""
+    YANDEX_GEOCODER_API_KEY: str = ""
     YANDEX_GEOSUGGEST_API_KEY: str = ""
     GEOAPIFY_API_KEY: str = ""
 

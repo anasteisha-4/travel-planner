@@ -163,7 +163,53 @@ def generate_external_route(
     destination_center = _destination_center(destination_info) or _geocode_destination_center(destination_name)
     provider = get_provider()
 
-    if _active_day_count(effective_request) > 4:
+    result = _generate_external_route_attempt(
+        provider=provider,
+        destination_id=destination_id,
+        destination_name=destination_name,
+        destination_info=destination_info,
+        destination_center=destination_center,
+        trip_id=trip_id,
+        request=effective_request,
+        trigger=trigger,
+    )
+    if result is not None:
+        return result
+
+    if settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
+        original_repair_enabled = settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
+        try:
+            settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED = False
+            relaxed_result = _generate_external_route_attempt(
+                provider=get_provider(),
+                destination_id=destination_id,
+                destination_name=destination_name,
+                destination_info=destination_info,
+                destination_center=destination_center,
+                trip_id=trip_id,
+                request=effective_request,
+                trigger=f"{trigger}_relaxed_coordinate_repair",
+            )
+        finally:
+            settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED = original_repair_enabled
+        if relaxed_result is not None:
+            return _mark_coordinate_repair_relaxed(relaxed_result)
+
+    return None
+
+
+def _generate_external_route_attempt(
+    *,
+    provider,
+    destination_id: uuid.UUID,
+    destination_name: str,
+    destination_info: dict | None,
+    destination_center: tuple[float, float] | None,
+    trip_id: uuid.UUID | None,
+    request: ItineraryGenerateRequest,
+    trigger: str,
+) -> ItineraryGenerateResponse | None:
+    if _active_day_count(request) > 4:
         return _generate_external_route_chunks(
             provider=provider,
             destination_id=destination_id,
@@ -171,7 +217,7 @@ def generate_external_route(
             destination_info=destination_info,
             destination_center=destination_center,
             trip_id=trip_id,
-            request=effective_request,
+            request=request,
             trigger=trigger,
         )
 
@@ -182,9 +228,26 @@ def generate_external_route(
         destination_info=destination_info,
         destination_center=destination_center,
         trip_id=trip_id,
-        request=effective_request,
+        request=request,
         trigger=trigger,
     )
+
+
+def _mark_coordinate_repair_relaxed(response: ItineraryGenerateResponse) -> ItineraryGenerateResponse:
+    summary = dict(response.score_summary or {})
+    summary["external_route_coordinate_repair_relaxed"] = True
+    variants = [
+        variant.model_copy(
+            update={
+                "score_summary": {
+                    **dict(variant.score_summary or {}),
+                    "external_route_coordinate_repair_relaxed": True,
+                }
+            }
+        )
+        for variant in (response.variants or [])
+    ]
+    return response.model_copy(update={"score_summary": summary, "variants": variants or response.variants})
 
 
 def _generate_external_route_single(
@@ -614,15 +677,13 @@ def _normalize_external_places(
             repaired = None
         if repaired is not None:
             lat, lng = repaired
-        elif (
-            (
-                settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
-                and destination_center is not None
-                and _needs_coordinate_evidence(raw_place, name)
-            )
-            or destination_center is not None
-            and _haversine_km(lat, lng, destination_center[0], destination_center[1])
-            > _unverified_coordinate_radius_km(radius_km)
+        elif _should_reject_unrepaired_coordinate(
+            raw_place=raw_place,
+            name=name,
+            lat=lat,
+            lng=lng,
+            destination_center=destination_center,
+            radius_km=radius_km,
         ):
             continue
         if any(
@@ -671,14 +732,33 @@ def _normalize_external_places(
 
 
 def _needs_coordinate_evidence(raw_place: dict, name: str) -> bool:
-    confidence = _float_or_none(raw_place.get("confidence"))
     category = _normalize_name(str(raw_place.get("category") or ""))
     normalized_name = _normalize_name(name)
-    if confidence is None or confidence < 0.9:
-        return True
     if any(token in category for token in ("beach", "view", "park", "nature", "coast", "water")):
         return True
     return bool(any(token in normalized_name for token in ("beach", "playa", "platja")))
+
+
+def _should_reject_unrepaired_coordinate(
+    *,
+    raw_place: dict,
+    name: str,
+    lat: float,
+    lng: float,
+    destination_center: tuple[float, float] | None,
+    radius_km: float,
+) -> bool:
+    if destination_center is None:
+        return False
+    distance_km = _haversine_km(lat, lng, destination_center[0], destination_center[1])
+    if distance_km > radius_km:
+        return True
+    if distance_km > _unverified_coordinate_radius_km(radius_km):
+        return True
+    if not settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
+        return False
+    confidence = _float_or_none(raw_place.get("confidence"))
+    return _needs_coordinate_evidence(raw_place, name) and (confidence is None or confidence < 0.75)
 
 
 def _repair_external_travel_minutes(places: list[ItineraryPlace]) -> list[ItineraryPlace]:
@@ -994,7 +1074,7 @@ def _route_cluster_radius_km(request: ItineraryGenerateRequest) -> float:
 
 
 def _validated_min_places_per_day(pace: str | None) -> int:
-    return max(2, _min_places_per_day(pace) - 1)
+    return max(2, _min_places_per_day(pace) - 2)
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

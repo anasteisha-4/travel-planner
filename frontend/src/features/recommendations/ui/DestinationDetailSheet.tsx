@@ -414,58 +414,12 @@ const ValidationBlock = ({
 };
 
 const DestinationDetailSkeleton = () => (
-  <div className="flex flex-col gap-4">
-    <section className="flex items-start gap-4">
-      <div className="flex h-16 w-16 shrink-0 animate-pulse items-center justify-center rounded-3xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]">
-        <div className="h-7 w-9 rounded-xl bg-background/70" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-2 h-7 w-[70%] animate-pulse rounded-xl bg-[hsl(var(--surface-muted))]" />
-        <div className="h-4 w-28 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-      </div>
-    </section>
-
-    <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
-      <div className="mb-3 h-3 w-28 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-      <div className="flex flex-col gap-2.5">
-        {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="flex items-center gap-3">
-            <div className="h-4 w-28 shrink-0 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-            <div className="h-2 flex-1 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
-            <div className="h-4 w-16 animate-pulse rounded-lg bg-primary/15" />
-          </div>
-        ))}
-      </div>
-    </section>
-
-    <section className="rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 animate-pulse items-center justify-center rounded-2xl bg-primary/10">
-            <CheckCircle2 className="h-4 w-4 text-primary/30" />
-          </div>
-          <div>
-            <div className="mb-2 h-3 w-32 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-            <div className="h-4 w-40 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-          </div>
-        </div>
-        <div className="h-8 w-24 animate-pulse rounded-full bg-primary/10" />
-      </div>
-      <div className="flex flex-col gap-2">
-        {[0, 1, 2].map((item) => (
-          <div
-            key={item}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-[hsl(var(--surface-border))] bg-background/55 px-3 py-3"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="mb-2 h-3 w-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-              <div className="h-4 w-[78%] animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-            </div>
-            <div className="h-7 w-20 shrink-0 animate-pulse rounded-full bg-[hsl(var(--surface-muted))]" />
-          </div>
-        ))}
-      </div>
-    </section>
+  <div className="flex h-[355.88px] flex-col items-stretch gap-0.5">
+    <div className="h-full animate-pulse rounded-t-[24px] bg-[hsl(var(--surface-muted))]" />
+    {[0, 1, 2, 3].map((key) => (
+      <div key={key} className="h-full animate-pulse bg-[hsl(var(--surface-muted))]" />
+    ))}
+    <div className="h-full animate-pulse rounded-b-[24px] bg-[hsl(var(--surface-muted))]" />
   </div>
 );
 

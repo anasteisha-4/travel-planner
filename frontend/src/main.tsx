@@ -5,21 +5,32 @@ import { App } from './app/App';
 import './app/styles/index.css';
 import { initFrontendObservability, sendEvent } from './shared/api/analytics';
 
-initFrontendObservability();
+const redirectToCanonicalHost = () => {
+  if (window.location.hostname !== 'triply-ai.ru') return false;
 
-registerSW({
-  immediate: true,
-  onRegisterError(error) {
-    sendEvent('service_worker_error', {
-      reason_code: 'registration_failed',
-      error_name: error instanceof Error ? error.name : 'unknown',
-      error_message: error instanceof Error ? error.message : undefined,
-    });
-  },
-});
+  window.location.replace(
+    `https://www.triply-ai.ru${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
+  return true;
+};
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+if (!redirectToCanonicalHost()) {
+  initFrontendObservability();
+
+  registerSW({
+    immediate: true,
+    onRegisterError(error) {
+      sendEvent('service_worker_error', {
+        reason_code: 'registration_failed',
+        error_name: error instanceof Error ? error.name : 'unknown',
+        error_message: error instanceof Error ? error.message : undefined,
+      });
+    },
+  });
+
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+}

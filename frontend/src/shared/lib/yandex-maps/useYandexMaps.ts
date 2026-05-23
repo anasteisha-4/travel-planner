@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { YMaps3 } from './types'
 
 const SCRIPT_ID = 'yandex-maps-v3-script'
+const SCRIPT_VERSION = '20260523-ymaps-fallback-semicolon'
 
 let loadPromise: Promise<void> | null = null
 
@@ -17,7 +18,7 @@ const loadYandexMaps = (): Promise<void> => {
 
     const script = document.createElement('script')
     script.id = SCRIPT_ID
-    script.src = '/api/maps/yandex/v3?lang=ru_RU'
+    script.src = `/api/maps/yandex/v3?lang=ru_RU&v=${SCRIPT_VERSION}`
     script.async = true
     script.onload = () => {
       window.ymaps3.ready.then(resolve).catch(reject)

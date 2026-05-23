@@ -1386,11 +1386,6 @@ export const TripItineraryTab = () => {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } })
   );
-  const generationError = generationJob?.status === 'failed'
-    ? itineraryErrorMessage({ response: { data: { error: generationJob.error_code, message: generationJob.error_message } } })
-    : generateMutation.isError || regenerateMutation.isError
-      ? itineraryErrorMessage(generateMutation.error ?? regenerateMutation.error)
-      : null;
   const isGenerationActive = generationJob?.status === 'queued' || generationJob?.status === 'running';
   const generationMode = isGenerationActive
     ? generationJob.mode === 'regenerate'
@@ -1401,6 +1396,13 @@ export const TripItineraryTab = () => {
     : regenerateMutation.isPending
       ? 'regenerate'
       : null;
+  const generationError = generationMode
+    ? null
+    : generationJob?.status === 'failed'
+      ? itineraryErrorMessage({ response: { data: { error: generationJob.error_code, message: generationJob.error_message } } })
+      : generateMutation.isError || regenerateMutation.isError
+        ? itineraryErrorMessage(generateMutation.error ?? regenerateMutation.error)
+        : null;
   const isBusy =
     isGenerationActive ||
     generateMutation.isPending ||
@@ -1439,8 +1441,8 @@ export const TripItineraryTab = () => {
     );
   }, [current, durationDays, trip.destination_id, trip.id]);
 
-  const handleGenerate = async () => {
-    await ensurePushNotifications().catch(() => false);
+  const handleGenerate = () => {
+    void ensurePushNotifications().catch(() => false);
     const variantCount = trip.destination_id ? 3 : 1;
     generateMutation.mutate(
       { variant_count: variantCount, pace: 'standard', allow_external_route: true },
@@ -1463,8 +1465,8 @@ export const TripItineraryTab = () => {
     );
   };
 
-  const handleRegenerate = async () => {
-    await ensurePushNotifications().catch(() => false);
+  const handleRegenerate = () => {
+    void ensurePushNotifications().catch(() => false);
     const variantCount = approved || !trip.destination_id ? 1 : 3;
     regenerateMutation.mutate(
       {

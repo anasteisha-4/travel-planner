@@ -30,7 +30,7 @@ cp .env.docker.example .env.docker
 
 > [!IMPORTANT]
 > В `.env.docker` хосты БД и Redis указывайте как имена сервисов Docker (`postgres`, `redis`), а не `localhost`.
-> Для карт и геокодинга используйте только серверные `YANDEX_MAPS_API_TOKEN`, `YANDEX_GEOSUGGEST_API_KEY` и `GEOAPIFY_API_KEY`; не добавляйте их в `VITE_*`.
+> Для карт и геокодинга используйте только серверные `YANDEX_MAPS_API_TOKEN`, `YANDEX_GEOCODER_API_KEY`, `YANDEX_GEOSUGGEST_API_KEY` и `GEOAPIFY_API_KEY`; не добавляйте их в `VITE_*`.
 > Для валют: `FXR_API_KEY` (fxratesapi.com).
 
 ### 2. Запуск (Docker Compose)

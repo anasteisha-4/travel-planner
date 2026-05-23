@@ -4,7 +4,7 @@ import hashlib
 import math
 import random
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -165,13 +165,21 @@ def generate_itinerary(
     }
 
 
-def visit_datetime(start_date: datetime | None, day_idx: int) -> datetime:
-    visit_dt = (start_date + timedelta(days=day_idx)) if start_date else datetime.now()
+def _as_datetime(value: date | datetime | None) -> datetime:
+    if value is None:
+        return datetime.now()
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.min)
+
+
+def visit_datetime(start_date: date | datetime | None, day_idx: int) -> datetime:
+    visit_dt = _as_datetime(start_date) + timedelta(days=day_idx)
     return visit_dt.replace(hour=12, minute=0, second=0)
 
 
-def visit_datetime_at(start_date: datetime | None, day_idx: int, current_time: time) -> datetime:
-    visit_dt = (start_date + timedelta(days=day_idx)) if start_date else datetime.now()
+def visit_datetime_at(start_date: date | datetime | None, day_idx: int, current_time: time) -> datetime:
+    visit_dt = _as_datetime(start_date) + timedelta(days=day_idx)
     return visit_dt.replace(hour=current_time.hour, minute=current_time.minute, second=0, microsecond=0)
 
 

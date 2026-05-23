@@ -8,9 +8,10 @@ from app.config import settings
 
 router = APIRouter(prefix="/geocode", tags=["geocode"])
 
-YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x"
+YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/v1"
 YANDEX_GEOSUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest"
 GEOAPIFY_URL = "https://api.geoapify.com/v1/geocode"
+YANDEX_PROXY_REFERER = "https://www.triply-ai.ru/"
 YANDEX_EXCLUDED_KINDS = {"street", "district"}
 GEOSUGGEST_EXCLUDED_TAGS = {"street", "district", "province", "country", "other"}
 GEOAPIFY_EXCLUDED_TYPES = {"street", "suburb", "district", "county", "state"}
@@ -22,6 +23,7 @@ async def _proxy_json_request(
     api_key_name: str,
     legacy_api_key_name: str,
     api_key_param: str,
+    upstream_headers: dict[str, str] | None = None,
 ) -> Response:
     api_key = _env_value(api_key_name, legacy_api_key_name)
     if not api_key:
@@ -29,7 +31,7 @@ async def _proxy_json_request(
     params = dict(request.query_params)
     params[api_key_param] = api_key
     async with httpx.AsyncClient(timeout=7.0) as client:
-        upstream = await client.get(url, params=params)
+        upstream = await client.get(url, params=params, headers=upstream_headers)
     return Response(
         content=upstream.content,
         status_code=upstream.status_code,
@@ -40,6 +42,21 @@ async def _proxy_json_request(
 def _env_value(name: str, legacy_name: str) -> str:
     value = getattr(settings, name, "") or os.getenv(name, "")
     return value or os.getenv(legacy_name, "")
+
+
+def _yandex_geocoder_api_key() -> str:
+    return (
+        _env_value("YANDEX_GEOCODER_API_KEY", "YANDEX_MAPS_API_TOKEN")
+        or os.getenv("VITE_YANDEX_GEOCODER_API_KEY", "")
+        or os.getenv("VITE_YANDEX_MAPS_API_TOKEN", "")
+    )
+
+
+def _yandex_referer_headers() -> dict[str, str]:
+    return {
+        "Referer": YANDEX_PROXY_REFERER,
+        "Origin": YANDEX_PROXY_REFERER.rstrip("/"),
+    }
 
 
 def _is_russia_or_cis(lon: float, lat: float) -> bool:
@@ -79,7 +96,7 @@ def _parse_geoapify(feature: dict[str, Any]) -> dict[str, float | str] | None:
 async def _search_yandex(
     query: str, results: int, lon: float | None, lat: float | None
 ) -> list[dict[str, float | str]]:
-    api_key = _env_value("YANDEX_MAPS_API_TOKEN", "VITE_YANDEX_MAPS_API_TOKEN")
+    api_key = _yandex_geocoder_api_key()
     if not api_key:
         return []
     params = {
@@ -93,7 +110,7 @@ async def _search_yandex(
         params["ll"] = f"{lon},{lat}"
         params["spn"] = "5,5"
     async with httpx.AsyncClient(timeout=5.0) as client:
-        response = await client.get(YANDEX_GEOCODER_URL, params=params)
+        response = await client.get(YANDEX_GEOCODER_URL, params=params, headers=_yandex_referer_headers())
     if not response.is_success:
         return []
     data = response.json()
@@ -128,7 +145,7 @@ async def _search_yandex_geosuggest(
         params["ll"] = f"{lon},{lat}"
         params["spn"] = "5,5"
     async with httpx.AsyncClient(timeout=5.0) as client:
-        response = await client.get(YANDEX_GEOSUGGEST_URL, params=params)
+        response = await client.get(YANDEX_GEOSUGGEST_URL, params=params, headers=_yandex_referer_headers())
     if not response.is_success:
         return []
     items = [
@@ -230,7 +247,7 @@ async def reverse_geocode(
     lon: float = Query(..., ge=-180, le=180),
 ) -> dict[str, str | None]:
     if _is_russia_or_cis(lon, lat):
-        return {"name": await _reverse_yandex(lat, lon)}
+        return {"name": await _reverse_yandex(lat, lon) or await _reverse_geoapify(lat, lon)}
     return {"name": await _reverse_geoapify(lat, lon) or await _reverse_yandex(lat, lon)}
 
 
@@ -239,9 +256,10 @@ async def proxy_yandex_geocoder(request: Request) -> Response:
     return await _proxy_json_request(
         YANDEX_GEOCODER_URL,
         request,
+        "YANDEX_GEOCODER_API_KEY",
         "YANDEX_MAPS_API_TOKEN",
-        "VITE_YANDEX_MAPS_API_TOKEN",
         "apikey",
+        _yandex_referer_headers(),
     )
 
 
@@ -253,6 +271,7 @@ async def proxy_yandex_geosuggest(request: Request) -> Response:
         "YANDEX_GEOSUGGEST_API_KEY",
         "VITE_YANDEX_GEOSUGGEST_API_KEY",
         "apikey",
+        _yandex_referer_headers(),
     )
 
 

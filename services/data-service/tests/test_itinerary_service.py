@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 
 from app.services.itinerary_service import (
@@ -10,6 +10,7 @@ from app.services.itinerary_service import (
     dedupe_poi_ids,
     rest_day_numbers,
     select_best_template,
+    visit_datetime,
 )
 
 
@@ -48,6 +49,10 @@ def _poi(
 
 def test_dedupe_poi_ids_skips_existing_and_day_duplicates():
     assert dedupe_poi_ids(["a", "b", "a", "c"], {"b"}) == ["a", "c"]
+
+
+def test_visit_datetime_accepts_date_from_api_query_params():
+    assert visit_datetime(date(2026, 5, 22), 1) == datetime(2026, 5, 23, 12, 0)
 
 
 def test_rest_day_numbers_are_evenly_distributed_and_exact():

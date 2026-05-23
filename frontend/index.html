@@ -24,6 +24,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      if (window.location.hostname === 'triply-ai.ru') {
+        window.location.replace(
+          'https://www.triply-ai.ru' + window.location.pathname + window.location.search + window.location.hash
+        );
+      }
+    </script>
     <script src="/env.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

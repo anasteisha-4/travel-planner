@@ -1,0 +1,93 @@
+{
+  "updated_at": "2026-05-23",
+  "blocked_countries_by_citizenship": {
+    "CIS": ["AE", "BH", "IL", "IR", "KW", "OM", "QA", "SA"],
+    "RU": ["AE", "BH", "IL", "IR", "KW", "MD", "OM", "QA", "SA"]
+  },
+  "blocked_domestic_names_by_citizenship": {
+    "RU": [
+      "bryansk",
+      "брянск",
+      "belgorod",
+      "белгород",
+      "kursk",
+      "курск",
+      "voronezh",
+      "воронеж",
+      "rostov-on-don",
+      "rostov on don",
+      "ростов-на-дону",
+      "ростов на дону",
+      "krasnodar",
+      "краснодар",
+      "sevastopol",
+      "севастополь",
+      "crimea",
+      "крым"
+    ]
+  },
+  "source_urls": {
+    "blocked_countries_by_citizenship": {
+      "CIS": {
+        "AE": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "BH": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "KW": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "QA": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "OM": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "SA": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "IR": [
+          "https://www.consultant.ru/law/hotdocs/92450.html"
+        ],
+        "IL": [
+          "https://www.interfax.ru/world/1075389"
+        ]
+      },
+      "RU": {
+        "AE": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "BH": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "KW": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "MD": [
+          "https://www.interfax.ru/russia/1067995"
+        ],
+        "OM": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "QA": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "SA": [
+          "https://www.mid.ru/upload/medialibrary/7bf/388c83za0jc0nths4on5fvovvbzs3y3r/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D0%BE%D0%BD%D0%BD%D1%8B%D0%B9%20%D0%B1%D1%8E%D0%BB%D0%BB%D0%B5%D1%82%D0%B5%D0%BD%D1%8C%202%E2%80%939%20%D0%BC%D0%B0%D1%80%D1%82%D0%B0%202026%20%D0%B3%D0%BE%D0%B4%D0%B0.pdf"
+        ],
+        "IR": [
+          "https://www.consultant.ru/law/hotdocs/92450.html"
+        ],
+        "IL": [
+          "https://www.interfax.ru/world/1075389"
+        ]
+      }
+    },
+    "blocked_domestic_names_by_citizenship": {
+      "RU": [
+        "https://rg.ru/documents/2022/10/19/prezident-ukaz757-site-dok.html"
+      ]
+    }
+  }
+}

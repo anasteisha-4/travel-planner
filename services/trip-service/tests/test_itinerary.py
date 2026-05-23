@@ -241,7 +241,7 @@ def test_generate_and_approve_itinerary(client, auth_headers, trip_data, monkeyp
     assert state.json()["approved"]["id"] == itinerary["id"]
 
 
-def test_regenerate_approved_catalog_trip_requests_one_variant_and_keeps_approved_route(
+def test_regenerate_approved_catalog_trip_requests_one_variant_and_replaces_approved_route(
     client, auth_headers, trip_data, monkeypatch
 ):
     trip_id = _create_trip(client, auth_headers, trip_data)
@@ -280,8 +280,9 @@ def test_regenerate_approved_catalog_trip_requests_one_variant_and_keeps_approve
     assert regenerate_payload["exclude_signature"] == "sig-a"
     state = client.get(f"/api/trips/{trip_id}/itinerary", headers=auth_headers)
     assert state.status_code == 200
-    assert state.json()["approved"]["id"] == approved_id
-    assert state.json()["drafts"][0]["route_signature"] == "sig-b"
+    assert state.json()["approved"]["id"] != approved_id
+    assert state.json()["approved"]["route_signature"] == "sig-b"
+    assert state.json()["drafts"] == []
 
 
 def test_generate_rejects_variants_with_empty_active_days(client, auth_headers, trip_data, monkeypatch):
