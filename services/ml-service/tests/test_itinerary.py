@@ -1175,6 +1175,7 @@ def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytes
             allow_external_route=True,
         ),
         trigger="manual_destination",
+        coordinate_repair_enabled=True,
     )
 
     assert variants == []
@@ -1190,6 +1191,14 @@ def test_external_route_keeps_ordinary_unrepaired_city_poi_inside_radius(monkeyp
         lng=1.055,
         destination_center=(41.074871, 1.054892),
         radius_km=35,
+    )
+    assert not _should_reject_unrepaired_coordinate(
+        raw_place={"category": "culture", "confidence": 0.7},
+        name="Torre Vella de Salou",
+        lat=41.077,
+        lng=1.132,
+        destination_center=(41.074871, 1.054892),
+        radius_km=12,
     )
     assert _should_reject_unrepaired_coordinate(
         raw_place={"category": "viewpoint", "confidence": 0.6},

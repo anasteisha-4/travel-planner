@@ -879,14 +879,14 @@ def _should_reject_unrepaired_coordinate(
     distance_km = _haversine_km(lat, lng, destination_center[0], destination_center[1])
     if distance_km > radius_km:
         return True
-    if distance_km > _unverified_coordinate_radius_km(radius_km):
-        return True
     if coordinate_repair_enabled is None:
         coordinate_repair_enabled = settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED
     if not coordinate_repair_enabled:
         return False
     confidence = _float_or_none(raw_place.get("confidence"))
-    return _needs_coordinate_evidence(raw_place, name) and (confidence is None or confidence < 0.75)
+    if _needs_coordinate_evidence(raw_place, name) and (confidence is None or confidence < 0.75):
+        return True
+    return confidence is not None and confidence < 0.45 and distance_km > _unverified_coordinate_radius_km(radius_km)
 
 
 def _repair_external_travel_minutes(places: list[ItineraryPlace]) -> list[ItineraryPlace]:
