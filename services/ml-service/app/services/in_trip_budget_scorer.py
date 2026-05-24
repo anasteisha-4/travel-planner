@@ -1,13 +1,15 @@
-"""In-trip budget monitoring with ML residual fallback.
+"""In-trip budget monitoring.
 
-The endpoint uses deterministic decomposition as a baseline and optionally
-adds residual LightGBM quantile models trained from synthetic checkpoint rows.
+The endpoint starts from the pre-trip prediction, then switches to a transparent
+tempo baseline once the user records actual expenses. Planning and one-time
+expenses are locked as paid amounts; other expenses are projected with a
+trimmed mean over the full trip duration. A bounded ML residual can calibrate
+the tempo baseline when an active in-trip model is available.
 """
 
 import io
 import logging
 import math
-import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -22,12 +24,6 @@ from app.services.currency import SUPPORTED_CURRENCY_RATES, normalize_currency
 
 logger = logging.getLogger(__name__)
 
-FIXED_KEYWORDS = re.compile(
-    r"\b(flight|airfare|airline|avia|plane|train|rail|ferry|ticket|booking|reservation|hotel|visa|insurance)\b"
-    r"|авиа|самолет|самол[её]т|перел[её]т|рейс|поезд|жд|билет\w*|брон\w*|отель|гостиниц\w*|виза|страхов\w*",
-    re.IGNORECASE,
-)
-
 # Baseline constants are used only when a pre-trip prediction or enough real
 # expenses are missing. They encode conservative UX assumptions rather than
 # learned parameters; the active LightGBM model then predicts residuals.
@@ -37,9 +33,6 @@ FALLBACK_DAILY_BY_TIER_USD = {
     "mid": 125.0,
     "luxury": 260.0,
 }
-DESTINATION_TRANSPORT_PRETRIP_SHARE = 0.35
-DESTINATION_TRANSPORT_TOTAL_SHARE = 0.12
-DESTINATION_TRANSPORT_ABSOLUTE_FLOOR_USD = 120.0
 FALLBACK_BREAKDOWN_SHARES = {
     "accommodation": 0.35,
     "meals": 0.30,
@@ -47,14 +40,15 @@ FALLBACK_BREAKDOWN_SHARES = {
     "activities": 0.10,
     "travel_to_destination": 0.10,
 }
-OBSERVED_TEMPO_MAX_WEIGHT = 0.65
-ACTIVITY_REMAINING_PLAN_SHARE = 0.65
 SHOPPING_REMAINING_TOTAL_SHARE = 0.03
 OTHER_REMAINING_TOTAL_SHARE = 0.025
 UNCERTAINTY_BASE = 0.18
 UNCERTAINTY_REMAINING_DAYS_WEIGHT = 0.22
 UNCERTAINTY_NO_PRICE_EVIDENCE_ADDON = 0.10
-ANCHOR_BLEND_MAX_WEIGHT = 1.0
+TRIMMED_MEAN_MIN_SAMPLES = 5
+TRIMMED_MEAN_FRACTION = 0.20
+ML_RESIDUAL_MAX_RELATIVE = 0.20
+ML_RESIDUAL_ABSOLUTE_FLOOR_USD = 100.0
 
 FEATURE_NAMES = [
     "duration_days",
@@ -139,18 +133,10 @@ def classify_expense(
     end: date,
     is_one_time: bool = False,
 ) -> str:
-    normalized = category.lower()
-    text = f"{category} {description or ''}"
     if expense_date is not None and (expense_date < start or expense_date > end):
         return "planning_once"
-    if is_one_time or FIXED_KEYWORDS.search(text):
+    if is_one_time:
         return "fixed_once"
-    if normalized == "housing":
-        return "fixed_once"
-    if normalized in {"food", "transport", "other"}:
-        return "recurring_daily"
-    if normalized in {"entertainment", "shopping"}:
-        return "optional_activity"
     return "recurring_daily"
 
 
@@ -184,17 +170,43 @@ def _is_destination_transport_paid(
 ) -> bool:
     if expense.category.lower() != "transport":
         return False
-    text = f"{expense.category} {expense.description or ''}"
-    large_transport_threshold = max(
-        pretrip_travel_usd * DESTINATION_TRANSPORT_PRETRIP_SHARE,
-        pretrip_total_mid * DESTINATION_TRANSPORT_TOTAL_SHARE,
-        DESTINATION_TRANSPORT_ABSOLUTE_FLOOR_USD,
-    )
-    return (
-        expense.kind in {"planning_once", "fixed_once"}
-        or bool(FIXED_KEYWORDS.search(text))
-        or expense.amount_usd >= large_transport_threshold
-    )
+    return expense.kind in {"planning_once", "fixed_once"}
+
+
+def _trimmed_mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) < TRIMMED_MEAN_MIN_SAMPLES:
+        sample = ordered
+    else:
+        trim_count = int(len(ordered) * TRIMMED_MEAN_FRACTION)
+        if trim_count == 0 and len(ordered) >= TRIMMED_MEAN_MIN_SAMPLES:
+            trim_count = 1
+        sample = ordered[trim_count : len(ordered) - trim_count] if trim_count else ordered
+        if not sample:
+            sample = ordered
+    return sum(sample) / len(sample)
+
+
+def _pretrip_category_total_usd(category: str, pretrip_breakdown: dict[str, float]) -> float:
+    normalized = category.lower()
+    if normalized == "housing":
+        return pretrip_breakdown.get("housing", 0.0)
+    if normalized == "food":
+        return pretrip_breakdown.get("food", 0.0)
+    if normalized == "transport":
+        return pretrip_breakdown.get("transport", 0.0) + pretrip_breakdown.get("travel_to_destination", 0.0)
+    if normalized == "entertainment":
+        return pretrip_breakdown.get("entertainment", 0.0)
+    if normalized in {"shopping", "other"}:
+        return pretrip_breakdown.get(normalized, 0.0)
+    return 0.0
+
+
+def _clamp_ml_residual(residual: float, baseline_remaining: float) -> float:
+    limit = max(baseline_remaining * ML_RESIDUAL_MAX_RELATIVE, ML_RESIDUAL_ABSOLUTE_FLOOR_USD)
+    return min(max(residual, -limit), limit)
 
 
 def _breakdown_usd(request: BudgetMonitorRequest, key: str) -> float:
@@ -403,52 +415,52 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
             feature_vector=feature_vector,
         )
 
-    observed_weight = min(OBSERVED_TEMPO_MAX_WEIGHT, elapsed / max(duration, 1))
-    blended_daily = observed_daily_recurring * observed_weight + daily_recurring_expected * (1 - observed_weight)
-    recurring_total_expected = max(recurring_expected_components, 1.0)
-    food_share = pretrip_meals / recurring_total_expected
-    transport_share = pretrip_transport / recurring_total_expected
-    activities_share = pretrip_activities / recurring_total_expected
-    blended_recurring_remaining = max(0.0, blended_daily * remaining)
-
-    remaining_progress_ratio = remaining / max(duration, 1)
-    housing_spent = category_spent.get("housing", 0.0)
-    accommodation_remaining = max(0.0, pretrip_accommodation - housing_spent) * remaining_progress_ratio
-    travel_remaining = max(0.0, pretrip_travel - destination_transport_paid) * remaining_progress_ratio
-    activity_remaining = max(
-        itinerary_fee_remaining,
-        (pretrip_activities / max(duration, 1)) * remaining * ACTIVITY_REMAINING_PLAN_SHARE,
-    )
-
-    category_remaining = {
-        "housing": accommodation_remaining,
-        "transport": max(0.0, travel_remaining + blended_recurring_remaining * transport_share),
-        "food": max(0.0, blended_recurring_remaining * food_share),
-        "entertainment": max(activity_remaining, blended_recurring_remaining * activities_share),
-        "shopping": max(0.0, pretrip_total_mid * SHOPPING_REMAINING_TOTAL_SHARE * (remaining / max(duration, 1))),
-        "other": max(0.0, pretrip_total_mid * OTHER_REMAINING_TOTAL_SHARE * (remaining / max(duration, 1))),
+    pretrip_breakdown = {
+        "housing": pretrip_accommodation,
+        "food": pretrip_meals,
+        "transport": pretrip_transport,
+        "entertainment": pretrip_activities,
+        "travel_to_destination": pretrip_travel,
+        "shopping": pretrip_total_mid * SHOPPING_REMAINING_TOTAL_SHARE,
+        "other": pretrip_total_mid * OTHER_REMAINING_TOTAL_SHARE,
     }
-    remaining_mid = sum(category_remaining.values())
-    remaining_mid = max(0.0, remaining_mid)
+    remaining_progress_ratio = remaining / max(duration, 1)
 
-    anchor_blend_weight = 1.0
-    if request.pre_trip_prediction is not None and current_spent > 0:
-        category_projected_mid = current_spent + remaining_mid
-        anchor_projected_mid = max(current_spent, pretrip_total_mid)
-        anchor_blend_weight = min(
-            ANCHOR_BLEND_MAX_WEIGHT,
-            max(0.0, (elapsed - 1) / max(duration - 1, 1)),
+    recurring_amounts_by_category: dict[str, list[float]] = {}
+    for expense in expenses:
+        if expense.kind in {"planning_once", "fixed_once"}:
+            continue
+        recurring_amounts_by_category.setdefault(expense.category, []).append(expense.amount_usd)
+
+    projected_recurring_total_by_category: dict[str, float] = {}
+    trimmed_mean_by_category: dict[str, float] = {}
+    for category, amounts in recurring_amounts_by_category.items():
+        trimmed_mean = _trimmed_mean(amounts)
+        trimmed_mean_by_category[category] = trimmed_mean
+        projected_recurring_total_by_category[category] = max(
+            category_spent.get(category, 0.0),
+            trimmed_mean * duration,
         )
-        stable_projected_mid = (
-            anchor_projected_mid * (1 - anchor_blend_weight) + category_projected_mid * anchor_blend_weight
-        )
-        stable_remaining_mid = max(0.0, stable_projected_mid - current_spent)
-        if remaining_mid > 0 and stable_remaining_mid < remaining_mid:
-            scale = stable_remaining_mid / remaining_mid
-            category_remaining = {category: amount * scale for category, amount in category_remaining.items()}
-        elif stable_remaining_mid > remaining_mid:
-            category_remaining["other"] = category_remaining.get("other", 0.0) + (stable_remaining_mid - remaining_mid)
-        remaining_mid = stable_remaining_mid
+
+    category_remaining: dict[str, float] = {}
+    projection_categories = set(pretrip_breakdown) | set(category_spent) | set(recurring_amounts_by_category)
+    for category in projection_categories:
+        spent = category_spent.get(category, 0.0)
+        if category in projected_recurring_total_by_category:
+            projected_total = projected_recurring_total_by_category[category]
+            category_remaining[category] = max(0.0, projected_total - spent)
+            category_kind[category] = "recurring_daily"
+            continue
+
+        planned_total = _pretrip_category_total_usd(category, pretrip_breakdown)
+        planned_remaining = max(0.0, planned_total - spent) * remaining_progress_ratio
+        category_remaining[category] = planned_remaining
+
+    if "entertainment" not in recurring_amounts_by_category:
+        category_remaining["entertainment"] = max(category_remaining.get("entertainment", 0.0), itinerary_fee_remaining)
+
+    remaining_mid = max(0.0, sum(category_remaining.values()))
+    projected_final_mid = current_spent + remaining_mid
 
     uncertainty = (
         UNCERTAINTY_BASE
@@ -477,8 +489,17 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
         "itinerary_candidate_poi_price_count": itinerary.candidate_poi_price_count if itinerary else 0,
         "itinerary_price_estimation_used": itinerary.price_estimation_used if itinerary else False,
         "destination_transport_paid_usd": round(destination_transport_paid, 2),
-        "ml_residual_allowed": elapsed >= 2 and recurring_spent > 0,
-        "pretrip_anchor_blend_weight": round(anchor_blend_weight, 4),
+        "recurring_projection_method": "trimmed_mean_per_expense_times_trip_duration",
+        "recurring_trim_fraction": TRIMMED_MEAN_FRACTION,
+        "recurring_trimmed_mean_by_category_usd": {
+            category: round(value, 2) for category, value in sorted(trimmed_mean_by_category.items())
+        },
+        "recurring_projected_total_by_category_usd": {
+            category: round(value, 2) for category, value in sorted(projected_recurring_total_by_category.items())
+        },
+        "projected_final_mid_usd_formula": round(projected_final_mid, 2),
+        "ml_residual_allowed": recurring_spent > 0,
+        "ml_residual_role": "bounded_calibration_of_trimmed_mean_tempo",
     }
 
     feature_vector = _feature_vector(
@@ -544,6 +565,9 @@ class InTripBudgetScorer:
         except Exception as exc:
             logger.warning("Failed to run in-trip budget model: %s", exc)
             return None
+        residual_p10 = _clamp_ml_residual(residual_p10, baseline.remaining_mid_usd)
+        residual_p50 = _clamp_ml_residual(residual_p50, baseline.remaining_mid_usd)
+        residual_p90 = _clamp_ml_residual(residual_p90, baseline.remaining_mid_usd)
         p10 = max(0.0, baseline.remaining_mid_usd + residual_p10)
         p50 = max(0.0, baseline.remaining_mid_usd + residual_p50)
         p90 = max(0.0, baseline.remaining_mid_usd + residual_p90)

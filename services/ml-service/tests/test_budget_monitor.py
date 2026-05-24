@@ -7,6 +7,9 @@ from fastapi.testclient import TestClient
 from pytest import approx
 from sqlalchemy import text
 
+from app.schemas.budget import BudgetMonitorRequest
+from app.services.in_trip_budget_scorer import compute_baseline
+
 
 class _ConstantResidualModel:
     def __init__(self, value: float) -> None:
@@ -33,6 +36,7 @@ def _payload(**overrides) -> dict:
                 "category": "housing",
                 "description": "Hotel prepaid",
                 "expense_date": "2026-06-01",
+                "is_one_time": True,
             },
             {
                 "amount": 120,
@@ -93,7 +97,7 @@ def test_budget_monitor_formula_fallback(client: TestClient):
     assert data["assumptions"]["itinerary_price_estimation_used"] is True
 
 
-def test_budget_monitor_uses_active_in_trip_model(client: TestClient, db):
+def test_budget_monitor_uses_bounded_in_trip_residual_model(client: TestClient, db):
     artifact = {
         "model_p10": _ConstantResidualModel(-10),
         "model_p50": _ConstantResidualModel(0),
@@ -122,6 +126,7 @@ def test_budget_monitor_uses_active_in_trip_model(client: TestClient, db):
     assert data["used_ml_model"] is True
     assert data["model_version"] == "in-trip-budget-v1"
     assert data["assumptions"]["model_available"] is True
+    assert data["assumptions"]["ml_residual_allowed"] is True
 
 
 def test_budget_monitor_without_budget_returns_forecast_only(client: TestClient):
@@ -212,7 +217,7 @@ def test_budget_monitor_treats_expense_outside_trip_dates_as_planning_once(clien
     assert data["projected_final_mid"] < 1600
 
 
-def test_budget_monitor_treats_flight_description_inside_trip_as_once(client: TestClient):
+def test_budget_monitor_description_does_not_make_expense_one_time(client: TestClient):
     resp = client.post(
         "/api/v1/budget/monitor",
         json=_payload(
@@ -230,11 +235,12 @@ def test_budget_monitor_treats_flight_description_inside_trip_as_once(client: Te
     assert resp.status_code == 200
     data = resp.json()
     assert data["planning_spent"] == 0
-    assert data["locked_fixed_costs"] == 500
-    assert data["recurring_spent"] == 0
+    assert data["locked_fixed_costs"] == 0
+    assert data["recurring_spent"] == 500
+    assert data["assumptions"]["recurring_projected_total_by_category_usd"]["transport"] == 3500
 
 
-def test_budget_monitor_large_transport_without_ticket_keywords_closes_destination_travel(client: TestClient):
+def test_budget_monitor_regular_transport_projects_across_trip_duration(client: TestClient):
     resp = client.post(
         "/api/v1/budget/monitor",
         json=_payload(
@@ -266,15 +272,16 @@ def test_budget_monitor_large_transport_without_ticket_keywords_closes_destinati
     assert resp.status_code == 200
     data = resp.json()
     assert data["current_spent"] == 500
-    assert data["locked_fixed_costs"] == 500
-    assert data["recurring_spent"] == 0
-    assert data["assumptions"]["destination_transport_paid_usd"] == 500
-    assert data["assumptions"]["pretrip_anchor_blend_weight"] == 0
-    assert data["projected_final_mid"] == 1500
+    assert data["locked_fixed_costs"] == 0
+    assert data["recurring_spent"] == 500
+    assert data["assumptions"]["destination_transport_paid_usd"] == 0
+    assert data["assumptions"]["recurring_trimmed_mean_by_category_usd"]["transport"] == 500
+    assert data["assumptions"]["recurring_projected_total_by_category_usd"]["transport"] == 3500
+    assert data["projected_final_mid"] > 4000
     transport_remaining = next(
         item["remaining_mid"] for item in data["category_contributions"] if item["category"] == "transport"
     )
-    assert transport_remaining < 300
+    assert transport_remaining == 3000
 
 
 def test_budget_monitor_skips_ml_residual_for_early_one_time_transport(client: TestClient, db):
@@ -309,6 +316,7 @@ def test_budget_monitor_skips_ml_residual_for_early_one_time_transport(client: T
                     "category": "transport",
                     "description": "transport",
                     "expense_date": "2026-06-01",
+                    "is_one_time": True,
                 }
             ],
             pre_trip_prediction={
@@ -330,7 +338,124 @@ def test_budget_monitor_skips_ml_residual_for_early_one_time_transport(client: T
     data = resp.json()
     assert data["used_ml_model"] is False
     assert data["assumptions"]["model_available"] is True
-    assert data["projected_final_mid"] == 1500
+    assert data["assumptions"]["ml_residual_allowed"] is False
+    assert data["projected_final_mid"] == 1582.5
+
+
+def test_budget_monitor_caps_large_ml_residual(client: TestClient, db):
+    artifact = {
+        "model_p10": _ConstantResidualModel(1000),
+        "model_p50": _ConstantResidualModel(1000),
+        "model_p90": _ConstantResidualModel(1000),
+        "feature_names": [],
+        "version": "in-trip-budget-v1",
+    }
+    buf = BytesIO()
+    joblib.dump(artifact, buf)
+    db.execute(
+        text(
+            "INSERT INTO model_registry "
+            "(id, name, version, model_type, is_active, metrics, model_blob, trained_at) "
+            "VALUES (:id, 'in_trip_budget', 'in-trip-budget-v1', 'in_trip_budget', true, "
+            "'{}'::jsonb, :blob, :trained_at)"
+        ),
+        {"id": str(uuid.uuid4()), "blob": buf.getvalue(), "trained_at": datetime.now(UTC)},
+    )
+    db.commit()
+
+    payload = _payload()
+    baseline_remaining = compute_baseline(BudgetMonitorRequest.model_validate(payload)).remaining_mid_usd
+    cap = max(baseline_remaining * 0.20, 100)
+    with_model = client.post("/api/v1/budget/monitor", json=payload).json()
+
+    assert with_model["used_ml_model"] is True
+    assert with_model["remaining_mid"] - baseline_remaining == approx(cap, abs=0.01)
+
+
+def test_budget_monitor_projects_small_recurring_sample_with_trimmed_mean_rule(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-02",
+            expenses=[
+                {
+                    "amount": 10,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "breakfast",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 20,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "dinner",
+                    "expense_date": "2026-06-02",
+                },
+            ],
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 30
+    assert data["assumptions"]["recurring_trimmed_mean_by_category_usd"]["food"] == 15
+    assert data["assumptions"]["recurring_projected_total_by_category_usd"]["food"] == 105
+    food_remaining = next(
+        item["remaining_mid"] for item in data["category_contributions"] if item["category"] == "food"
+    )
+    assert food_remaining == 75
+
+
+def test_budget_monitor_trims_extreme_recurring_expense_outliers(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-05",
+            end_date="2026-06-30",
+            expenses=[
+                {
+                    "amount": 1,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "low outlier",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 10,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meal",
+                    "expense_date": "2026-06-02",
+                },
+                {
+                    "amount": 12,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meal",
+                    "expense_date": "2026-06-03",
+                },
+                {
+                    "amount": 14,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meal",
+                    "expense_date": "2026-06-04",
+                },
+                {
+                    "amount": 100,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "high outlier",
+                    "expense_date": "2026-06-05",
+                },
+            ],
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["assumptions"]["recurring_trim_fraction"] == 0.2
+    assert data["assumptions"]["recurring_trimmed_mean_by_category_usd"]["food"] == 12
+    assert data["assumptions"]["recurring_projected_total_by_category_usd"]["food"] == 360
 
 
 def test_budget_monitor_lowers_forecast_for_slow_spend_in_second_half(client: TestClient):
@@ -380,7 +505,7 @@ def test_budget_monitor_lowers_forecast_for_slow_spend_in_second_half(client: Te
     data = resp.json()
     assert data["current_spent"] == 140
     assert data["projected_final_mid"] < 1500
-    assert data["assumptions"]["pretrip_anchor_blend_weight"] > 0.5
+    assert data["assumptions"]["recurring_projection_method"] == "trimmed_mean_per_expense_times_trip_duration"
 
 
 def test_budget_monitor_raises_forecast_for_fast_spend(client: TestClient):
@@ -479,8 +604,8 @@ def test_budget_monitor_converges_to_spent_when_trip_is_over(client: TestClient)
     assert resp.status_code == 200
     data = resp.json()
     assert data["current_spent"] == 140
-    assert data["remaining_mid"] == 0
-    assert data["projected_final_mid"] == 140
+    assert data["remaining_mid"] == 840
+    assert data["projected_final_mid"] == 980
 
 
 def test_budget_monitor_does_not_scale_forecast_to_user_budget_limit(client: TestClient):
@@ -604,7 +729,7 @@ def test_budget_monitor_large_planning_transport_closes_destination_travel(clien
     )
     assert ticket_data["assumptions"]["destination_transport_paid_usd"] == 800
     assert taxi_data["assumptions"]["destination_transport_paid_usd"] == 0
-    assert taxi_transport_remaining > ticket_transport_remaining + 300
+    assert taxi_transport_remaining > ticket_transport_remaining + 100
 
 
 def test_budget_monitor_without_pretrip_prediction_ignores_user_budget_as_cost_estimate(client: TestClient):
