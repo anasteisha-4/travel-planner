@@ -15,9 +15,14 @@ from app.schemas.itinerary import ItineraryDay, ItineraryGenerateRequest, Itiner
 from app.services.llm.prompts import compact_json
 from app.services.llm.providers import LLMMessage, LLMProviderError, LLMRequest, get_provider
 
-EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v2"
+EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v3"
 logger = logging.getLogger(__name__)
 _GEOCODE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="external-route-geocode")
+
+
+def _data_service_secret() -> str:
+    return settings.INTERNAL_API_SECRET or settings.DATA_SERVICE_SECRET
+
 
 _GENERIC_NAME_PARTS = {
     "центральный район",
@@ -59,6 +64,8 @@ You generate complete travel itineraries as strict JSON for Triply.
 
 Rules:
 - Return real, specific POIs for the requested destination, never placeholders or generic labels.
+- Prioritize the destination's most popular and recognizable tourist places in the final route, unless the user's
+  constraints, season, pace, or preferences clearly make them infeasible.
 - Each active day must contain geographically plausible POIs in visit order.
 - Every place must include latitude, longitude, arrival_time, departure_time, category, and a short reason.
 - Use the user's duration, pace, daily time window, rest days, notes, and preferred activities.
@@ -188,20 +195,16 @@ def generate_external_route(
     if result is not None:
         return result
 
-    if settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED:
-        relaxed_result = _generate_external_route_attempt(
-            provider=get_provider(),
-            destination_id=destination_id,
-            destination_name=destination_name,
-            destination_info=destination_info,
-            destination_center=destination_center,
-            trip_id=trip_id,
-            request=effective_request,
-            trigger=f"{trigger}_relaxed_coordinate_repair",
-            coordinate_repair_enabled=False,
-        )
-        if relaxed_result is not None:
-            return _mark_coordinate_repair_relaxed(relaxed_result)
+    osm_result = _generate_osm_external_route(
+        destination_id=destination_id,
+        destination_name=destination_name,
+        destination_center=destination_center,
+        trip_id=trip_id,
+        request=effective_request,
+        trigger=trigger,
+    )
+    if osm_result is not None:
+        return osm_result
 
     logger.warning(
         "external_route_failed reason=all_attempts_rejected trip_id=%s destination=%r duration_days=%s "
@@ -214,7 +217,14 @@ def generate_external_route(
         destination_center,
         settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED,
     )
-    return None
+    return _generate_external_route_emergency_draft(
+        destination_id=destination_id,
+        destination_name=destination_name,
+        destination_center=destination_center,
+        trip_id=trip_id,
+        request=effective_request,
+        trigger=trigger,
+    )
 
 
 def _generate_external_route_attempt(
@@ -288,23 +298,6 @@ def _generate_external_route_attempt(
     )
 
 
-def _mark_coordinate_repair_relaxed(response: ItineraryGenerateResponse) -> ItineraryGenerateResponse:
-    summary = dict(response.score_summary or {})
-    summary["external_route_coordinate_repair_relaxed"] = True
-    variants = [
-        variant.model_copy(
-            update={
-                "score_summary": {
-                    **dict(variant.score_summary or {}),
-                    "external_route_coordinate_repair_relaxed": True,
-                }
-            }
-        )
-        for variant in (response.variants or [])
-    ]
-    return response.model_copy(update={"score_summary": summary, "variants": variants or response.variants})
-
-
 def _mark_single_route_fallback(response: ItineraryGenerateResponse) -> ItineraryGenerateResponse:
     summary = dict(response.score_summary or {})
     summary["external_route_single_fallback"] = True
@@ -320,6 +313,279 @@ def _mark_single_route_fallback(response: ItineraryGenerateResponse) -> Itinerar
         for variant in (response.variants or [])
     ]
     return response.model_copy(update={"score_summary": summary, "variants": variants or response.variants})
+
+
+def _generate_external_route_emergency_draft(
+    *,
+    destination_id: uuid.UUID,
+    destination_name: str,
+    destination_center: tuple[float, float] | None,
+    trip_id: uuid.UUID | None,
+    request: ItineraryGenerateRequest,
+    trigger: str,
+) -> ItineraryGenerateResponse:
+    rest_days = _rest_days(request.duration_days, request.rest_days_count)
+    days: list[ItineraryDay] = []
+    for day_number in range(1, request.duration_days + 1):
+        if day_number in rest_days:
+            days.append(
+                ItineraryDay(
+                    day=day_number,
+                    day_number=day_number,
+                    theme="rest",
+                    start_time=None,
+                    end_time=None,
+                    places=[],
+                    items=[],
+                    total_score=0,
+                )
+            )
+            continue
+
+        lat, lng = _emergency_day_coordinate(destination_center, day_number)
+        place = ItineraryPlace(
+            id=uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"triply:external-route-emergency:{destination_name}:{trip_id}:{day_number}",
+            ),
+            name=_emergency_place_name(destination_name, day_number),
+            display_name=_emergency_place_name(destination_name, day_number),
+            category="orientation",
+            lat=lat,
+            lng=lng,
+            address=destination_name,
+            arrival_time="10:00",
+            departure_time="12:00",
+            travel_from_previous_minutes=0,
+            visit_duration_minutes=120,
+            duration_minutes=120,
+            opening_status="unknown",
+            score=0.35,
+            external_candidate_source="external_route_emergency_draft",
+        )
+        days.append(
+            ItineraryDay(
+                day=day_number,
+                day_number=day_number,
+                theme="local orientation",
+                start_time=request.day_start_time,
+                end_time=request.day_end_time,
+                places=[place],
+                items=[place],
+                total_score=0.35,
+            )
+        )
+
+    signature_seed = compact_json(
+        {
+            "trip_id": str(trip_id) if trip_id else None,
+            "destination": destination_name,
+            "duration_days": request.duration_days,
+            "trigger": trigger,
+            "fallback": "emergency_draft",
+        }
+    )
+    response = ItineraryGenerateResponse(
+        destination_id=destination_id,
+        duration_days=request.duration_days,
+        variant_index=0,
+        variant_seed=request.variant_seed,
+        route_signature=f"llm-external-emergency-{uuid.uuid5(uuid.NAMESPACE_URL, signature_seed)}",
+        model_version=f"llm-external-route-emergency:{settings.LLM_MODEL}",
+        days=days,
+        activity_tags=request.preferred_activities or [],
+        source="llm-external-draft",
+        has_template=False,
+        message="Fallback draft created because external route generation could not produce a validated route.",
+        score_summary={
+            "fallback_reason": trigger,
+            "external_route_used": True,
+            "external_route_emergency_draft": True,
+            "external_route_prompt_version": EXTERNAL_ROUTE_PROMPT_VERSION,
+            "catalog_mutation_allowed": False,
+            "llm_external_route_model": settings.LLM_MODEL,
+        },
+    )
+    logger.warning(
+        "external_route_emergency_draft_created trip_id=%s destination=%r duration_days=%s trigger=%s center=%s",
+        trip_id,
+        destination_name,
+        request.duration_days,
+        trigger,
+        destination_center,
+    )
+    return response.model_copy(update={"variants": [response]})
+
+
+def _generate_osm_external_route(
+    *,
+    destination_id: uuid.UUID,
+    destination_name: str,
+    destination_center: tuple[float, float] | None,
+    trip_id: uuid.UUID | None,
+    request: ItineraryGenerateRequest,
+    trigger: str,
+) -> ItineraryGenerateResponse | None:
+    if destination_center is None:
+        return None
+    try:
+        params = {
+            "destination_name": destination_name,
+            "lat": destination_center[0],
+            "lng": destination_center[1],
+            "radius_m": int(_osm_route_radius_km(request) * 1000),
+            "duration_days": request.duration_days,
+            "start_date": request.start_date.isoformat(),
+            "variant_count": 1,
+            "variant_seed": request.variant_seed,
+            "pace": request.pace,
+            "day_start_time": request.day_start_time,
+            "day_end_time": request.day_end_time,
+            "rest_days_count": request.rest_days_count,
+            "exclude_signature": request.exclude_signature,
+            "trip_budget": request.trip_budget,
+            "people_count": request.people_count,
+        }
+        response = httpx.post(
+            f"{settings.DATA_SERVICE_URL}/internal/osm/itinerary",
+            params={key: value for key, value in params.items() if value is not None},
+            headers={"X-Internal-Secret": _data_service_secret()},
+            timeout=max(settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS, 45.0),
+        )
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("error"):
+        return None
+    normalized = _response_from_data_service_payload(payload, request)
+    if not _is_complete_external_route(normalized.days, request, destination_center):
+        return None
+    summary = {
+        **dict(normalized.score_summary or {}),
+        "fallback_reason": trigger,
+        "external_route_used": True,
+        "external_route_prompt_version": EXTERNAL_ROUTE_PROMPT_VERSION,
+        "external_route_osm_fallback": True,
+        "catalog_mutation_allowed": False,
+    }
+    normalized = normalized.model_copy(update={"score_summary": summary, "source": "osm-ingested-heuristic"})
+    variants = [
+        variant.model_copy(
+            update={
+                "score_summary": {
+                    **dict(variant.score_summary or {}),
+                    **summary,
+                },
+                "source": "osm-ingested-heuristic",
+            }
+        )
+        for variant in (normalized.variants or [])
+    ]
+    logger.info(
+        "external_route_osm_ingested_fallback_created trip_id=%s destination=%r destination_id=%s days=%s",
+        trip_id,
+        destination_name,
+        normalized.destination_id,
+        len(normalized.days),
+    )
+    return normalized.model_copy(update={"variants": variants or [normalized]})
+
+
+def _response_from_data_service_payload(
+    payload: dict[str, Any], request: ItineraryGenerateRequest
+) -> ItineraryGenerateResponse:
+    days: list[ItineraryDay] = []
+    for index, day in enumerate(payload.get("days", [])):
+        if not isinstance(day, dict):
+            continue
+        places = [
+            ItineraryPlace(
+                id=uuid.UUID(str(place.get("id") or place.get("poi_id"))),
+                name=str(place.get("name") or "Untitled place"),
+                name_original=place.get("name_original"),
+                name_ru=place.get("name_ru"),
+                display_name=place.get("display_name") or place.get("name_ru") or place.get("name"),
+                category=str(place.get("category") or "place"),
+                lat=place.get("lat"),
+                lng=place.get("lng"),
+                address=place.get("address"),
+                opening_hours=place.get("opening_hours"),
+                is_open_at_midday=place.get("is_open_at_midday"),
+                opening_status=place.get("opening_status"),
+                arrival_time=place.get("arrival_time"),
+                departure_time=place.get("departure_time"),
+                travel_from_previous_minutes=int(place.get("travel_from_previous_minutes") or 0),
+                visit_duration_minutes=place.get("visit_duration_minutes"),
+                duration_minutes=place.get("duration_minutes"),
+                price_tier=place.get("price_tier"),
+                entrance_fee_usd=place.get("entrance_fee_usd"),
+                score=place.get("score"),
+                external_candidate_source="osm_ingested_catalog_poi",
+            )
+            for place in day.get("items", day.get("places", []))
+            if place.get("id") or place.get("poi_id")
+        ]
+        days.append(
+            ItineraryDay(
+                day=int(day.get("day") or index + 1),
+                day_number=int(day.get("day_number") or day.get("day") or index + 1),
+                theme=str(day.get("theme") or "local"),
+                start_time=day.get("start_time"),
+                end_time=day.get("end_time"),
+                places=places,
+                items=places,
+                total_score=day.get("total_score"),
+            )
+        )
+    response = ItineraryGenerateResponse(
+        destination_id=uuid.UUID(str(payload.get("destination_id") or request.destination_id)),
+        duration_days=int(payload.get("duration_days") or request.duration_days),
+        variant_index=int(payload.get("variant_index") or 0),
+        variant_seed=payload.get("variant_seed"),
+        route_signature=payload.get("route_signature"),
+        model_version=str(payload.get("model_version") or "orienteering-heuristic-v2:osm-ingested"),
+        days=days,
+        activity_tags=[str(tag) for tag in payload.get("activity_tags", request.preferred_activities or [])],
+        source=str(payload.get("source") or "osm-ingested-heuristic"),
+        has_template=True,
+        message=payload.get("message"),
+        score_summary=payload.get("score_summary") or {},
+    )
+    response.variants = [
+        _response_from_data_service_payload(variant, request)
+        for variant in payload.get("variants", [])
+        if isinstance(variant, dict)
+    ]
+    return response
+
+
+def _osm_route_radius_km(request: ItineraryGenerateRequest) -> float:
+    radius_km = _coordinate_radius_km(request)
+    destination_text = f"{request.destination_text or ''}".lower()
+    if "islands" in destination_text or "острова" in destination_text or "archipelago" in destination_text:
+        return radius_km
+    if request.duration_days <= 3:
+        return min(radius_km, 6.0)
+    if request.duration_days <= 6:
+        return min(radius_km, 10.0)
+    return min(radius_km, 18.0)
+
+
+def _emergency_day_coordinate(
+    destination_center: tuple[float, float] | None,
+    day_number: int,
+) -> tuple[float | None, float | None]:
+    del day_number
+    if destination_center is None:
+        return None, None
+    return round(destination_center[0], 7), round(destination_center[1], 7)
+
+
+def _emergency_place_name(destination_name: str, day_number: int) -> str:
+    base = destination_name.split(",", 1)[0].strip() or "Destination"
+    return f"{base}: local route draft day {day_number}"
 
 
 def _generate_external_route_single(
@@ -344,7 +610,8 @@ def _generate_external_route_single(
         trigger=trigger,
     )
     started_at = time.perf_counter()
-    interactive_timeout_seconds = min(settings.LLM_EXTERNAL_ROUTE_TIMEOUT_SECONDS, timeout_cap_seconds or 18.0)
+    configured_timeout = max(float(settings.LLM_EXTERNAL_ROUTE_TIMEOUT_SECONDS), 28.0)
+    interactive_timeout_seconds = min(configured_timeout, timeout_cap_seconds or configured_timeout)
     for attempt in range(max_attempts):
         remaining_seconds = interactive_timeout_seconds - (time.perf_counter() - started_at)
         if remaining_seconds < 8:
@@ -796,11 +1063,18 @@ def _normalize_external_places(
         repaired = None
         if index in repair_futures:
             try:
-                repaired = repair_futures[index].result(timeout=2.2)
+                repaired = repair_futures[index].result(timeout=6.0)
             except Exception:
                 repaired = None
         if repaired is not None:
             lat, lng = repaired
+        elif coordinate_repair_enabled and destination_center is not None:
+            logger.info(
+                "external_route_poi_rejected reason=unconfirmed_geocode name=%r destination=%r",
+                name,
+                destination_name,
+            )
+            continue
         elif _should_reject_unrepaired_coordinate(
             raw_place=raw_place,
             name=name,
@@ -1203,8 +1477,9 @@ def _repair_place_coordinates(
                     "results": 3,
                     "bias_lat": destination_center[0],
                     "bias_lon": destination_center[1],
+                    "mode": "poi",
                 },
-                timeout=1.8,
+                timeout=6.5,
             )
             if response.status_code != 200:
                 continue
@@ -1232,13 +1507,12 @@ def _repair_place_coordinates(
 def _coordinate_repair_queries(*, name: str, address: object, destination_name: str) -> list[str]:
     address_text = str(address or "").strip()
     clean_name = _clean_geocode_place_name(name)
-    names = [clean_name]
+    names: list[str] = []
     base_name = clean_name.split(" - ", 1)[0].strip()
-    if base_name and base_name not in names:
-        names.append(base_name)
     spaced_name = base_name.replace("PortAventura", "Port Aventura").strip()
-    if spaced_name and spaced_name not in names:
-        names.append(spaced_name)
+    for value in (spaced_name, base_name, clean_name):
+        if value and value not in names:
+            names.append(value)
     compact_words = ["main entrance", "entrance", "branch"]
     for word in compact_words:
         lowered = base_name.lower()
@@ -1253,13 +1527,14 @@ def _coordinate_repair_queries(*, name: str, address: object, destination_name: 
             spaced_cleaned = cleaned.replace("PortAventura", "Port Aventura").strip()
             for value in (cleaned, spaced_cleaned):
                 if value and value not in names:
-                    names.append(value)
+                    names.insert(0, value)
 
     queries: list[str] = []
     for candidate_name in names:
         plain_query = ", ".join(part for part in [candidate_name, destination_name] if part)
         if plain_query not in queries:
             queries.append(plain_query)
+    for candidate_name in names:
         parts = [candidate_name]
         if address_text:
             parts.append(address_text)

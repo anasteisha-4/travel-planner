@@ -3,7 +3,12 @@ from app.models.airport import Airport
 from app.models.attributes import DestinationAttributes
 from app.models.connectivity import DestinationConnectivity
 from app.models.costs import DestinationCosts
-from app.models.destination import Destination, DestinationSeasonality
+from app.models.destination import (
+    Destination,
+    DestinationIngestionRequest,
+    DestinationIngestionStatus,
+    DestinationSeasonality,
+)
 from app.models.events import DestinationEvent, EventCategory
 from app.models.infrastructure import DestinationInfrastructure
 from app.models.language import DestinationLanguageAccessibility
@@ -20,6 +25,8 @@ from app.models.visa import VisaRule, VisaType
 __all__ = [
     "Destination",
     "DestinationSeasonality",
+    "DestinationIngestionRequest",
+    "DestinationIngestionStatus",
     "Airport",
     "DestinationCosts",
     "DestinationSafety",

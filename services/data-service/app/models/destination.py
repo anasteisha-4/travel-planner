@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime
 
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -41,6 +43,43 @@ class Destination(BaseModel):
     )
 
     __table_args__ = (UniqueConstraint("name", "country_code", name="uq_destination_name_country"),)
+
+
+class DestinationIngestionStatus(enum.StrEnum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class DestinationIngestionRequest(BaseModel):
+    __tablename__ = "destination_ingestion_requests"
+
+    destination_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("destinations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requested_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    requested_country_code: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
+    status: Mapped[DestinationIngestionStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        default=DestinationIngestionStatus.pending,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(60), nullable=False, default="osm_external_route")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "destination_id",
+            "source",
+            "status",
+            name="uq_destination_ingestion_request_open",
+        ),
+    )
 
 
 class DestinationSeasonality(Base):

@@ -89,6 +89,7 @@ def generate_itinerary(
     exclude_signature: str | None = None,
     trip_budget: float | None = None,
     people_count: int = 1,
+    poi_sources: list[str] | None = None,
 ) -> dict:
     from app.models import POI, Destination, DestinationPopularity, Trajectory
 
@@ -118,11 +119,16 @@ def generate_itinerary(
             for poi_id in day_data.get("poi_ids", [])
         }
     )
-    template_pois = db.query(POI).filter(POI.id.in_(all_poi_ids)).all() if all_poi_ids else []
+    template_query = db.query(POI).filter(POI.id.in_(all_poi_ids)) if all_poi_ids else None
+    supplemental_query = db.query(POI).filter(
+        POI.destination_id == destination_id, POI.lat.isnot(None), POI.lng.isnot(None)
+    )
+    if poi_sources:
+        template_query = template_query.filter(POI.source.in_(poi_sources)) if template_query is not None else None
+        supplemental_query = supplemental_query.filter(POI.source.in_(poi_sources))
+    template_pois = template_query.all() if template_query is not None else []
     supplemental_pois = (
-        db.query(POI)
-        .filter(POI.destination_id == destination_id, POI.lat.isnot(None), POI.lng.isnot(None))
-        .order_by(POI.popularity_score.desc().nullslast())
+        supplemental_query.order_by(POI.popularity_score.desc().nullslast())
         .limit(_candidate_query_limit(duration_days, pace, rest_days_count))
         .all()
     )
@@ -149,34 +155,46 @@ def generate_itinerary(
     variants = []
     seed = int(variant_seed or 7301)
     attempts = max(variant_count * 5, variant_count)
-    for offset in range(attempts):
-        variant = build_personalized_variant(
-            candidate_pois=candidate_pois,
-            translations=poi_translations,
-            destination_id=destination_id,
-            duration_days=duration_days,
-            preferred_activities=preferred_activities,
-            start_date=start_date,
-            variant_seed=seed + offset,
-            variant_index=len(variants),
-            pace=pace,
-            day_start_time=day_start_time,
-            day_end_time=day_end_time,
-            rest_days_count=rest_days_count,
-            trip_budget=trip_budget,
-            people_count=people_count,
-            destination_popularity=destination_popularity,
-            trajectories_available=bool(trajectories),
-            trajectory_prior=trajectory_prior,
-        )
-        if variant is None:
-            continue
-        if variant["route_signature"] == exclude_signature:
-            continue
-        if variant["route_signature"] in {v["route_signature"] for v in variants}:
-            continue
-        variants.append(variant)
-        if len(variants) >= variant_count:
+    fallback_pace_used: str | None = None
+    for attempted_pace in _feasible_pace_sequence(pace):
+        for offset in range(attempts):
+            variant = build_personalized_variant(
+                candidate_pois=candidate_pois,
+                translations=poi_translations,
+                destination_id=destination_id,
+                duration_days=duration_days,
+                preferred_activities=preferred_activities,
+                start_date=start_date,
+                variant_seed=seed + offset,
+                variant_index=len(variants),
+                pace=attempted_pace,
+                day_start_time=day_start_time,
+                day_end_time=day_end_time,
+                rest_days_count=rest_days_count,
+                trip_budget=trip_budget,
+                people_count=people_count,
+                destination_popularity=destination_popularity,
+                trajectories_available=bool(trajectories),
+                trajectory_prior=trajectory_prior,
+            )
+            if variant is None:
+                continue
+            if variant["route_signature"] == exclude_signature:
+                continue
+            if variant["route_signature"] in {v["route_signature"] for v in variants}:
+                continue
+            if attempted_pace != pace:
+                fallback_pace_used = attempted_pace
+                summary = dict(variant.get("score_summary") or {})
+                summary["requested_pace"] = pace
+                summary["fallback_pace"] = attempted_pace
+                summary["fallback_reason"] = "requested_pace_infeasible_after_constraints"
+                variant["score_summary"] = summary
+                variant["model_version"] = f"{variant.get('model_version', 'orienteering-heuristic-v2')}:fallback-pace"
+            variants.append(variant)
+            if len(variants) >= variant_count:
+                break
+        if variants:
             break
 
     if not variants:
@@ -189,11 +207,34 @@ def generate_itinerary(
         }
 
     first = variants[0]
+    if fallback_pace_used:
+        variants = [
+            {
+                **variant,
+                "score_summary": {
+                    **dict(variant.get("score_summary") or {}),
+                    "requested_pace": pace,
+                    "fallback_pace": fallback_pace_used,
+                    "fallback_reason": "requested_pace_infeasible_after_constraints",
+                },
+            }
+            for variant in variants
+        ]
+        first = variants[0]
     return {
         **first,
         "variants": variants,
         "activity_tags": first["activity_tags"],
     }
+
+
+def _feasible_pace_sequence(pace: str) -> list[str]:
+    normalized = str(pace or "standard").lower()
+    if normalized in {"fast", "intense", "high"}:
+        return [pace, "standard", "relaxed"]
+    if normalized in {"standard", "medium", "normal"}:
+        return [pace, "relaxed"]
+    return [pace]
 
 
 def _as_datetime(value: date | datetime | None) -> datetime:

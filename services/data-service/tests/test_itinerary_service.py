@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from app.lib.opening_hours_parser import OpeningHoursParser
 from app.services.itinerary_service import (
+    _feasible_pace_sequence,
     _optimize_variant_days,
     _ranked_destination_pois,
     _seeded_candidate_pool,
@@ -246,6 +247,11 @@ def test_personalized_orienteering_variant_supports_month_long_routes():
     assert all(len(day["items"]) >= 3 for day in variant["days"])
     assert variant["score_summary"]["algorithm"] == "greedy_team_orienteering_with_time_windows_v3"
     assert variant["score_summary"]["optimizer"] == "bounded_local_search_v1"
+
+
+def test_feasible_pace_sequence_relaxes_intense_before_failing():
+    assert _feasible_pace_sequence("intense") == ["intense", "standard", "relaxed"]
+    assert _feasible_pace_sequence("standard") == ["standard", "relaxed"]
 
 
 def test_optimizer_reorders_day_to_reduce_travel_without_changing_poi_set():

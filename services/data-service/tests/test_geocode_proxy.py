@@ -27,6 +27,16 @@ class _FakeAsyncClient:
             },
         }
     ]
+    osm_items: list[dict] = [
+        {
+            "name": "Port Aventura",
+            "display_name": "Port Aventura, Salou, Spain",
+            "lat": "41.0864197",
+            "lon": "1.1453584",
+            "type": "theme_park",
+            "namedetails": {"name": "Port Aventura"},
+        }
+    ]
 
     def __init__(self, *args, **kwargs):
         pass
@@ -69,7 +79,39 @@ class _FakeAsyncClient:
                 },
                 headers={"content-type": "application/json"},
             )
+        if url == geocode.OSM_NOMINATIM_URL:
+            return httpx.Response(200, json=_FakeAsyncClient.osm_items)
         return httpx.Response(200, json={"ok": True}, headers={"content-type": "application/json"})
+
+    async def post(self, url, data=None, headers=None):
+        _FakeAsyncClient.last_url = url
+        _FakeAsyncClient.last_headers = headers
+        _FakeAsyncClient.last_params = data
+        _FakeAsyncClient.calls.append(url)
+        if url == geocode.OSM_OVERPASS_URL:
+            return httpx.Response(
+                200,
+                json={
+                    "elements": [
+                        {
+                            "type": "node",
+                            "lat": 41.0864197,
+                            "lon": 1.1453584,
+                            "tags": {
+                                "name": "Port Aventura",
+                                "tourism": "attraction",
+                                "wikidata": "Q123",
+                            },
+                        },
+                        {
+                            "type": "way",
+                            "center": {"lat": 41.0724561, "lon": 1.142969},
+                            "tags": {"name": "Platja de Llevant", "natural": "beach"},
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"ok": True})
 
 
 @pytest.fixture()
@@ -91,6 +133,16 @@ def client(monkeypatch):
                 "formatted": "Москва, Россия",
                 "result_type": "city",
             },
+        }
+    ]
+    _FakeAsyncClient.osm_items = [
+        {
+            "name": "Port Aventura",
+            "display_name": "Port Aventura, Salou, Spain",
+            "lat": "41.0864197",
+            "lon": "1.1453584",
+            "type": "theme_park",
+            "namedetails": {"name": "Port Aventura"},
         }
     ]
 
@@ -149,3 +201,29 @@ def test_search_reuses_backend_cache(client):
         assert response.status_code == 200
 
     assert _FakeAsyncClient.calls == ["https://api.geoapify.com/v1/geocode/autocomplete"]
+
+
+def test_poi_search_aggregates_osm_when_geoapify_has_partial_matches(client):
+    response = client.get(
+        "/api/geocode/search?q=Port%20Aventura%20World,%20Salou,%20Spain"
+        "&results=5&bias_lon=1.1440411&bias_lat=41.0768193&mode=poi"
+    )
+
+    assert response.status_code == 200
+    names = [item["name"] for item in response.json()]
+    assert "Port Aventura" in names
+    assert _FakeAsyncClient.calls == [
+        "https://api.geoapify.com/v1/geocode/autocomplete",
+        "https://geocode-maps.yandex.ru/v1",
+        "https://nominatim.openstreetmap.org/search",
+    ]
+
+
+def test_overpass_poi_endpoint_returns_named_osm_places(client):
+    response = client.get("/api/geocode/poi?lat=41.0768193&lon=1.1440411&radius_m=12000&results=10")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["name"] == "Port Aventura"
+    assert data[0]["source"] == "osm_overpass"
+    assert _FakeAsyncClient.calls == ["https://overpass-api.de/api/interpreter"]

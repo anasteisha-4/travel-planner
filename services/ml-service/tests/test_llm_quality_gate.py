@@ -2,7 +2,7 @@ import uuid
 
 from app.schemas.llm_quality import LLMReviewStatus
 from app.services.llm.providers import FakeProvider
-from app.services.llm.quality_gate import LLMQualityGate
+from app.services.llm.quality_gate import LLMQualityGate, _normalize_review_payload
 
 
 class _FakeDb:
@@ -47,3 +47,24 @@ def test_llm_quality_gate_fail_open_on_unexpected_provider_error(monkeypatch):
 
     assert review.status == LLMReviewStatus.skipped
     assert "TypeError" in (review.defense_trace or "")
+
+
+def test_normalize_review_payload_drops_invalid_optional_uuid_ids():
+    payload = _normalize_review_payload(
+        {
+            "status": "caution",
+            "confidence": 0.8,
+            "suggested_adjustments": [
+                {
+                    "action": "replace_item",
+                    "reason": "Use a real candidate instead of a placeholder.",
+                    "target_id": "not-a-uuid",
+                    "replacement_id": "cambrils_old_town_placeholder",
+                }
+            ],
+        }
+    )
+
+    adjustment = payload["suggested_adjustments"][0]
+    assert adjustment["target_id"] is None
+    assert adjustment["replacement_id"] is None

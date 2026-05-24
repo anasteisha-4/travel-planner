@@ -22,6 +22,7 @@ from app.schemas.llm_quality import (
 )
 from app.services.llm.external_route import (
     _coordinate_radius_km,
+    _coordinate_repair_queries,
     _destination_name_with_geocode_context,
     _is_wrong_singular_island_place,
     _normalize_external_variants,
@@ -203,7 +204,7 @@ def test_itinerary_quality_review_caution_and_notes_context(client: TestClient, 
         confidence=0.82,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="closed_poi",
@@ -271,7 +272,7 @@ def test_itinerary_quality_unknown_remove_is_ignored(client: TestClient, monkeyp
         confidence=0.72,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="overloaded_day",
@@ -312,7 +313,7 @@ def test_itinerary_quality_resolved_remove_hides_stale_warning(client: TestClien
         confidence=0.86,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="wrong_city_poi",
@@ -398,7 +399,7 @@ def test_rejected_first_variant_is_ordered_after_alternatives(client: TestClient
         confidence=0.9,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="missing_user_preference",
@@ -414,7 +415,7 @@ def test_rejected_first_variant_is_ordered_after_alternatives(client: TestClient
         confidence=0.9,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[],
         suggested_adjustments=[],
     )
@@ -459,7 +460,7 @@ def test_itinerary_quality_reviews_all_default_variants(client: TestClient, monk
                 confidence=0.9,
                 provider="yandex",
                 model="qwen3.6-35b-a3b/latest",
-                prompt_version="itinerary_quality_v1",
+                prompt_version="itinerary_quality_v2",
                 issues=[],
                 suggested_adjustments=[],
             )
@@ -496,7 +497,7 @@ def test_rejected_catalog_variants_keep_catalog_variants_without_external_replac
         confidence=0.9,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="wrong_city_route",
@@ -571,7 +572,7 @@ def test_itinerary_candidate_poi_is_added_as_external_candidate(
         confidence=0.8,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="missing_user_interest",
@@ -634,7 +635,7 @@ def test_itinerary_duplicate_candidate_poi_is_ignored(client: TestClient, db: Se
         confidence=0.8,
         provider="yandex",
         model="qwen3.6-35b-a3b/latest",
-        prompt_version="itinerary_quality_v1",
+        prompt_version="itinerary_quality_v2",
         issues=[
             LLMReviewIssue(
                 code="repetitive_route",
@@ -902,6 +903,7 @@ def test_manual_destination_external_route_uses_llm_specific_pois(client: TestCl
     }
     monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
     monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", False)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_TIMEOUT_SECONDS", 18.0)
     monkeypatch.setattr(settings, "LLM_QUALITY_ENABLED", False)
     monkeypatch.setattr(
         "app.services.llm.external_route.get_provider",
@@ -992,7 +994,7 @@ def test_manual_destination_external_route_requests_single_variant_schema(
     request = captured_requests[0]
     assert request.json_schema["schema"]["properties"]["variants"]["maxItems"] == 1
     assert request.max_tokens <= 4500
-    assert request.timeout_seconds <= 24.0
+    assert request.timeout_seconds >= 27.0
     assert json.loads(request.messages[1].content)["context"]["trip"]["variant_count"] == 1
 
 
@@ -1117,6 +1119,18 @@ def test_external_route_repairs_coordinates_and_travel_minutes(client: TestClien
     assert places[0]["lng"] == 1.1419
     assert places[1]["travel_from_previous_minutes"] > 0
     assert len(captured_geocode_queries) == 5
+    assert all(params["mode"] == "poi" for params, _timeout in captured_geocode_queries[1:])
+
+
+def test_coordinate_repair_queries_prefer_spaced_portaventura_name():
+    queries = _coordinate_repair_queries(
+        name="PortAventura World",
+        address="Avinguda de Barcelona, s/n, 43840 Salou, Tarragona, Spain",
+        destination_name="Salou, Spain",
+    )
+
+    assert queries[0] == "Port Aventura, Salou, Spain"
+    assert "PortAventura World, Avinguda de Barcelona, s/n, 43840 Salou, Tarragona, Spain, Salou, Spain" in queries
 
 
 def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytest.MonkeyPatch):
@@ -1161,6 +1175,68 @@ def test_external_route_rejects_risky_unconfirmed_coordinates(monkeypatch: pytes
     monkeypatch.setattr(
         "app.services.llm.external_route.httpx.get", lambda *_args, **_kwargs: DestinationOnlyResponse()
     )
+
+    variants = _normalize_external_variants(
+        payload=payload,
+        destination_id=DEST_ID,
+        destination_name="Salou",
+        destination_center=(41.076, 1.141),
+        trip_id=None,
+        request=ItineraryGenerateRequest(
+            destination_text="Salou",
+            duration_days=1,
+            start_date=date(2026, 6, 10),
+            allow_external_route=True,
+        ),
+        trigger="manual_destination",
+        coordinate_repair_enabled=True,
+    )
+
+    assert variants == []
+
+
+def test_external_route_rejects_ordinary_unconfirmed_coordinates_when_repair_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    payload = {
+        "variants": [
+            {
+                "variant_index": 0,
+                "title": "Unconfirmed city POI",
+                "days": [
+                    {
+                        "day_number": 1,
+                        "theme": "parks",
+                        "places": [
+                            {
+                                "name": f"Salou Park {index}",
+                                "category": "culture",
+                                "lat": 41.075 + index / 1000,
+                                "lng": 1.14 + index / 1000,
+                                "address": "Salou",
+                                "arrival_time": f"{9 + index}:30",
+                                "departure_time": f"{10 + index}:20",
+                                "visit_duration_minutes": 50,
+                                "travel_from_previous_minutes": 0,
+                                "reason": "Specific but unverified.",
+                                "confidence": 0.92,
+                            }
+                            for index in range(4)
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    class NoMatchesResponse:
+        status_code = 200
+
+        def json(self):
+            return [{"lat": 41.076, "lon": 1.141, "name": "Salou"}]
+
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+    monkeypatch.setattr("app.services.llm.external_route.httpx.get", lambda *_args, **_kwargs: NoMatchesResponse())
 
     variants = _normalize_external_variants(
         payload=payload,
@@ -1398,6 +1474,129 @@ def test_long_external_route_falls_back_to_single_route_when_chunks_fail(monkeyp
     assert response is not None
     assert response.score_summary["external_route_single_fallback"] is True
     assert [len(day.places) for day in response.days] == [3, 3, 3, 3, 3]
+
+
+def test_external_route_returns_emergency_draft_when_llm_outputs_are_rejected(monkeypatch: pytest.MonkeyPatch):
+    provider = FakeProvider(responses=["{}"] * 20)
+    request = ItineraryGenerateRequest(
+        destination_text="остров Ко Чанг, тайланд",
+        duration_days=4,
+        start_date=date(2026, 6, 10),
+        allow_external_route=True,
+        variant_count=1,
+    )
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+    monkeypatch.setattr("app.services.llm.external_route.get_provider", lambda: provider)
+    monkeypatch.setattr(
+        "app.services.llm.external_route._geocode_destination_context",
+        lambda _name: {
+            "name": "Ko Chang District",
+            "fullAddress": "Ko Chang District, Trat Province, Thailand",
+            "lat": 12.0546168,
+            "lng": 102.3373426,
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.llm.external_route.httpx.post",
+        lambda *_args, **_kwargs: Mock(status_code=500),
+    )
+
+    response = generate_external_route(
+        db=None,
+        user_id=TEST_USER_ID,
+        trip_id=uuid.uuid4(),
+        request=request,
+        profile={},
+        destination_info=None,
+        trigger="manual_destination",
+    )
+
+    assert response is not None
+    assert response.score_summary["external_route_emergency_draft"] is True
+    assert response.has_template is False
+    assert [len(day.places) for day in response.days] == [1, 1, 1, 1]
+    assert all(day.places[0].external_candidate_source == "external_route_emergency_draft" for day in response.days)
+
+
+def test_external_route_uses_osm_fallback_when_llm_coordinates_are_rejected(monkeypatch: pytest.MonkeyPatch):
+    provider = FakeProvider(responses=["{}"] * 4)
+    request = ItineraryGenerateRequest(
+        destination_text="Salou, Spain",
+        duration_days=3,
+        start_date=date(2026, 6, 10),
+        allow_external_route=True,
+        variant_count=1,
+    )
+
+    class OSMItineraryResponse:
+        status_code = 200
+
+        def json(self):
+            days = []
+            for day_number in range(1, 4):
+                items = []
+                for index in range(3):
+                    poi_index = (day_number - 1) * 3 + index
+                    items.append(
+                        {
+                            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"real-salou-poi-{poi_index}")),
+                            "name": f"Real Salou POI {poi_index}",
+                            "category": "attraction" if index % 2 else "beach",
+                            "lat": 41.076 + poi_index / 1000,
+                            "lng": 1.144 + poi_index / 1000,
+                            "arrival_time": "09:30",
+                            "departure_time": "10:30",
+                            "travel_from_previous_minutes": 0,
+                            "visit_duration_minutes": 60,
+                            "score": 0.8,
+                        }
+                    )
+                days.append({"day": day_number, "theme": "local", "items": items, "total_score": 2.4})
+            return {
+                "destination_id": str(DEST_ID),
+                "duration_days": 3,
+                "route_signature": "osm-ingested-test",
+                "model_version": "orienteering-heuristic-v2:osm-ingested",
+                "days": days,
+                "activity_tags": [],
+                "source": "osm-ingested-heuristic",
+                "score_summary": {"osm_ingestion_used": True, "osm_saved_poi_count": 9},
+                "variants": [],
+            }
+
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_ENABLED", True)
+    monkeypatch.setattr(settings, "LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED", True)
+    monkeypatch.setattr("app.services.llm.external_route.get_provider", lambda: provider)
+    monkeypatch.setattr(
+        "app.services.llm.external_route._geocode_destination_context",
+        lambda _name: {
+            "name": "Salou",
+            "fullAddress": "Salou, CT, Spain",
+            "lat": 41.0768193,
+            "lng": 1.1440411,
+        },
+    )
+    monkeypatch.setattr("app.services.llm.external_route.httpx.post", lambda *_args, **_kwargs: OSMItineraryResponse())
+
+    response = generate_external_route(
+        db=None,
+        user_id=TEST_USER_ID,
+        trip_id=uuid.uuid4(),
+        request=request,
+        profile={},
+        destination_info=None,
+        trigger="manual_destination",
+    )
+
+    assert response is not None
+    assert response.model_version == "orienteering-heuristic-v2:osm-ingested"
+    assert response.score_summary["external_route_osm_fallback"] is True
+    assert response.score_summary["osm_ingestion_used"] is True
+    assert [len(day.places) for day in response.days] == [3, 3, 3]
+    assert all(
+        place.external_candidate_source == "osm_ingested_catalog_poi" for day in response.days for place in day.places
+    )
 
 
 def test_quality_removal_keeps_first_duplicate_and_avoids_sparse_days():

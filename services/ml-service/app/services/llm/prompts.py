@@ -1,7 +1,7 @@
 import json
 
 RECOMMENDATION_QUALITY_PROMPT_VERSION = "recommendation_quality_v3"
-ITINERARY_QUALITY_PROMPT_VERSION = "itinerary_quality_v1"
+ITINERARY_QUALITY_PROMPT_VERSION = "itinerary_quality_v2"
 
 RECOMMENDATION_QUALITY_TEMPLATE = (
     "You are a strict travel recommendation quality gate. Review the ranked recommendation list. "
@@ -29,6 +29,9 @@ ITINERARY_QUALITY_TEMPLATE = (
     "when unknown. Review safety, feasibility, opening-time, route-density, budget, and preference fit. "
     "Also verify that the route follows the supplied algorithm summary: POI utility should match user preferences, "
     "daily order should be geographically coherent, and coordinates must be plausible for the destination. "
+    "The final itinerary should include the destination's most popular and recognizable tourist places when they are "
+    "feasible for the user's duration, pace, budget, season, and preferences; flag routes that omit obvious must-see "
+    "POIs without a clear constraint-based reason. "
     "The destination object is authoritative: if the user asks for Roman history while destination is Tarragona, "
     "interpret that as Roman heritage in Tarragona, not as a request to switch to Rome. "
     "External candidate routes may have unverified opening hours; do not reject solely because opening_status is unknown. "

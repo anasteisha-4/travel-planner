@@ -12,10 +12,13 @@ router = APIRouter(prefix="/geocode", tags=["geocode"])
 YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/v1"
 YANDEX_GEOSUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest"
 GEOAPIFY_URL = "https://api.geoapify.com/v1/geocode"
+OSM_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+OSM_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 YANDEX_PROXY_REFERER = "https://www.triply-ai.ru/"
 YANDEX_EXCLUDED_KINDS = {"street", "district"}
 GEOSUGGEST_EXCLUDED_TAGS = {"street", "district", "province", "country", "other"}
 GEOAPIFY_EXCLUDED_TYPES = {"street", "suburb", "district", "county", "state"}
+OSM_EXCLUDED_TYPES = {"administrative", "postcode", "road", "residential", "suburb"}
 GEOCODE_CACHE_TTL_SECONDS = 24 * 60 * 60
 GEOCODE_CACHE_MAX_SIZE = 1024
 GEOCODE_CACHE_PRECISION = 5
@@ -127,6 +130,28 @@ def _parse_geoapify(feature: dict[str, Any]) -> dict[str, float | str] | None:
     }
 
 
+def _parse_osm(item: dict[str, Any]) -> dict[str, float | str] | None:
+    try:
+        lat = float(item.get("lat"))
+        lon = float(item.get("lon"))
+    except (TypeError, ValueError):
+        return None
+    namedetails = item.get("namedetails") if isinstance(item.get("namedetails"), dict) else {}
+    name = (
+        item.get("name")
+        or namedetails.get("name")
+        or namedetails.get("name:en")
+        or namedetails.get("name:ru")
+        or str(item.get("display_name") or "").split(",", 1)[0]
+    )
+    return {
+        "name": str(name or ""),
+        "fullAddress": item.get("display_name") or "",
+        "lat": lat,
+        "lon": lon,
+    }
+
+
 async def _search_yandex(
     query: str, results: int, lon: float | None, lat: float | None
 ) -> list[dict[str, float | str]]:
@@ -235,6 +260,140 @@ async def _search_geoapify(
     return _cache_set(cache_key, parsed)
 
 
+async def _search_osm_nominatim(
+    query: str, results: int, lon: float | None, lat: float | None
+) -> list[dict[str, float | str]]:
+    cache_key = _cache_key("osm-nominatim-search", query, results, _rounded_coord(lon), _rounded_coord(lat))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    params = {
+        "q": query,
+        "format": "jsonv2",
+        "limit": str(results),
+        "addressdetails": "1",
+        "namedetails": "1",
+        "extratags": "1",
+        "accept-language": "ru,en",
+    }
+    if lon is not None and lat is not None:
+        params["viewbox"] = f"{lon - 0.25},{lat + 0.25},{lon + 0.25},{lat - 0.25}"
+        params["bounded"] = "0"
+    headers = {"User-Agent": "Triply/1.0 (https://www.triply-ai.ru; geocoding@triply-ai.ru)"}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.get(OSM_NOMINATIM_URL, params=params, headers=headers)
+    if not response.is_success:
+        return []
+    parsed: list[dict[str, float | str]] = []
+    for item in response.json():
+        if str(item.get("type") or "").lower() in OSM_EXCLUDED_TYPES:
+            continue
+        parsed_item = _parse_osm(item)
+        if parsed_item and parsed_item["name"]:
+            parsed.append(parsed_item)
+    return _cache_set(cache_key, parsed)
+
+
+def _overpass_query(lat: float, lon: float, radius_m: int, limit: int) -> str:
+    selectors = [
+        '["tourism"~"^(attraction|museum|gallery|theme_park|viewpoint|zoo|aquarium)$"]["name"]',
+        '["historic"]["name"]',
+        '["leisure"~"^(park|theme_park|water_park|marina|beach_resort)$"]["name"]',
+        '["amenity"~"^(theatre|arts_centre|place_of_worship|marketplace)$"]["name"]',
+        '["natural"~"^(beach|cape|peak|spring|wood)$"]["name"]',
+    ]
+    blocks = [f"nwr(around:{radius_m},{lat},{lon}){selector};" for selector in selectors]
+    return "[out:json][timeout:8];(" + "".join(blocks) + f");out center tags qt {limit};"
+
+
+def _parse_overpass_element(element: dict[str, Any], center_lat: float, center_lon: float) -> dict[str, Any] | None:
+    tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
+    name = tags.get("name") or tags.get("name:en") or tags.get("name:ru")
+    if not name:
+        return None
+    lat = element.get("lat") or (element.get("center") or {}).get("lat")
+    lon = element.get("lon") or (element.get("center") or {}).get("lon")
+    try:
+        lat_float = float(lat)
+        lon_float = float(lon)
+    except (TypeError, ValueError):
+        return None
+    category = _osm_category(tags)
+    return {
+        "external_id": f"osm:{element.get('type', 'element')}:{element.get('id')}",
+        "name": str(name),
+        "fullAddress": tags.get("addr:full") or tags.get("addr:street") or "",
+        "lat": lat_float,
+        "lon": lon_float,
+        "category": category,
+        "source": "osm_overpass",
+        "score": _osm_poi_score(tags, category, lat_float, lon_float, center_lat, center_lon),
+        "tags": tags,
+    }
+
+
+def _osm_category(tags: dict[str, Any]) -> str:
+    if tags.get("leisure") in {"theme_park", "water_park"}:
+        return "family"
+    if tags.get("tourism") in {"museum", "gallery", "attraction", "theme_park", "viewpoint"}:
+        return str(tags["tourism"])
+    if tags.get("historic"):
+        return "historic"
+    if tags.get("natural") == "beach":
+        return "beach"
+    if tags.get("leisure") in {"park", "marina", "beach_resort"}:
+        return str(tags["leisure"])
+    if tags.get("amenity"):
+        return str(tags["amenity"])
+    return "place"
+
+
+def _osm_poi_score(
+    tags: dict[str, Any],
+    category: str,
+    lat: float,
+    lon: float,
+    center_lat: float,
+    center_lon: float,
+) -> float:
+    score = 1.0
+    if tags.get("wikidata") or tags.get("wikipedia"):
+        score += 1.2
+    if tags.get("tourism") in {"attraction", "theme_park", "museum", "viewpoint"}:
+        score += 1.0
+    if category in {"family", "beach", "historic", "park", "marina"}:
+        score += 0.6
+    score -= min(1.2, (((lat - center_lat) ** 2 + (lon - center_lon) ** 2) ** 0.5) * 12)
+    return round(score, 4)
+
+
+async def _search_osm_overpass_poi(lat: float, lon: float, radius_m: int, results: int) -> list[dict[str, Any]]:
+    radius_m = max(500, min(radius_m, 30000))
+    cache_key = _cache_key("osm-overpass-poi", _rounded_coord(lon), _rounded_coord(lat), radius_m, results)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    headers = {"User-Agent": "Triply/1.0 (https://www.triply-ai.ru; geocoding@triply-ai.ru)"}
+    try:
+        async with httpx.AsyncClient(timeout=18.0) as client:
+            response = await client.post(
+                OSM_OVERPASS_URL,
+                data={"data": _overpass_query(lat, lon, radius_m, results)},
+                headers=headers,
+            )
+    except httpx.HTTPError:
+        return []
+    if not response.is_success:
+        return []
+    items = [
+        parsed
+        for element in response.json().get("elements", [])
+        if (parsed := _parse_overpass_element(element, lat, lon)) is not None
+    ]
+    items.sort(key=lambda item: float(item.get("score") or 0), reverse=True)
+    return _cache_set(cache_key, _dedupe_geocode_matches(items)[:results])
+
+
 async def _reverse_yandex(lat: float, lon: float) -> str | None:
     matches = await _search_yandex(f"{lon},{lat}", 1, lon, lat)
     return str(matches[0]["name"]) if matches else None
@@ -277,7 +436,18 @@ async def search_geocode(
     results: int = Query(5, ge=1, le=10),
     bias_lon: float | None = Query(None, ge=-180, le=180),
     bias_lat: float | None = Query(None, ge=-90, le=90),
+    mode: str = Query("default", pattern="^(default|poi)$"),
 ) -> list[dict[str, float | str]]:
+    if mode == "poi":
+        matches: list[dict[str, float | str]] = []
+        for provider_matches in [
+            await _search_geoapify(q, results, bias_lon, bias_lat),
+            await _search_yandex(q, results, bias_lon, bias_lat),
+            await _search_osm_nominatim(q, results, bias_lon, bias_lat),
+        ]:
+            matches.extend(provider_matches)
+        return _dedupe_geocode_matches(matches)[:results]
+
     geoapify = await _search_geoapify(q, results, bias_lon, bias_lat)
     if geoapify:
         return geoapify[:results]
@@ -291,12 +461,40 @@ async def search_geocode(
     return []
 
 
+def _dedupe_geocode_matches(matches: list[dict[str, float | str]]) -> list[dict[str, float | str]]:
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[dict[str, float | str]] = []
+    for item in matches:
+        lat = item.get("lat")
+        lon = item.get("lon")
+        key = (
+            str(item.get("name") or "").casefold(),
+            f"{float(lat):.5f}" if isinstance(lat, int | float) else str(lat),
+            f"{float(lon):.5f}" if isinstance(lon, int | float) else str(lon),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
 @router.get("/reverse")
 async def reverse_geocode(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
 ) -> dict[str, str | None]:
     return {"name": await _reverse_geoapify(lat, lon) or await _reverse_yandex(lat, lon)}
+
+
+@router.get("/poi")
+async def search_poi(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    radius_m: int = Query(12000, ge=500, le=30000),
+    results: int = Query(40, ge=1, le=80),
+) -> list[dict[str, Any]]:
+    return await _search_osm_overpass_poi(lat, lon, radius_m, results)
 
 
 @router.get("/yandex/1.x")

@@ -160,3 +160,81 @@ def generate_itinerary(
         trip_budget=trip_budget,
         people_count=people_count,
     )
+
+
+@router.post("/osm/itinerary")
+async def ingest_osm_and_generate_itinerary(
+    destination_name: str,
+    lat: float,
+    lng: float,
+    radius_m: int = 12000,
+    duration_days: int = 1,
+    preferred_activities: list[str] = Query(default_factory=list),
+    start_date: str | None = None,
+    variant_count: int = 1,
+    variant_seed: int | None = None,
+    pace: str = "standard",
+    day_start_time: str = "09:30",
+    day_end_time: str = "19:00",
+    rest_days_count: int = 0,
+    exclude_signature: str | None = None,
+    trip_budget: float | None = None,
+    people_count: int = 1,
+    db: Session = Depends(get_internal_db),
+):
+    import contextlib
+    from datetime import datetime as dt_class
+    from datetime import time as time_class
+
+    from app.services.osm_ingestion_service import ingest_osm_poi_and_generate_itinerary
+
+    parsed_start_date = None
+    if start_date:
+        with contextlib.suppress(ValueError):
+            parsed_start_date = dt_class.fromisoformat(start_date)
+    return await ingest_osm_poi_and_generate_itinerary(
+        db=db,
+        destination_name=destination_name,
+        lat=lat,
+        lng=lng,
+        radius_m=radius_m,
+        duration_days=duration_days,
+        preferred_activities=preferred_activities,
+        start_date=parsed_start_date,
+        variant_count=variant_count,
+        variant_seed=variant_seed,
+        pace=pace,
+        day_start_time=time_class.fromisoformat(day_start_time),
+        day_end_time=time_class.fromisoformat(day_end_time),
+        rest_days_count=rest_days_count,
+        exclude_signature=exclude_signature,
+        trip_budget=trip_budget,
+        people_count=people_count,
+    )
+
+
+@router.get("/admin/destination-ingestion-requests")
+def list_destination_ingestion_requests(
+    status: str = "pending",
+    db: Session = Depends(get_internal_db),
+):
+    from app.services.osm_ingestion_service import list_destination_ingestion_requests
+
+    return list_destination_ingestion_requests(db, status=status)
+
+
+@router.post("/admin/destination-ingestion-requests/{request_id}/approve")
+def approve_destination_ingestion_request(
+    request_id: str,
+    db: Session = Depends(get_internal_db),
+):
+    import uuid
+
+    from fastapi import HTTPException
+
+    from app.services.osm_ingestion_service import approve_destination_ingestion_request
+
+    result = approve_destination_ingestion_request(db, uuid.UUID(request_id))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Destination ingestion request not found")
+    return result

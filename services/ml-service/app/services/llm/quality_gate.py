@@ -59,7 +59,7 @@ class LLMQualityGate:
         context: dict,
     ) -> LLMQualityReview:
         day_count = len((context.get("variant") or {}).get("days") or []) if isinstance(context, dict) else 0
-        timeout_budget = min(max(settings.LLM_TIMEOUT_SECONDS, 8.0), 20.0 if day_count > 10 else 12.0)
+        timeout_budget = min(max(settings.LLM_TIMEOUT_SECONDS, 8.0), 28.0 if day_count > 10 else 20.0)
         return self.review(
             db=db,
             user_id=user_id,
@@ -503,7 +503,10 @@ def _nullable_uuidish(value: Any) -> str | None:
     text = str(value).strip()
     if not text or text.lower() in {"null", "none", "n/a", "unknown"}:
         return None
-    return text
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return None
 
 
 def _normalize_candidate_poi(value: Any) -> dict | None:
