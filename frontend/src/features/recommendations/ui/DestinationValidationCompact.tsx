@@ -239,10 +239,7 @@ export const DestinationValidationCompact = ({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[12px] font-extrabold uppercase tracking-[0.06em] text-stone-400">
-            Проверка направления
-          </p>
-          <p className="mt-0.5 text-[13px] font-bold text-stone-900 dark:text-white">
-            {isFetching && 'Обновляем проверку...'}
+            Обновляем проверку
           </p>
         </div>
         <span

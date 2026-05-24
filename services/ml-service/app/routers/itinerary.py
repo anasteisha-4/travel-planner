@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 import httpx
@@ -27,10 +28,26 @@ from app.services.llm.quality_gate import LLMQualityGate
 from app.services.profile_client import _get_profile_sync
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _data_service_secret() -> str:
     return settings.INTERNAL_API_SECRET or settings.DATA_SERVICE_SECRET
+
+
+def _log_itinerary_failure(request: ItineraryGenerateRequest, reason: str, **extra) -> None:
+    logger.warning(
+        "itinerary_generation_failed reason=%s trip_id=%s destination_id=%s destination_text=%r duration_days=%s "
+        "variant_count=%s allow_external_route=%s extra=%s",
+        reason,
+        request.trip_id,
+        request.destination_id,
+        request.destination_text,
+        request.duration_days,
+        request.variant_count,
+        request.allow_external_route,
+        extra,
+    )
 
 
 def _activity_preferences(profile: dict, request: ItineraryGenerateRequest) -> list[str]:
@@ -543,6 +560,7 @@ def generate_itinerary(
         )
         if external is not None:
             return _review_response(db=db, user_id=user_id, profile=profile, request=request, response=external)
+        _log_itinerary_failure(request, "manual_external_route_unavailable")
         raise AppException(
             status_code=422,
             code="ITINERARY_NO_FEASIBLE_ROUTE",
@@ -554,6 +572,7 @@ def generate_itinerary(
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code if exc.response is not None else 0
+        response_sample = exc.response.text[:500] if exc.response is not None else None
         if status_code in {404, 409, 422}:
             external = generate_external_route(
                 db=db,
@@ -566,12 +585,26 @@ def generate_itinerary(
             )
             if external is not None:
                 return _review_response(db=db, user_id=user_id, profile=profile, request=request, response=external)
+        _log_itinerary_failure(
+            request,
+            "data_service_http_error",
+            status_code=status_code,
+            response_sample=response_sample,
+        )
+        raise AppException(
+            status_code=503,
+            code="ITINERARY_UNAVAILABLE",
+            message="Itinerary generation is temporarily unavailable.",
+        ) from exc
+    except httpx.TimeoutException as exc:
+        _log_itinerary_failure(request, "data_service_timeout", timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS)
         raise AppException(
             status_code=503,
             code="ITINERARY_UNAVAILABLE",
             message="Itinerary generation is temporarily unavailable.",
         ) from exc
     except httpx.HTTPError as exc:
+        _log_itinerary_failure(request, "data_service_transport_error", error=str(exc))
         raise AppException(
             status_code=503,
             code="ITINERARY_UNAVAILABLE",
@@ -599,6 +632,11 @@ def generate_itinerary(
         if external is not None:
             return _review_response(db=db, user_id=user_id, profile=profile, request=request, response=external)
         if trigger == "data_service_no_feasible":
+            _log_itinerary_failure(
+                request,
+                "data_service_no_feasible_external_unavailable",
+                score_summary=normalized.score_summary,
+            )
             raise AppException(
                 status_code=422,
                 code="ITINERARY_NO_FEASIBLE_ROUTE",

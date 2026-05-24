@@ -22,7 +22,16 @@ self.addEventListener('push', (event) => {
     },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        clientList.forEach((client) => {
+          client.postMessage({ type: 'triply-push', payload: { ...payload, url: options.data.url } });
+        });
+      }),
+      self.registration.showNotification(title, options),
+    ])
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {

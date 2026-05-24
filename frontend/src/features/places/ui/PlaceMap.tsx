@@ -80,7 +80,9 @@ export const PlaceMap = ({
     places.length > 0 ? computeCenter(places) : null
   );
 
-  const { result: geocodeResult, isLoading: isGeocoding } = useGeocode(!placesCenter ? destination : '');
+  const { result: geocodeResult, isLoading: isGeocoding } = useGeocode(
+    !placesCenter ? destination : ''
+  );
   const geocodedCenter: LngLat | null = geocodeResult
     ? [geocodeResult.lon, geocodeResult.lat]
     : !isGeocoding && !placesCenter

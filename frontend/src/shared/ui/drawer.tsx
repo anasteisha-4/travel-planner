@@ -33,7 +33,7 @@ export const DrawerHandle = ({
 }: React.ComponentProps<typeof DrawerPrimitive.Handle>) => (
   <DrawerPrimitive.Handle
     className={cn(
-      'mx-100 mb-5 mt-3 h-1 w-full shrink-0 touch-none !bg-transparent',
+      'mb-5 mt-3 !h-1 !w-full shrink-0 touch-none !bg-transparent',
       '[&_[data-vaul-handle-hitarea]]:flex [&_[data-vaul-handle-hitarea]]:items-center [&_[data-vaul-handle-hitarea]]:justify-center',
       className
     )}

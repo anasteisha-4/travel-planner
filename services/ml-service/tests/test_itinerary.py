@@ -21,7 +21,9 @@ from app.schemas.llm_quality import (
     LLMReviewStatus,
 )
 from app.services.llm.external_route import (
+    _coordinate_radius_km,
     _destination_name_with_geocode_context,
+    _is_wrong_singular_island_place,
     _normalize_external_variants,
     _select_destination_geocode_match,
     _should_reject_unrepaired_coordinate,
@@ -1220,6 +1222,100 @@ def test_destination_center_prefers_exact_city_over_first_fuzzy_match():
 
     assert selected is not None
     assert selected["lat"] == 41.081038
+
+
+def test_destination_center_prefers_locality_over_exact_street_poi():
+    ko_chang = _select_destination_geocode_match(
+        "Ko Chang",
+        [
+            {
+                "name": "Ko Chang",
+                "fullAddress": "Ko Chang, Bahnhofstraße, 12305 Берлин, Германия",
+                "lat": 52.3865177,
+                "lon": 13.4068113,
+            },
+            {
+                "name": "Ko Chang District",
+                "fullAddress": "Ko Chang District, Trat Province 23120, Таиланд",
+                "lat": 12.0546168,
+                "lon": 102.3373426,
+            },
+            {
+                "name": "Ko Chang",
+                "fullAddress": "Ko Chang, Westerstraat, 1015 MP Амстердам, Нидерланды",
+                "lat": 52.3783707,
+                "lon": 4.8840418,
+            },
+        ],
+    )
+    istanbul = _select_destination_geocode_match(
+        "Стамбул",
+        [
+            {
+                "name": "Фатих",
+                "fullAddress": "Фатих, Стамбул, Мраморноморский регион, Турция",
+                "lat": 41.006381,
+                "lon": 28.9758715,
+            },
+            {
+                "name": "Стамбул",
+                "fullAddress": "Стамбул, улица Победы 25, Leopoldslust, Гусев, Россия",
+                "lat": 54.5866465,
+                "lon": 22.1965031,
+            },
+        ],
+    )
+
+    assert ko_chang is not None
+    assert ko_chang["lat"] == 12.0546168
+    assert istanbul is not None
+    assert istanbul["lat"] == 41.006381
+
+
+def test_destination_center_accepts_single_locality_translation_candidate():
+    selected = _select_destination_geocode_match(
+        "Canary Islands",
+        [
+            {
+                "name": "Канарские острова",
+                "fullAddress": "Канарские острова",
+                "lat": 28.48912,
+                "lon": -15.928702,
+            }
+        ],
+    )
+
+    assert selected is not None
+    assert selected["lat"] == 28.48912
+
+
+def test_archipelago_manual_destination_uses_wide_coordinate_radius():
+    request = ItineraryGenerateRequest(
+        destination_text="Canary Islands",
+        duration_days=5,
+        start_date=date(2026, 6, 10),
+        allow_external_route=True,
+    )
+
+    assert _coordinate_radius_km(request) == 250.0
+
+
+def test_singular_island_destination_rejects_other_island_places():
+    assert _is_wrong_singular_island_place(
+        place_name="Koh Mak",
+        place_address="Koh Mak, Trat Province, Thailand",
+        destination_name="Ko Chang, Таиланд",
+    )
+    assert not _is_wrong_singular_island_place(
+        place_name="Koh Chang Marine National Park",
+        place_address="Ko Chang, Trat Province, Thailand",
+        destination_name="Ko Chang, Таиланд",
+    )
+    assert not _is_wrong_singular_island_place(
+        place_name="Gran Canaria",
+        place_address="Canary Islands, Spain",
+        destination_name="Canary Islands",
+    )
 
 
 def test_manual_destination_name_uses_geocoded_full_address_context():

@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import re
 import time
@@ -15,6 +16,7 @@ from app.services.llm.prompts import compact_json
 from app.services.llm.providers import LLMMessage, LLMProviderError, LLMRequest, get_provider
 
 EXTERNAL_ROUTE_PROMPT_VERSION = "external_route_v2"
+logger = logging.getLogger(__name__)
 _GEOCODE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="external-route-geocode")
 
 _GENERIC_NAME_PARTS = {
@@ -154,6 +156,14 @@ def generate_external_route(
 ) -> ItineraryGenerateResponse | None:
     del db, user_id, profile
     if not settings.LLM_EXTERNAL_ROUTE_ENABLED or not request.allow_external_route:
+        logger.warning(
+            "external_route_skipped reason=disabled_or_not_allowed trip_id=%s destination_text=%r "
+            "enabled=%s allowed=%s",
+            trip_id,
+            request.destination_text,
+            settings.LLM_EXTERNAL_ROUTE_ENABLED,
+            request.allow_external_route,
+        )
         return None
 
     destination_name = _destination_name(request, destination_info)
@@ -193,6 +203,17 @@ def generate_external_route(
         if relaxed_result is not None:
             return _mark_coordinate_repair_relaxed(relaxed_result)
 
+    logger.warning(
+        "external_route_failed reason=all_attempts_rejected trip_id=%s destination=%r duration_days=%s "
+        "active_days=%s trigger=%s center=%s repair_enabled=%s",
+        trip_id,
+        destination_name,
+        request.duration_days,
+        _active_day_count(request),
+        trigger,
+        destination_center,
+        settings.LLM_EXTERNAL_ROUTE_COORDINATE_REPAIR_ENABLED,
+    )
     return None
 
 
@@ -222,6 +243,13 @@ def _generate_external_route_attempt(
         )
         if chunked is not None:
             return chunked
+        logger.warning(
+            "external_route_chunked_failed trying_single_fallback trip_id=%s destination=%r duration_days=%s trigger=%s",
+            trip_id,
+            destination_name,
+            request.duration_days,
+            trigger,
+        )
         single_fallback = _generate_external_route_single(
             provider=get_provider(),
             destination_id=destination_id,
@@ -233,10 +261,18 @@ def _generate_external_route_attempt(
             trigger=f"{trigger}_single_fallback",
             coordinate_repair_enabled=coordinate_repair_enabled,
             timeout_cap_seconds=28.0,
+            max_tokens_cap=7000,
             max_attempts=1,
         )
         if single_fallback is not None:
             return _mark_single_route_fallback(single_fallback)
+        logger.warning(
+            "external_route_single_fallback_failed trip_id=%s destination=%r duration_days=%s trigger=%s",
+            trip_id,
+            destination_name,
+            request.duration_days,
+            trigger,
+        )
         return None
 
     return _generate_external_route_single(
@@ -298,6 +334,7 @@ def _generate_external_route_single(
     trigger: str,
     coordinate_repair_enabled: bool,
     timeout_cap_seconds: float | None = None,
+    max_tokens_cap: int = 3600,
     max_attempts: int = 2,
 ) -> ItineraryGenerateResponse | None:
     context = _external_route_context(
@@ -317,7 +354,7 @@ def _generate_external_route_single(
                 LLMRequest(
                     model=settings.LLM_MODEL,
                     temperature=0.25 if attempt == 0 else 0,
-                    max_tokens=min(settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS, 3600),
+                    max_tokens=min(settings.LLM_EXTERNAL_ROUTE_MAX_TOKENS, max_tokens_cap),
                     timeout_seconds=max(8.0, min(remaining_seconds, interactive_timeout_seconds)),
                     max_retries=0,
                     json_schema=external_route_json_schema(max_variants=request.variant_count),
@@ -331,7 +368,14 @@ def _generate_external_route_single(
                 )
             )
             payload = _loads_json_object(response.content)
-        except (LLMProviderError, json.JSONDecodeError, ValueError, TypeError, KeyError):
+        except (LLMProviderError, json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
+            logger.warning(
+                "external_route_llm_attempt_failed trigger=%s attempt=%s destination=%r error=%s",
+                trigger,
+                attempt,
+                destination_name,
+                str(exc)[:300],
+            )
             continue
 
         variants = _normalize_external_variants(
@@ -346,6 +390,13 @@ def _generate_external_route_single(
         )
         if variants:
             return variants[0].model_copy(update={"variants": variants})
+        logger.warning(
+            "external_route_llm_attempt_rejected trigger=%s attempt=%s destination=%r duration_days=%s",
+            trigger,
+            attempt,
+            destination_name,
+            request.duration_days,
+        )
     return None
 
 
@@ -415,14 +466,37 @@ def _generate_external_route_chunks(
             max_attempts=2,
         )
         if chunk is None:
+            logger.warning(
+                "external_route_chunk_failed reason=no_chunk trip_id=%s destination=%r chunk_index=%s days=%s",
+                trip_id,
+                destination_name,
+                chunk_index,
+                day_numbers,
+            )
             return None
         chunk_days = [day for day in chunk.days if str(day.theme or "").lower() != "rest"]
         if len(chunk_days) < len(day_numbers):
+            logger.warning(
+                "external_route_chunk_failed reason=missing_days trip_id=%s destination=%r chunk_index=%s "
+                "expected=%s got=%s",
+                trip_id,
+                destination_name,
+                chunk_index,
+                len(day_numbers),
+                len(chunk_days),
+            )
             return None
         for offset, original_day_number in enumerate(day_numbers):
             source_day = chunk_days[offset]
             places = source_day.places
             if len(places) < _validated_min_places_per_day(request.pace):
+                logger.warning(
+                    "external_route_chunk_failed reason=sparse_day trip_id=%s destination=%r day=%s places=%s",
+                    trip_id,
+                    destination_name,
+                    original_day_number,
+                    len(places),
+                )
                 return None
             for place in places:
                 seen_names.add(_normalize_name(place.name))
@@ -437,6 +511,12 @@ def _generate_external_route_chunks(
 
     days = [combined[day_number] for day_number in range(1, request.duration_days + 1) if day_number in combined]
     if not _is_complete_external_route(days, request, destination_center):
+        logger.warning(
+            "external_route_chunked_failed reason=incomplete_combined trip_id=%s destination=%r day_counts=%s",
+            trip_id,
+            destination_name,
+            [len(day.places) for day in days],
+        )
         return None
     signature_seed = compact_json(
         {
@@ -682,6 +762,12 @@ def _normalize_external_places(
         normalized_name = _normalize_name(name)
         if not name or normalized_name in seen_names or _is_generic_place_name(name, destination_name):
             continue
+        if _is_wrong_singular_island_place(
+            place_name=name,
+            place_address=raw_place.get("address"),
+            destination_name=destination_name,
+        ):
+            continue
         lat = _float_or_none(raw_place.get("lat"))
         lng = _float_or_none(raw_place.get("lng"))
         if lat is None or lng is None or not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
@@ -827,7 +913,7 @@ def _repair_external_travel_minutes(places: list[ItineraryPlace]) -> list[Itiner
 
 
 def _clean_external_days(days: list[ItineraryDay], request: ItineraryGenerateRequest) -> list[ItineraryDay]:
-    days = _remove_coordinate_outliers(days)
+    days = _remove_coordinate_outliers(days, max_distance_km=max(35.0, _coordinate_radius_km(request)))
     max_places = _max_places_per_day(request.pace)
     cleaned: list[ItineraryDay] = []
     for day in days:
@@ -839,7 +925,7 @@ def _clean_external_days(days: list[ItineraryDay], request: ItineraryGenerateReq
     return cleaned
 
 
-def _remove_coordinate_outliers(days: list[ItineraryDay]) -> list[ItineraryDay]:
+def _remove_coordinate_outliers(days: list[ItineraryDay], *, max_distance_km: float = 35.0) -> list[ItineraryDay]:
     places_with_coords = [
         place for day in days for place in day.places if place.lat is not None and place.lng is not None
     ]
@@ -857,7 +943,7 @@ def _remove_coordinate_outliers(days: list[ItineraryDay]) -> list[ItineraryDay]:
             for place in day.places
             if place.lat is not None
             and place.lng is not None
-            and _haversine_km(float(place.lat), float(place.lng), median_lat, median_lng) <= 35
+            and _haversine_km(float(place.lat), float(place.lng), median_lat, median_lng) <= max_distance_km
         ]
         cleaned.append(day.model_copy(update={"places": places, "items": places}))
     return cleaned
@@ -942,7 +1028,7 @@ def _select_destination_geocode_match(destination_name: str, items: list[Any]) -
     query_tokens = {
         token
         for token in re.split(r"\s+|,", normalized_query)
-        if len(token) >= 4 and token not in {"spain", "испания", "france", "франция"}
+        if len(token) >= 4 and token not in _GEOCODE_COUNTRY_STOPWORDS
     }
     scored: list[tuple[float, dict[str, Any]]] = []
     for index, item in enumerate(items):
@@ -955,6 +1041,7 @@ def _select_destination_geocode_match(destination_name: str, items: list[Any]) -
         name = _normalize_name(str(item.get("name") or ""))
         address = _normalize_name(str(item.get("fullAddress") or item.get("address") or ""))
         haystack = f"{name} {address}"
+        locality_score = _destination_geocode_locality_score(name, address)
         score = 0.0
         if name == normalized_query:
             score += 12.0
@@ -971,6 +1058,7 @@ def _select_destination_geocode_match(destination_name: str, items: list[Any]) -
             score += 3.0
         if any(token in haystack for token in ("франция", "france")):
             score += 3.0
+        score += locality_score
         if any(token in haystack for token in ("россия", "russia", "украина", "ukraine")) and not any(
             token in normalized_query for token in ("россия", "russia", "украина", "ukraine")
         ):
@@ -980,7 +1068,112 @@ def _select_destination_geocode_match(destination_name: str, items: list[Any]) -
     if not scored:
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
-    return scored[0][1] if scored[0][0] > -5.0 else None
+    if scored[0][0] >= 4.0:
+        return scored[0][1]
+    if len(scored) == 1 and scored[0][0] >= 0.0:
+        return scored[0][1]
+    return None
+
+
+_GEOCODE_COUNTRY_STOPWORDS = {
+    "spain",
+    "испания",
+    "france",
+    "франция",
+    "turkey",
+    "турция",
+    "thailand",
+    "таиланд",
+    "germany",
+    "германия",
+    "russia",
+    "россия",
+    "ukraine",
+    "украина",
+}
+
+
+_GEOCODE_STREET_HINTS = {
+    "street",
+    "straße",
+    "strasse",
+    "straat",
+    "landstraße",
+    "landstrasse",
+    "улица",
+    "проспект",
+    "переулок",
+    "шоссе",
+    "road",
+    "rd",
+    "avenue",
+    "ave",
+    "bahnhof",
+}
+
+
+_GEOCODE_LOCALITY_HINTS = {
+    "district",
+    "province",
+    "region",
+    "область",
+    "регион",
+    "район",
+    "остров",
+    "island",
+    "islands",
+    "город",
+    "city",
+}
+
+
+def _destination_geocode_locality_score(name: str, address: str) -> float:
+    score = 0.0
+    if any(hint in address for hint in _GEOCODE_STREET_HINTS):
+        score -= 28.0
+    if re.search(r"\b\d{1,5}[a-zа-я]?\b", address):
+        score -= 8.0
+    if any(hint in f"{name} {address}" for hint in _GEOCODE_LOCALITY_HINTS):
+        score += 10.0
+    return score
+
+
+def _is_wrong_singular_island_place(*, place_name: str, place_address: object, destination_name: str) -> bool:
+    destination_text = _normalize_name(destination_name.split(",", 1)[0])
+    if not _is_singular_island_destination(destination_text):
+        return False
+    destination_aliases = _singular_island_aliases(destination_text)
+    if not destination_aliases:
+        return False
+    place_text = _normalize_name(f"{place_name} {place_address or ''}")
+    island_mentions = re.findall(r"\b(?:ko|koh)\s+[\w']+", place_text)
+    if not island_mentions and " island" not in place_text:
+        return False
+    return not any(alias in place_text for alias in destination_aliases)
+
+
+def _is_singular_island_destination(destination_text: str) -> bool:
+    if any(token in destination_text for token in ("islands", "острова", "archipelago")):
+        return False
+    return bool(
+        re.search(r"\b(?:ko|koh)\s+[\w']+", destination_text)
+        or " island" in destination_text
+        or "остров " in destination_text
+    )
+
+
+def _singular_island_aliases(destination_text: str) -> set[str]:
+    aliases = {destination_text}
+    for match in re.finditer(r"\b(ko|koh)\s+([\w']+)", destination_text):
+        island_name = match.group(2)
+        aliases.add(f"ko {island_name}")
+        aliases.add(f"koh {island_name}")
+    if destination_text.endswith(" island"):
+        base = destination_text[: -len(" island")].strip()
+        if base:
+            aliases.add(base)
+            aliases.add(f"{base} island")
+    return {alias for alias in aliases if alias}
 
 
 def _repair_place_coordinates(
@@ -1116,6 +1309,8 @@ def _geocode_item_matches_place(item: dict, place_name: str) -> bool:
 
 def _coordinate_radius_km(request: ItineraryGenerateRequest) -> float:
     destination_text = f"{request.destination_text or ''}".lower()
+    if "islands" in destination_text or "острова" in destination_text or "archipelago" in destination_text:
+        return 250.0
     if (
         "koh " in destination_text
         or "ko " in destination_text

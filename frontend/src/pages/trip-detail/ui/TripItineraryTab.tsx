@@ -207,7 +207,7 @@ const createRouteMarkerEl = (index: number, isSelected: boolean): HTMLButtonElem
 };
 
 const formatDuration = (minutes: number | null) => {
-  if (!minutes) return 'время не указано';
+  if (!minutes) return;
   if (minutes < 60) return `${minutes} мин`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -393,9 +393,12 @@ const DraftPreviewItem = ({ item }: { item: ItineraryItem }) => (
         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-[hsl(var(--surface))] dark:text-stone-400">
           {categoryLabel(item.category)}
         </span>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
-          {formatDuration(item.duration_minutes)}
-        </span>
+        {formatDuration(item.duration_minutes) && (
+          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+            {formatDuration(item.duration_minutes)}
+          </span>
+        )}
+
         {openingLabel(item.opening_status) && (
           <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
             {openingLabel(item.opening_status)}
@@ -1550,6 +1553,22 @@ export const TripItineraryTab = () => {
     }, 2200);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handlePushMessage = (event: MessageEvent<{ type?: string; payload?: { url?: string; tag?: string } }>) => {
+      if (event.data?.type !== 'triply-push') return;
+      const payload = event.data.payload;
+      const isCurrentTripItinerary =
+        payload?.url?.includes(`/trips/${trip.id}/itinerary`) ||
+        payload?.tag === `itinerary-${trip.id}`;
+      if (isCurrentTripItinerary) {
+        void stateQuery.refetch();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handlePushMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handlePushMessage);
+  }, [stateQuery, trip.id]);
 
   const handleDragOver = (event: DragOverEvent) => {
     const activeId = String(event.active.id);
