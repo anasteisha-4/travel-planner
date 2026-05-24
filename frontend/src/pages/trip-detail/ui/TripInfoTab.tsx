@@ -1,3 +1,4 @@
+import { expenseApi } from '@/entities/expense';
 import { useFeedback } from '@/features/feedback';
 import { useItineraryState } from '@/features/itinerary';
 import { profileApi } from '@/features/profile';
@@ -10,8 +11,31 @@ import { Button } from '@/shared/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Edit, Loader2, Trash2, User } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import type { TripDetailOutletContext } from './TripDetailPage';
+
+type PreTripPredictionSnapshot = {
+  total_min: number;
+  total_mid: number;
+  total_max: number;
+  breakdown: Record<string, number>;
+  model_version: string | null;
+  daily_recurring_mid?: number | null;
+};
+
+type CreatedTripBudgetSnapshot = {
+  trip_id: string;
+  destination_id?: string | null;
+  start_date: string;
+  end_date: string;
+  people_count: number;
+  currency: string;
+  pre_trip_prediction: PreTripPredictionSnapshot;
+};
+
+type TripDetailLocationState = {
+  createdTripBudgetSnapshot?: CreatedTripBudgetSnapshot;
+};
 
 const formatDateFull = (dateStr: string) => {
   if (!dateStr) return '';
@@ -37,14 +61,39 @@ const getTravelMonth = (dateStr: string) => {
   return Number.isFinite(parsed.getTime()) ? parsed.getMonth() + 1 : new Date().getMonth() + 1;
 };
 
+const normalizeCity = (value?: string | null) => value?.trim().toLowerCase() ?? '';
+
+const getCreatedTripBudgetSnapshot = (state: unknown): CreatedTripBudgetSnapshot | null => {
+  if (!state || typeof state !== 'object' || !('createdTripBudgetSnapshot' in state)) return null;
+  const snapshot = (state as TripDetailLocationState).createdTripBudgetSnapshot;
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  if (!snapshot.pre_trip_prediction || typeof snapshot.pre_trip_prediction.total_mid !== 'number') {
+    return null;
+  }
+  return snapshot;
+};
+
+const getStoredTripBudgetSnapshot = (tripId: string): CreatedTripBudgetSnapshot | null => {
+  try {
+    const raw = sessionStorage.getItem(`triply:pretrip-budget:${tripId}`);
+    return raw ? getCreatedTripBudgetSnapshot({ createdTripBudgetSnapshot: JSON.parse(raw) }) : null;
+  } catch {
+    return null;
+  }
+};
+
 const getAccommodationTier = (
-  budgetMinUsd?: number | null,
-  budgetMaxUsd?: number | null
+  restLevel?: string | null,
+  budgetLimitUsd?: number | null
 ): 'budget' | 'mid' | 'luxury' => {
-  const mid = ((budgetMinUsd ?? 0) + (budgetMaxUsd ?? 2000)) / 2;
-  if (mid < 800) return 'budget';
-  if (mid < 5000) return 'mid';
-  return 'luxury';
+  const profileTier =
+    restLevel === 'economy' ? 'budget' : restLevel === 'luxury' ? 'luxury' : 'mid';
+
+  if (budgetLimitUsd !== null && budgetLimitUsd !== undefined) {
+    if (budgetLimitUsd < 900) return 'budget';
+    if (budgetLimitUsd < 3000 && profileTier === 'luxury') return 'mid';
+  }
+  return profileTier;
 };
 
 const FIXED_EXPENSE_KEYWORDS =
@@ -96,6 +145,7 @@ const isManualForecastExpense = (
 export const TripInfoTab = () => {
   const { play } = useHapticFeedback();
   const navigate = useNavigate();
+  const location = useLocation();
   const trackedBudgetMonitorKeys = useRef<Set<string>>(new Set());
   const trackedBudgetRiskKeys = useRef<Set<string>>(new Set());
   const { trip, isStatusChanging, onStatusChange, onEditOpen, onCancelOpen, onDeleteOpen } =
@@ -128,6 +178,47 @@ export const TripInfoTab = () => {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+  const needsTripBudgetUsdRate = trip.budget !== null && trip.budget > 0 && trip.currency !== 'USD';
+  const { data: tripBudgetRates } = useQuery({
+    queryKey: ['exchange-rates', trip.currency],
+    queryFn: () => expenseApi.getExchangeRates(trip.currency),
+    enabled: needsTripBudgetUsdRate,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+  const tripBudgetUsd =
+    trip.budget === null
+      ? null
+      : trip.currency === 'USD'
+        ? trip.budget
+        : trip.budget === 0
+          ? 0
+          : tripBudgetRates?.rates.USD
+            ? trip.budget * tripBudgetRates.rates.USD
+            : null;
+  const isProfileOrigin =
+    normalizeCity(trip.departure_city) === normalizeCity(profile?.origin_city_name);
+  const createdTripBudgetSnapshot = useMemo(() => {
+    const snapshot =
+      getCreatedTripBudgetSnapshot(location.state) ?? getStoredTripBudgetSnapshot(trip.id);
+    if (!snapshot) return null;
+    const matchesTrip =
+      snapshot.trip_id === trip.id &&
+      snapshot.destination_id === trip.destination_id &&
+      snapshot.start_date === trip.start_date &&
+      snapshot.end_date === trip.end_date &&
+      snapshot.people_count === trip.people_count &&
+      snapshot.currency === trip.currency;
+    return matchesTrip ? snapshot : null;
+  }, [
+    location.state,
+    trip.currency,
+    trip.destination_id,
+    trip.end_date,
+    trip.id,
+    trip.people_count,
+    trip.start_date,
+  ]);
   const todayParam = new Date().toISOString().slice(0, 10);
   const { data: itineraryState } = useItineraryState(trip.id);
   const itinerarySummary = useMemo(() => {
@@ -174,28 +265,27 @@ export const TripInfoTab = () => {
             duration_days: durationDays,
             people_count: trip.people_count,
             travel_month: getTravelMonth(trip.start_date),
-            accommodation_tier: getAccommodationTier(
-              profile?.budget_min_usd,
-              profile?.budget_max_usd
-            ),
+            accommodation_tier: getAccommodationTier(profile?.rest_level, tripBudgetUsd),
             currency: trip.currency,
-            origin_city_name: profile?.origin_city_name ?? trip.departure_city,
-            origin_lat: profile?.origin_lat,
-            origin_lng: profile?.origin_lng,
+            budget_limit_usd: tripBudgetUsd,
+            origin_city_name: trip.departure_city ?? profile?.origin_city_name,
+            origin_lat: isProfileOrigin ? profile?.origin_lat : null,
+            origin_lng: isProfileOrigin ? profile?.origin_lng : null,
           }
         : null,
     [
       durationDays,
-      profile?.budget_max_usd,
-      profile?.budget_min_usd,
+      isProfileOrigin,
       profile?.origin_city_name,
       profile?.origin_lat,
       profile?.origin_lng,
+      profile?.rest_level,
       trip.currency,
       trip.departure_city,
       trip.destination_id,
       trip.people_count,
       trip.start_date,
+      tripBudgetUsd,
     ]
   );
   const {
@@ -206,6 +296,7 @@ export const TripInfoTab = () => {
     refetch: refetchBudgetPrediction,
   } = useBudgetPrediction(budgetPredictionParams);
   const monitorPreTripPrediction = useMemo(() => {
+    if (createdTripBudgetSnapshot) return createdTripBudgetSnapshot.pre_trip_prediction;
     if (!budgetPrediction) return null;
 
     const travelCost = budgetPrediction.breakdown.travel_to_destination ?? 0;
@@ -223,15 +314,16 @@ export const TripInfoTab = () => {
       },
       model_version: budgetPrediction.model_version,
     };
-  }, [budgetPrediction]);
+  }, [budgetPrediction, createdTripBudgetSnapshot]);
   const plannedDailyBudget =
-    budgetPrediction && monitorPreTripPrediction
-      ? (budgetPrediction.daily_recurring_mid ??
+    monitorPreTripPrediction
+      ? (createdTripBudgetSnapshot?.pre_trip_prediction.daily_recurring_mid ??
+        budgetPrediction?.daily_recurring_mid ??
         Math.max(
           0,
           monitorPreTripPrediction.total_mid -
             (monitorPreTripPrediction.breakdown.travel_to_destination ?? 0)
-        ) / Math.max(budgetPrediction.duration_days, 1))
+        ) / Math.max(durationDays, 1))
       : null;
   const manualForecastExpenseCount = expenses.filter((expense) =>
     isManualForecastExpense(expense, trip.start_date, trip.end_date)
@@ -239,7 +331,7 @@ export const TripInfoTab = () => {
   const hasBudgetForecastInput = Boolean(trip.destination_id) || manualForecastExpenseCount >= 2;
   const budgetMonitorParams = useMemo(
     () =>
-      !hasBudgetForecastInput || (trip.destination_id && !budgetPrediction)
+      !hasBudgetForecastInput || (trip.destination_id && !monitorPreTripPrediction)
         ? null
         : {
             trip_id: trip.id,
@@ -263,7 +355,6 @@ export const TripInfoTab = () => {
             itinerary_summary: itinerarySummary,
           },
     [
-      budgetPrediction,
       budgetPredictionParams?.accommodation_tier,
       expenses,
       hasBudgetForecastInput,
@@ -287,12 +378,12 @@ export const TripInfoTab = () => {
     refetch: refetchBudgetMonitor,
   } = useBudgetMonitor(budgetMonitorParams);
   const hasBudgetForecastError =
-    (Boolean(budgetPredictionParams) && !budgetPrediction && isBudgetPredictionError) ||
+    (Boolean(budgetPredictionParams) && !monitorPreTripPrediction && isBudgetPredictionError) ||
     (Boolean(budgetMonitorParams) && !budgetMonitor && isBudgetMonitorError);
   const isBudgetForecastUpdating =
     !hasBudgetForecastError &&
     ((Boolean(budgetPredictionParams) &&
-      !budgetPrediction &&
+      !monitorPreTripPrediction &&
       (isBudgetPredictionPending || isBudgetPredictionFetching)) ||
       (Boolean(budgetMonitorParams) &&
         (isBudgetMonitorPending || (!budgetMonitor && isBudgetMonitorFetching))));
@@ -340,7 +431,10 @@ export const TripInfoTab = () => {
   }, [budgetMonitor, trip.budget, trip.id]);
 
   const handleBudgetForecastRetry = () => {
-    if (Boolean(budgetPredictionParams) && (!budgetPrediction || isBudgetPredictionError)) {
+    if (
+      Boolean(budgetPredictionParams) &&
+      (!monitorPreTripPrediction || isBudgetPredictionError)
+    ) {
       void refetchBudgetPrediction();
       return;
     }

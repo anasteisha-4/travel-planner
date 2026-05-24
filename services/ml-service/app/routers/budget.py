@@ -339,7 +339,13 @@ def monitor_budget(
 ) -> BudgetMonitorResponse:
     baseline = compute_baseline(request)
     scorer = get_in_trip_budget_scorer(db)
-    ml_prediction = scorer.predict(baseline) if scorer else None
+    ml_prediction = (
+        scorer.predict(baseline)
+        if scorer
+        and not baseline.assumptions.get("pretrip_anchor_applied")
+        and baseline.assumptions.get("ml_residual_allowed", False)
+        else None
+    )
     used_ml = ml_prediction is not None
     remaining_min, remaining_mid, remaining_max = (
         ml_prediction

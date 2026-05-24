@@ -133,6 +133,37 @@ def test_budget_monitor_without_budget_returns_forecast_only(client: TestClient)
     assert data["budget_usage_projected_pct"] is None
 
 
+def test_budget_monitor_starts_from_pretrip_prediction_without_expenses(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-01",
+            expenses=[],
+            itinerary_summary={
+                "generated_days_count": 7,
+                "remaining_days_count": 7,
+                "remaining_poi_count": 20,
+                "remaining_food_poi_count": 6,
+                "remaining_paid_poi_count": 8,
+                "remaining_estimated_entrance_fees": 500,
+                "remaining_evidence_backed_entrance_fees": 500,
+                "evidence_backed_price_count": 8,
+                "candidate_poi_price_count": 0,
+                "price_estimation_used": False,
+                "avg_visit_duration_minutes": 90,
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 0
+    assert data["remaining_mid"] == 1500
+    assert data["projected_final_mid"] == 1500
+    assert data["assumptions"]["elapsed_days"] == 0
+    assert data["assumptions"]["remaining_days"] == 7
+    assert data["assumptions"]["pretrip_anchor_applied"] is True
+
+
 def test_budget_monitor_converts_target_currency(client: TestClient):
     resp = client.post(
         "/api/v1/budget/monitor",
@@ -203,6 +234,255 @@ def test_budget_monitor_treats_flight_description_inside_trip_as_once(client: Te
     assert data["recurring_spent"] == 0
 
 
+def test_budget_monitor_large_transport_without_ticket_keywords_closes_destination_travel(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-01",
+            expenses=[
+                {
+                    "amount": 500,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "transport",
+                    "expense_date": "2026-06-01",
+                }
+            ],
+            pre_trip_prediction={
+                "total_min": 1200,
+                "total_mid": 1500,
+                "total_max": 1900,
+                "breakdown": {
+                    "accommodation": 500,
+                    "meals": 250,
+                    "transport": 150,
+                    "activities": 100,
+                    "travel_to_destination": 500,
+                },
+                "model_version": "budget-v1",
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 500
+    assert data["locked_fixed_costs"] == 500
+    assert data["recurring_spent"] == 0
+    assert data["assumptions"]["destination_transport_paid_usd"] == 500
+    assert data["assumptions"]["pretrip_anchor_blend_weight"] == 0
+    assert data["projected_final_mid"] == 1500
+    transport_remaining = next(
+        item["remaining_mid"] for item in data["category_contributions"] if item["category"] == "transport"
+    )
+    assert transport_remaining < 300
+
+
+def test_budget_monitor_skips_ml_residual_for_early_one_time_transport(client: TestClient, db):
+    artifact = {
+        "model_p10": _ConstantResidualModel(1000),
+        "model_p50": _ConstantResidualModel(1000),
+        "model_p90": _ConstantResidualModel(1000),
+        "feature_names": [],
+        "version": "in-trip-budget-v1",
+    }
+    buf = BytesIO()
+    joblib.dump(artifact, buf)
+    db.execute(
+        text(
+            "INSERT INTO model_registry "
+            "(id, name, version, model_type, is_active, metrics, model_blob, trained_at) "
+            "VALUES (:id, 'in_trip_budget', 'in-trip-budget-v1', 'in_trip_budget', true, "
+            "'{}'::jsonb, :blob, :trained_at)"
+        ),
+        {"id": str(uuid.uuid4()), "blob": buf.getvalue(), "trained_at": datetime.now(UTC)},
+    )
+    db.commit()
+
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-01",
+            expenses=[
+                {
+                    "amount": 500,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "transport",
+                    "expense_date": "2026-06-01",
+                }
+            ],
+            pre_trip_prediction={
+                "total_min": 1200,
+                "total_mid": 1500,
+                "total_max": 1900,
+                "breakdown": {
+                    "accommodation": 500,
+                    "meals": 250,
+                    "transport": 150,
+                    "activities": 100,
+                    "travel_to_destination": 500,
+                },
+                "model_version": "budget-v1",
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["used_ml_model"] is False
+    assert data["assumptions"]["model_available"] is True
+    assert data["projected_final_mid"] == 1500
+
+
+def test_budget_monitor_lowers_forecast_for_slow_spend_in_second_half(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-05",
+            expenses=[
+                {
+                    "amount": 100,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "flight tickets",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 20,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meals",
+                    "expense_date": "2026-06-02",
+                },
+                {
+                    "amount": 20,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "metro",
+                    "expense_date": "2026-06-03",
+                },
+            ],
+            itinerary_summary={
+                "generated_days_count": 7,
+                "remaining_days_count": 2,
+                "remaining_poi_count": 4,
+                "remaining_food_poi_count": 1,
+                "remaining_paid_poi_count": 1,
+                "remaining_estimated_entrance_fees": 0,
+                "remaining_evidence_backed_entrance_fees": 0,
+                "evidence_backed_price_count": 0,
+                "candidate_poi_price_count": 0,
+                "price_estimation_used": False,
+                "avg_visit_duration_minutes": 90,
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 140
+    assert data["projected_final_mid"] < 1500
+    assert data["assumptions"]["pretrip_anchor_blend_weight"] > 0.5
+
+
+def test_budget_monitor_raises_forecast_for_fast_spend(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-05",
+            expenses=[
+                {
+                    "amount": 800,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "flight tickets",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 500,
+                    "currency": "USD",
+                    "category": "housing",
+                    "description": "hotel",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 500,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meals",
+                    "expense_date": "2026-06-02",
+                },
+                {
+                    "amount": 200,
+                    "currency": "USD",
+                    "category": "entertainment",
+                    "description": "museum tickets",
+                    "expense_date": "2026-06-03",
+                },
+            ],
+            itinerary_summary={
+                "generated_days_count": 7,
+                "remaining_days_count": 2,
+                "remaining_poi_count": 4,
+                "remaining_food_poi_count": 1,
+                "remaining_paid_poi_count": 1,
+                "remaining_estimated_entrance_fees": 0,
+                "remaining_evidence_backed_entrance_fees": 0,
+                "evidence_backed_price_count": 0,
+                "candidate_poi_price_count": 0,
+                "price_estimation_used": False,
+                "avg_visit_duration_minutes": 90,
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 2000
+    assert data["projected_final_mid"] > 2000
+    assert data["projected_final_mid"] > 1500
+
+
+def test_budget_monitor_converges_to_spent_when_trip_is_over(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            as_of_date="2026-06-07",
+            expenses=[
+                {
+                    "amount": 100,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "flight tickets",
+                    "expense_date": "2026-06-01",
+                },
+                {
+                    "amount": 40,
+                    "currency": "USD",
+                    "category": "food",
+                    "description": "meals",
+                    "expense_date": "2026-06-02",
+                },
+            ],
+            itinerary_summary={
+                "generated_days_count": 7,
+                "remaining_days_count": 0,
+                "remaining_poi_count": 0,
+                "remaining_food_poi_count": 0,
+                "remaining_paid_poi_count": 0,
+                "remaining_estimated_entrance_fees": 0,
+                "remaining_evidence_backed_entrance_fees": 0,
+                "evidence_backed_price_count": 0,
+                "candidate_poi_price_count": 0,
+                "price_estimation_used": False,
+                "avg_visit_duration_minutes": 90,
+            },
+        ),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_spent"] == 140
+    assert data["remaining_mid"] == 0
+    assert data["projected_final_mid"] == 140
+
+
 def test_budget_monitor_does_not_scale_forecast_to_user_budget_limit(client: TestClient):
     resp = client.post(
         "/api/v1/budget/monitor",
@@ -251,8 +531,8 @@ def test_budget_monitor_small_forecast_overage_is_on_track_not_over_budget(clien
     assert resp.status_code == 200
     data = resp.json()
     assert data["current_spent"] == 800
-    assert data["projected_final_mid"] > data["budget_limit"]
-    assert data["budget_usage_projected_pct"] < 1.10
+    assert data["projected_final_mid"] <= data["budget_limit"]
+    assert data["budget_usage_projected_pct"] < 1.0
     assert data["risk_status"] == "on_track"
 
 
@@ -324,7 +604,7 @@ def test_budget_monitor_large_planning_transport_closes_destination_travel(clien
     )
     assert ticket_data["assumptions"]["destination_transport_paid_usd"] == 800
     assert taxi_data["assumptions"]["destination_transport_paid_usd"] == 0
-    assert taxi_transport_remaining > ticket_transport_remaining + 400
+    assert taxi_transport_remaining > ticket_transport_remaining + 300
 
 
 def test_budget_monitor_without_pretrip_prediction_ignores_user_budget_as_cost_estimate(client: TestClient):

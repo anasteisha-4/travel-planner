@@ -324,6 +324,19 @@ export const TripCreatePage = () => {
     budgetAssumptions?.travel_distance_km !== undefined
       ? `${Math.round(budgetAssumptions.travel_distance_km).toLocaleString('ru-RU')} км`
       : 'Расстояние неизвестно';
+  const displayedPreTripPrediction = budgetPrediction
+    ? {
+        total_min: budgetDisplayTotalMin,
+        total_mid: budgetDisplayTotalMid,
+        total_max: budgetDisplayTotalMax,
+        breakdown: {
+          ...budgetPrediction.breakdown,
+          travel_to_destination: hasBudgetTravelFareData ? budgetTravelCost : 0,
+        },
+        model_version: budgetPrediction.model_version,
+        daily_recurring_mid: budgetPrediction.daily_recurring_mid,
+      }
+    : null;
 
   useEffect(() => {
     if (!budgetPrediction || !destinationId) return;
@@ -349,7 +362,35 @@ export const TripCreatePage = () => {
   }, [budgetPrediction, destinationId, previewStartDate, searchParams]);
 
   const handleSuccess = (trip: Trip) => {
-    navigate(`/trips/${trip.id}`, { replace: true });
+    const createdTripBudgetSnapshot = displayedPreTripPrediction
+      ? {
+          trip_id: trip.id,
+          destination_id: trip.destination_id,
+          start_date: trip.start_date,
+          end_date: trip.end_date,
+          people_count: trip.people_count,
+          currency: trip.currency,
+          pre_trip_prediction: displayedPreTripPrediction,
+        }
+      : null;
+    if (createdTripBudgetSnapshot) {
+      try {
+        sessionStorage.setItem(
+          `triply:pretrip-budget:${trip.id}`,
+          JSON.stringify(createdTripBudgetSnapshot)
+        );
+      } catch (error) {
+        void error;
+      }
+    }
+    navigate(`/trips/${trip.id}/info`, {
+      replace: true,
+      state: createdTripBudgetSnapshot
+        ? {
+            createdTripBudgetSnapshot,
+          }
+        : undefined,
+    });
   };
 
   const handleCancel = () => {
