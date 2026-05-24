@@ -66,7 +66,7 @@ export default defineConfig(({ command, mode }) => {
           clientsClaim: true,
           skipWaiting: true,
           importScripts: ['push-listener.js'],
-          navigateFallbackDenylist: [/^\/grafana(?:\/.*)?$/],
+          navigateFallbackDenylist: [/^\/api(?:\/.*)?$/, /^\/grafana(?:\/.*)?$/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           globIgnores: ['**/env.js'],
           runtimeCaching: [
