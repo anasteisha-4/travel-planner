@@ -463,6 +463,7 @@ export const TripCreatePage = () => {
                 travelMonth={getTravelMonth(previewStartDate)}
                 budgetPerDayUsd={validationBudgetPerDayUsd}
                 budgetUnlimited={isBudgetUnlimited}
+                citizenshipCode={profile?.citizenship_code}
                 durationDays={budgetDurationDays}
                 riskTolerance={profile?.risk_tolerance}
                 preferredLanguage={

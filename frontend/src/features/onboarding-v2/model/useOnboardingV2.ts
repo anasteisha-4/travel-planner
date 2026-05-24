@@ -39,6 +39,7 @@ type OnboardingState = {
   originCityName: string;
   originLat: number | null;
   originLng: number | null;
+  citizenshipCode: string | null;
   likedDests: LikedDest[];
   riskTolerance: number | null;
   visaTolerance: VisaTolerance | null;
@@ -60,6 +61,7 @@ const DEFAULT_STATE: OnboardingState = {
   originCityName: '',
   originLat: null,
   originLng: null,
+  citizenshipCode: null,
   likedDests: [],
   riskTolerance: null,
   visaTolerance: null,
@@ -81,6 +83,7 @@ const profileToState = (profile: UserProfileV2): OnboardingState => ({
   originCityName: profile.origin_city_name ?? '',
   originLat: profile.origin_lat ?? null,
   originLng: profile.origin_lng ?? null,
+  citizenshipCode: profile.citizenship_code ?? null,
   likedDests: (profile.liked_destination_ids ?? []).map((id, i) => ({
     id,
     name: profile.liked_destination_names?.[i] ?? id,
@@ -112,6 +115,7 @@ const stateToStepPayload = (step: number, state: OnboardingState): OnboardingSte
         origin_city_name: state.originCityName || undefined,
         origin_lat: state.originLat ?? undefined,
         origin_lng: state.originLng ?? undefined,
+        citizenship_code: state.citizenshipCode ?? undefined,
       };
     case 4:
       return {
@@ -271,6 +275,7 @@ export const useOnboardingV2 = ({ onComplete }: { onComplete: () => void }) => {
     originCityName: state.originCityName,
     originLat: state.originLat,
     originLng: state.originLng,
+    citizenshipCode: state.citizenshipCode,
     likedDests: state.likedDests,
     riskTolerance: state.riskTolerance,
     visaTolerance: state.visaTolerance,

@@ -10,6 +10,7 @@ type Props = {
   travelMonth: number;
   budgetPerDayUsd?: number | null;
   budgetUnlimited?: boolean;
+  citizenshipCode?: string | null;
   durationDays?: number | null;
   riskTolerance?: number | null;
   preferredLanguage?: string | null;
@@ -63,6 +64,7 @@ export const DestinationValidationCompact = ({
   travelMonth,
   budgetPerDayUsd,
   budgetUnlimited = false,
+  citizenshipCode = 'RU',
   durationDays,
   riskTolerance,
   preferredLanguage,
@@ -74,7 +76,7 @@ export const DestinationValidationCompact = ({
     destinationId
       ? {
           destination_id: destinationId,
-          citizenship_code: 'RU',
+          citizenship_code: citizenshipCode ?? 'RU',
           travel_month: travelMonth,
           budget_per_day_usd: budgetPerDayUsd ?? null,
           duration_days: durationDays ?? null,
@@ -90,6 +92,7 @@ export const DestinationValidationCompact = ({
       destinationId,
       travelMonth,
       budgetUnlimited ? 'unlimited' : (budgetPerDayUsd ?? 'none'),
+      citizenshipCode ?? 'RU',
       durationDays ?? 'duration-none',
       riskTolerance ?? 'risk-none',
       preferredLanguage ?? 'lang-none',
@@ -103,6 +106,7 @@ export const DestinationValidationCompact = ({
         travel_month: travelMonth,
         budget_per_day_usd: budgetPerDayUsd ?? null,
         budget_unlimited: budgetUnlimited,
+        citizenship_code: citizenshipCode ?? 'RU',
         duration_days: durationDays ?? null,
         risk_tolerance: riskTolerance ?? null,
         preferred_language: preferredLanguage ?? null,
@@ -118,6 +122,7 @@ export const DestinationValidationCompact = ({
     budgetUnlimited,
     data,
     destinationId,
+    citizenshipCode,
     durationDays,
     preferredLanguage,
     riskTolerance,

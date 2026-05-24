@@ -219,4 +219,5 @@ export type DestinationValidationResponse = {
 export type RecommendationFilters = {
   month: number;
   region?: string | null;
+  citizenship_code?: string | null;
 };

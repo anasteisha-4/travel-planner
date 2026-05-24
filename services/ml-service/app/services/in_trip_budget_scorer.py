@@ -28,6 +28,33 @@ FIXED_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Baseline constants are used only when a pre-trip prediction or enough real
+# expenses are missing. They encode conservative UX assumptions rather than
+# learned parameters; the active LightGBM model then predicts residuals.
+FALLBACK_DAILY_BY_TIER_USD = {
+    "hostel": 65.0,
+    "budget": 85.0,
+    "mid": 125.0,
+    "luxury": 260.0,
+}
+DESTINATION_TRANSPORT_PRETRIP_SHARE = 0.35
+DESTINATION_TRANSPORT_TOTAL_SHARE = 0.12
+DESTINATION_TRANSPORT_ABSOLUTE_FLOOR_USD = 120.0
+FALLBACK_BREAKDOWN_SHARES = {
+    "accommodation": 0.35,
+    "meals": 0.30,
+    "transport": 0.15,
+    "activities": 0.10,
+    "travel_to_destination": 0.10,
+}
+OBSERVED_TEMPO_MAX_WEIGHT = 0.65
+ACTIVITY_REMAINING_PLAN_SHARE = 0.65
+SHOPPING_REMAINING_TOTAL_SHARE = 0.03
+OTHER_REMAINING_TOTAL_SHARE = 0.025
+UNCERTAINTY_BASE = 0.18
+UNCERTAINTY_REMAINING_DAYS_WEIGHT = 0.22
+UNCERTAINTY_NO_PRICE_EVIDENCE_ADDON = 0.10
+
 FEATURE_NAMES = [
     "duration_days",
     "elapsed_days",
@@ -159,7 +186,11 @@ def _is_destination_transport_paid(
     if expense.kind not in {"planning_once", "fixed_once"}:
         return False
     text = f"{expense.category} {expense.description or ''}"
-    large_transport_threshold = max(pretrip_travel_usd * 0.35, pretrip_total_mid * 0.12, 120.0)
+    large_transport_threshold = max(
+        pretrip_travel_usd * DESTINATION_TRANSPORT_PRETRIP_SHARE,
+        pretrip_total_mid * DESTINATION_TRANSPORT_TOTAL_SHARE,
+        DESTINATION_TRANSPORT_ABSOLUTE_FLOOR_USD,
+    )
     return bool(FIXED_KEYWORDS.search(text)) or expense.amount_usd >= large_transport_threshold
 
 
@@ -174,13 +205,7 @@ def _breakdown_usd(request: BudgetMonitorRequest, key: str) -> float:
 def _fallback_total_mid_usd(request: BudgetMonitorRequest, category_spent: dict[str, float]) -> float:
     current = sum(category_spent.values())
     duration, _, _ = trip_days(request.start_date, request.end_date, request.as_of_date)
-    tier_daily = {
-        "hostel": 65.0,
-        "budget": 85.0,
-        "mid": 125.0,
-        "luxury": 260.0,
-    }
-    daily = tier_daily.get(request.accommodation_tier, tier_daily["mid"])
+    daily = FALLBACK_DAILY_BY_TIER_USD.get(request.accommodation_tier, FALLBACK_DAILY_BY_TIER_USD["mid"])
     formula_default = daily * max(request.people_count, 1) * max(duration, 1)
     return max(current, formula_default)
 
@@ -269,11 +294,11 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     pretrip_travel = _breakdown_usd(request, "travel_to_destination")
 
     if request.pre_trip_prediction is None:
-        pretrip_accommodation = pretrip_total_mid * 0.35
-        pretrip_meals = pretrip_total_mid * 0.30
-        pretrip_transport = pretrip_total_mid * 0.15
-        pretrip_activities = pretrip_total_mid * 0.10
-        pretrip_travel = pretrip_total_mid * 0.10
+        pretrip_accommodation = pretrip_total_mid * FALLBACK_BREAKDOWN_SHARES["accommodation"]
+        pretrip_meals = pretrip_total_mid * FALLBACK_BREAKDOWN_SHARES["meals"]
+        pretrip_transport = pretrip_total_mid * FALLBACK_BREAKDOWN_SHARES["transport"]
+        pretrip_activities = pretrip_total_mid * FALLBACK_BREAKDOWN_SHARES["activities"]
+        pretrip_travel = pretrip_total_mid * FALLBACK_BREAKDOWN_SHARES["travel_to_destination"]
 
     destination_transport_paid = sum(
         expense.amount_usd
@@ -284,9 +309,8 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     recurring_expected_components = pretrip_meals + pretrip_transport + pretrip_activities
     daily_recurring_expected = recurring_expected_components / max(duration, 1)
     observed_daily_recurring = recurring_spent / max(elapsed, 1)
-    blended_daily = observed_daily_recurring * min(0.65, elapsed / max(duration, 1)) + daily_recurring_expected * (
-        1 - min(0.65, elapsed / max(duration, 1))
-    )
+    observed_weight = min(OBSERVED_TEMPO_MAX_WEIGHT, elapsed / max(duration, 1))
+    blended_daily = observed_daily_recurring * observed_weight + daily_recurring_expected * (1 - observed_weight)
     recurring_total_expected = max(recurring_expected_components, 1.0)
     food_share = pretrip_meals / recurring_total_expected
     transport_share = pretrip_transport / recurring_total_expected
@@ -308,7 +332,7 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     )
     activity_remaining = max(
         itinerary_fee_remaining,
-        (pretrip_activities / max(duration, 1)) * remaining * 0.65,
+        (pretrip_activities / max(duration, 1)) * remaining * ACTIVITY_REMAINING_PLAN_SHARE,
     )
 
     category_remaining = {
@@ -316,12 +340,16 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
         "transport": max(0.0, travel_remaining + blended_recurring_remaining * transport_share),
         "food": max(0.0, blended_recurring_remaining * food_share),
         "entertainment": max(activity_remaining, blended_recurring_remaining * activities_share),
-        "shopping": max(0.0, pretrip_total_mid * 0.03 * (remaining / max(duration, 1))),
-        "other": max(0.0, pretrip_total_mid * 0.025 * (remaining / max(duration, 1))),
+        "shopping": max(0.0, pretrip_total_mid * SHOPPING_REMAINING_TOTAL_SHARE * (remaining / max(duration, 1))),
+        "other": max(0.0, pretrip_total_mid * OTHER_REMAINING_TOTAL_SHARE * (remaining / max(duration, 1))),
     }
     remaining_mid = sum(category_remaining.values())
     remaining_mid = max(0.0, remaining_mid)
-    uncertainty = 0.18 + 0.22 * (remaining / max(duration, 1)) + (0.10 if itinerary_fee_remaining == 0 else 0.0)
+    uncertainty = (
+        UNCERTAINTY_BASE
+        + UNCERTAINTY_REMAINING_DAYS_WEIGHT * (remaining / max(duration, 1))
+        + (UNCERTAINTY_NO_PRICE_EVIDENCE_ADDON if itinerary_fee_remaining == 0 else 0.0)
+    )
     remaining_min = max(0.0, remaining_mid * (1 - uncertainty))
     remaining_max = max(remaining_mid, remaining_mid * (1 + uncertainty))
 

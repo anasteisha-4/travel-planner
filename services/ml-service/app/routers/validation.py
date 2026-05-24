@@ -12,6 +12,28 @@ from app.services.currency import convert_usd, normalize_currency
 
 router = APIRouter()
 
+# Validation is intentionally warning-based: hard exclusion already happens in
+# recommendation filtering, while this endpoint explains concrete booking risks.
+VISA_WARNING_THRESHOLD = 0.60
+POOR_SEASON_THRESHOLD = 0.40
+EXTREME_HEAT_C = 35.0
+FREEZING_TEMP_C = 0.0
+MONSOON_PRECIP_MM = 200.0
+VERY_HUMID_PCT = 85.0
+LOW_LANGUAGE_COMFORT_THRESHOLD = 0.35
+TIGHT_DAILY_BUDGET_RATIO = 0.70
+
+# Risk tolerance maps to warning severity, not to recommendation exclusion.
+# Values are wider than the recommender hard filters so cautious users get an
+# earlier warning, while tolerant users are only warned for materially low scores.
+SAFETY_WARNING_THRESHOLDS: dict[int, tuple[float, float]] = {
+    1: (0.45, 0.62),
+    2: (0.45, 0.62),
+    3: (0.30, 0.45),
+    4: (0.20, 0.35),
+    5: (0.20, 0.35),
+}
+
 
 class ValidateTripRequest(BaseModel):
     destination_id: uuid.UUID
@@ -50,8 +72,7 @@ def _language_column(language: str | None) -> tuple[str, str] | None:
 
 def _safety_severity(safety_score: float, risk_tolerance: int | None) -> str | None:
     tolerance = risk_tolerance or 3
-    high_threshold = 0.45 if tolerance <= 2 else 0.30 if tolerance == 3 else 0.20
-    medium_threshold = 0.62 if tolerance <= 2 else 0.45 if tolerance == 3 else 0.35
+    high_threshold, medium_threshold = SAFETY_WARNING_THRESHOLDS.get(tolerance, SAFETY_WARNING_THRESHOLDS[3])
     if safety_score < high_threshold:
         return "high"
     if safety_score < medium_threshold:
@@ -112,7 +133,7 @@ def validate_trip(
                         ),
                     )
                 )
-        if float(visa_row.visa_score) < 0.6:
+        if float(visa_row.visa_score) < VISA_WARNING_THRESHOLD:
             severity = "high" if float(visa_row.visa_score) == 0.0 else "medium"
             warnings.append(
                 ValidationWarning(
@@ -148,18 +169,18 @@ def validate_trip(
         if season_row.avg_humidity_pct is not None:
             info["avg_humidity_pct"] = float(season_row.avg_humidity_pct)
 
-        if float(season_row.season_score) < 0.4:
+        if float(season_row.season_score) < POOR_SEASON_THRESHOLD:
             reasons: list[str] = []
             t = season_row.avg_temp_c
             p = season_row.avg_precipitation_mm
             h = season_row.avg_humidity_pct
-            if t is not None and float(t) > 35:
+            if t is not None and float(t) > EXTREME_HEAT_C:
                 reasons.append(f"extreme heat ({float(t):.0f}°C)")
-            elif t is not None and float(t) < 0:
+            elif t is not None and float(t) < FREEZING_TEMP_C:
                 reasons.append(f"freezing temperatures ({float(t):.0f}°C)")
-            if p is not None and float(p) > 200:
+            if p is not None and float(p) > MONSOON_PRECIP_MM:
                 reasons.append(f"monsoon season ({float(p):.0f}mm/month)")
-            if h is not None and float(h) > 85:
+            if h is not None and float(h) > VERY_HUMID_PCT:
                 reasons.append(f"very high humidity ({float(h):.0f}%)")
             if not reasons:
                 reasons = (
@@ -213,7 +234,7 @@ def validate_trip(
             script_difficulty = _script_difficulty_score(language_row.script_difficulty)
             if script_difficulty is not None:
                 info["script_difficulty"] = script_difficulty
-            if comfort_score < 0.35:
+            if comfort_score < LOW_LANGUAGE_COMFORT_THRESHOLD:
                 warnings.append(
                     ValidationWarning(
                         type="language",
@@ -238,7 +259,7 @@ def validate_trip(
             info["avg_daily_cost"] = avg_daily_display
             info["budget_per_day"] = budget_per_day_display
             info["display_currency"] = display_currency
-            if request.budget_per_day_usd < avg_daily * 0.7:
+            if request.budget_per_day_usd < avg_daily * TIGHT_DAILY_BUDGET_RATIO:
                 avg_text = (
                     f"{avg_daily_display:.0f} {display_currency}/day"
                     if avg_daily_display is not None

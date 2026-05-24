@@ -7,12 +7,13 @@ import {
   CROWD_LABELS,
   DURATION_OPTIONS,
   LANGUAGE_OPTIONS,
-  RISK_TOLERANCE_LABELS,
   REST_LEVEL_OPTIONS,
+  RISK_TOLERANCE_LABELS,
   TRAVEL_TYPES,
   TRIP_DURATIONS,
   VISA_OPTIONS,
 } from '@/shared/config';
+import { getCountryFlag } from '@/shared/lib';
 
 const getDurationLabel = (id: string) =>
   TRIP_DURATIONS.find((d) => d.id === id)?.label ??
@@ -29,7 +30,9 @@ const VISA_ICONS: Record<string, string> = {
 };
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{children}</p>
+  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+    {children}
+  </p>
 );
 
 const Divider = () => <div className="my-3 h-px bg-[hsl(var(--surface-field))]" />;
@@ -108,11 +111,28 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
       )}
 
       {vacationPrefs.length > 0 &&
-        (hasBudget || restLevel || preferences.typical_duration || preferences.origin_city_name) && <Divider />}
+        (hasBudget ||
+          restLevel ||
+          preferences.typical_duration ||
+          preferences.origin_city_name) && <Divider />}
 
       {/* Бюджет и поездки */}
-      {(hasBudget || restLevel || preferences.typical_duration || preferences.origin_city_name) && (
+      {(hasBudget ||
+        restLevel ||
+        preferences.typical_duration ||
+        preferences.origin_city_name ||
+        preferences.citizenship_code) && (
         <div className="flex flex-col gap-0">
+          {preferences.citizenship_code && (
+            <div className="flex items-center justify-between py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                📕 Гражданство
+              </span>
+              <span className="text-[14px] font-semibold text-foreground">
+                {getCountryFlag(preferences.citizenship_code) + ' ' + preferences.citizenship_code}
+              </span>
+            </div>
+          )}
           {preferences.origin_city_name && (
             <div className="flex items-center justify-between py-2">
               <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -123,9 +143,10 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               </span>
             </div>
           )}
-          {preferences.origin_city_name && (hasBudget || restLevel || preferences.typical_duration) && (
-            <div className="h-px bg-[hsl(var(--surface-field))]" />
-          )}
+          {preferences.origin_city_name &&
+            (hasBudget || restLevel || preferences.typical_duration) && (
+              <div className="h-px bg-[hsl(var(--surface-field))]" />
+            )}
 
           {hasBudget && (
             <div className="flex items-center justify-between py-2">
@@ -134,12 +155,18 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               </span>
               <div className="text-right">
                 <span className="text-[14px] font-bold text-foreground">
-                  {formatBudgetRange(preferences.budget_min, preferences.budget_max, budgetConfig.format)}
+                  {formatBudgetRange(
+                    preferences.budget_min,
+                    preferences.budget_max,
+                    budgetConfig.format
+                  )}
                 </span>
               </div>
             </div>
           )}
-          {hasBudget && (restLevel || preferences.typical_duration) && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+          {hasBudget && (restLevel || preferences.typical_duration) && (
+            <div className="h-px bg-[hsl(var(--surface-field))]" />
+          )}
 
           {restLevel && (
             <div className="flex items-center justify-between py-2">
@@ -149,7 +176,9 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
               <span className="text-[14px] font-semibold text-foreground">{restLevel.label}</span>
             </div>
           )}
-          {restLevel && preferences.typical_duration && <div className="h-px bg-[hsl(var(--surface-field))]" />}
+          {restLevel && preferences.typical_duration && (
+            <div className="h-px bg-[hsl(var(--surface-field))]" />
+          )}
 
           {preferences.typical_duration && (
             <div className="flex items-center justify-between py-2">
@@ -212,7 +241,9 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
                       <span className="text-[16px] leading-none">
                         {VISA_ICONS[preferences.visa_tolerance!] ?? '🌐'}
                       </span>
-                      <span className="text-[13px] font-semibold text-foreground">{visa.label}</span>
+                      <span className="text-[13px] font-semibold text-foreground">
+                        {visa.label}
+                      </span>
                     </div>
                   </div>
                 ) : null;
@@ -284,10 +315,7 @@ export const PreferencesView = ({ preferences }: { preferences: Partial<UserProf
           <Divider />
           <div className="rounded-xl bg-[hsl(var(--surface-muted))] px-3 py-2.5">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Заметки для маршрутов
-            </p>
-            <p className="mb-2 text-[12px] font-semibold leading-snug text-muted-foreground">
-              Эти детали помогают точнее подбирать темп, активности и проверки поездки.
+              Заметки
             </p>
             <p className="text-[13px] text-muted-foreground">{preferences.free_text_notes}</p>
           </div>

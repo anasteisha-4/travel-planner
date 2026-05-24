@@ -458,6 +458,7 @@ export const DestinationDetailSheet = ({
   };
 
   const currency = profileCached?.preferred_currency ?? 'RUB';
+  const citizenshipCode = profileCached?.citizenship_code ?? 'RU';
   const budgetPredictionParams = destination
     ? {
         destination_id: destination.destination_id,
@@ -479,7 +480,7 @@ export const DestinationDetailSheet = ({
   const destinationValidationParams = destination
     ? {
         destination_id: destination.destination_id,
-        citizenship_code: 'RU',
+        citizenship_code: citizenshipCode,
         travel_month: month,
         budget_per_day_usd: budgetPerDayUsd,
         display_currency: currency,

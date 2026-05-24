@@ -1,6 +1,6 @@
 import { apiClient } from '@/shared/api';
 
-import type { DestinationDetail, DestinationSearchResult } from '../model/types';
+import type { CitizenshipOption, DestinationDetail, DestinationSearchResult } from '../model/types';
 
 export const destinationApi = {
   searchDestinations: async (query: string, limit = 10): Promise<DestinationSearchResult[]> => {
@@ -18,6 +18,11 @@ export const destinationApi = {
 
   getDestination: async (id: string): Promise<DestinationDetail> => {
     const response = await apiClient.get(`/api/destinations/${id}`);
+    return response.data;
+  },
+
+  getCitizenships: async (): Promise<CitizenshipOption[]> => {
+    const response = await apiClient.get('/api/destinations/citizenships');
     return response.data;
   },
 };

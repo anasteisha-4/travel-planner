@@ -76,6 +76,7 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             "origin_city_name": None,
             "origin_lat": None,
             "origin_lng": None,
+            "citizenship_code": "RU",
             "free_text_notes": None,
         }
     else:
@@ -104,6 +105,7 @@ def _get_profile_sync(db: Session, user_id: uuid.UUID) -> dict:
             "origin_city_name": m.get("origin_city_name"),
             "origin_lat": float(m["origin_lat"]) if m.get("origin_lat") else None,
             "origin_lng": float(m["origin_lng"]) if m.get("origin_lng") else None,
+            "citizenship_code": (m.get("citizenship_code") or "RU").upper(),
             "free_text_notes": m.get("free_text_notes"),
         }
 

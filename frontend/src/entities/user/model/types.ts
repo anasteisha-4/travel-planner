@@ -27,6 +27,7 @@ export type UserProfileV2 = {
   origin_city_name: string | null;
   origin_lat: number | null;
   origin_lng: number | null;
+  citizenship_code: string | null;
   liked_destination_ids: string[] | null;
   liked_destination_names: string[] | null;
   risk_tolerance: number | null;
@@ -46,7 +47,7 @@ export type OnboardingStepData = Partial<
   Pick<UserProfileV2,
     | 'vacation_preferences_ranked' | 'preferred_currency' | 'budget_min' | 'budget_max'
     | 'rest_level' | 'typical_duration' | 'origin_city_id' | 'origin_city_name' | 'origin_lat' | 'origin_lng'
-    | 'liked_destination_ids' | 'liked_destination_names' | 'risk_tolerance' | 'visa_tolerance' | 'language_comfort'
+    | 'citizenship_code' | 'liked_destination_ids' | 'liked_destination_names' | 'risk_tolerance' | 'visa_tolerance' | 'language_comfort'
     | 'crowd_preference' | 'climate_preferences' | 'free_text_notes'
   >
 >;

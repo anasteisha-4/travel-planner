@@ -85,6 +85,7 @@ class UserProfile(BaseModel):
     origin_city_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     origin_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     origin_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    citizenship_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     liked_destination_ids: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     liked_destination_names: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     risk_tolerance: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)

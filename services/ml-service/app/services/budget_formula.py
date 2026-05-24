@@ -10,7 +10,13 @@ If any constant changes here, training and inference stay in sync automatically.
 import json
 import math
 
-# Accommodation cost as fraction of avg_daily_cost_usd per room per night.
+# Formula constants are deliberately shared by training and inference. They are
+# calibrated against the same synthetic budget actuals used for the diploma
+# experiment, while remaining interpretable when the ML residual model is absent.
+
+# Accommodation cost as fraction of destination avg_daily_cost_usd per room per
+# night. Stored tier-specific hotel costs from destination_costs override these
+# anchors when present; the fractions only cover missing/inferred data.
 ACCOMMODATION_DAILY_FRACTION: dict[str, float] = {
     "hostel": 0.18,
     "budget": 0.35,
@@ -18,7 +24,9 @@ ACCOMMODATION_DAILY_FRACTION: dict[str, float] = {
     "luxury": 1.60,
 }
 
-# Meals fraction of avg_daily per person per day (by tier).
+# Meals fraction of avg_daily per person per day. The gap between economy and
+# luxury is intentionally smaller than accommodation because food costs scale
+# less sharply than hotel class in Numbeo-derived city data.
 MEALS_DAILY_FRACTION: dict[str, float] = {
     "hostel": 0.25,
     "budget": 0.30,
@@ -26,13 +34,16 @@ MEALS_DAILY_FRACTION: dict[str, float] = {
     "luxury": 0.55,
 }
 
-# Transport and activities fractions — fixed across tiers.
+# Local transport and activities are fixed shares because the source catalog has
+# destination-level daily cost but sparse category-level prices for many cities.
 TRANSPORT_DAILY_FRACTION: float = 0.12
 ACTIVITIES_DAILY_FRACTION: float = 0.08
 
 ACC_TIER_ENCODING: dict[str, int] = {"hostel": 0, "budget": 1, "mid": 2, "luxury": 3}
 
-# Round-trip economy fare calibrated to 2024-2025 averages (USD per person).
+# Round-trip economy fallback by great-circle distance, in USD per person. The
+# brackets are intentionally coarse: they are only used when cached fare data is
+# unavailable and prevent the budget model from treating unknown travel as free.
 _TRAVEL_COST_BRACKETS: list[tuple[float, float]] = [
     (80, 0),
     (250, 25),
@@ -44,6 +55,8 @@ _TRAVEL_COST_BRACKETS: list[tuple[float, float]] = [
     (float("inf"), 980),
 ]
 
+# Airfare seasonality uses a small peak-season uplift for summer and New Year
+# months; all other months keep a neutral multiplier.
 _TRAVEL_SEASON_MULT: dict[int, float] = {6: 1.15, 7: 1.30, 8: 1.30, 12: 1.40, 1: 1.20}
 
 _EARTH_RADIUS_KM = 6371.0

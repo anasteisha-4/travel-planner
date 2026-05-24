@@ -12,17 +12,29 @@ import { AppInput, FieldLabel } from '@/shared/ui';
 import { onboardingV2Api } from '../api/onboarding-v2.api';
 import type { DestinationSearchResult } from '../api/onboarding-v2.api';
 import type { DurationOption } from '../model/types';
+import { CitizenshipSearch } from './CitizenshipSearch';
 
 type Props = {
   cityName: string;
+  citizenshipCode: string | null;
   duration: DurationOption | null;
   onSelect: (city: { name: string; lat: number | null; lng: number | null }) => void;
+  onCitizenshipChange: (code: string) => void;
   onDurationChange: (v: DurationOption | null) => void;
   cityError?: string;
   durationError?: string;
 };
 
-export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange, cityError, durationError }: Props) => {
+export const StepOriginCity = ({
+  cityName,
+  citizenshipCode,
+  duration,
+  onSelect,
+  onCitizenshipChange,
+  onDurationChange,
+  cityError,
+  durationError,
+}: Props) => {
   const { play } = useHapticFeedback();
   const dropdownScrollHaptics = useScrollHaptics();
   const [inputValue, setInputValue] = useState(cityName);
@@ -124,6 +136,8 @@ export const StepOriginCity = ({ cityName, duration, onSelect, onDurationChange,
           </div>
         )}
       </div>
+
+      <CitizenshipSearch citizenshipCode={citizenshipCode} onSelect={onCitizenshipChange} />
 
       <div>
         <FieldLabel>Длительность поездок</FieldLabel>

@@ -130,7 +130,17 @@ export const RecommendationsPage = () => {
   const trackedEmptyStates = useRef<Set<string>>(new Set());
   const trackedRecommendationExposures = useRef<Set<string>>(new Set());
 
-  const { data, isLoading, isFetching, isError, refetch } = useRecommendations({ month, region });
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: profileApi.getProfile,
+    retry: 1,
+  });
+  const citizenshipCode = profile?.citizenship_code ?? 'RU';
+  const { data, isLoading, isFetching, isError, refetch } = useRecommendations({
+    month,
+    region,
+    citizenship_code: citizenshipCode,
+  });
   const showLoadingState = isLoading || (isFetching && !data);
   const displayedLoadingMessageIndex = showLoadingState ? loadingMessageIndex : 0;
   const { data: checkedDestinationDetail } = useQuery({
@@ -149,15 +159,10 @@ export const RecommendationsPage = () => {
         ? {
             destination_id: selectedCheckResult.id,
             travel_month: month,
-            citizenship_code: 'RU',
+            citizenship_code: citizenshipCode,
           }
         : null
     );
-  useQuery({
-    queryKey: ['profile'],
-    queryFn: profileApi.getProfile,
-    retry: 1,
-  });
 
   const checkedDestination = selectedCheckResult
     ? getCheckedDestination(

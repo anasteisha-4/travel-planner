@@ -219,6 +219,7 @@ export const TripDetailPage = () => {
             travelMonth={getTravelMonth(validationStartDate)}
             budgetPerDayUsd={validationBudgetPerDayUsd}
             budgetUnlimited={isValidationBudgetUnlimited}
+            citizenshipCode={profile?.citizenship_code}
             durationDays={validationDurationDays}
             riskTolerance={profile?.risk_tolerance}
             preferredLanguage={

@@ -29,7 +29,7 @@ import { profileApi } from '@/features/profile';
 const STEP_META = [
   { title: 'Виды отдыха', subtitle: 'Расскажите о себе' },
   { title: 'Бюджет', subtitle: 'Финансовые предпочтения' },
-  { title: 'Откуда летаете', subtitle: 'Город и длительность' },
+  { title: 'Откуда летаете', subtitle: 'Город, гражданство и длительность' },
   { title: 'Любимые места', subtitle: 'Ваши фавориты' },
   { title: 'Безопасность и визы', subtitle: 'Ограничения и комфорт' },
   { title: 'Климат и атмосфера', subtitle: 'Финальные штрихи' },
@@ -46,6 +46,7 @@ type EditState = {
   originCityName: string;
   originLat: number | null;
   originLng: number | null;
+  citizenshipCode: string | null;
   likedDests: LikedDest[];
   riskTolerance: number | null;
   visaTolerance: VisaTolerance | null;
@@ -66,6 +67,7 @@ const profileToEditState = (p: Partial<UserProfileV2>): EditState => ({
   originCityName: p.origin_city_name ?? '',
   originLat: p.origin_lat ?? null,
   originLng: p.origin_lng ?? null,
+  citizenshipCode: p.citizenship_code ?? null,
   likedDests: (p.liked_destination_ids ?? []).map((id, i) => ({
     id,
     name: p.liked_destination_names?.[i] ?? id,
@@ -147,6 +149,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
         initial.restLevel !== state.restLevel ? 'rest_level' : null,
         initial.typicalDuration !== state.typicalDuration ? 'typical_duration' : null,
         initial.originCityName !== state.originCityName ? 'origin_city_name' : null,
+        initial.citizenshipCode !== state.citizenshipCode ? 'citizenship_code' : null,
         hasArrayChanged(
           initial.likedDests.map((dest) => dest.id),
           state.likedDests.map((dest) => dest.id)
@@ -199,6 +202,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
           [
             'vacation_preferences_ranked',
             'liked_destination_ids',
+            'citizenship_code',
             'risk_tolerance',
             'visa_tolerance',
             'language_comfort',
@@ -235,6 +239,7 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
       origin_city_name: state.originCityName || undefined,
       origin_lat: state.originLat ?? undefined,
       origin_lng: state.originLng ?? undefined,
+      citizenship_code: state.citizenshipCode ?? undefined,
       liked_destination_ids: state.likedDests.map((d) => d.id),
       liked_destination_names: state.likedDests.map((d) => d.name),
       risk_tolerance: state.riskTolerance ?? undefined,
@@ -306,10 +311,12 @@ export const ProfileEditWizard = ({ open, onOpenChange, initialData, onSaved }: 
             {step === 3 && (
               <StepOriginCity
                 cityName={state.originCityName}
+                citizenshipCode={state.citizenshipCode}
                 duration={state.typicalDuration}
                 onSelect={({ name, lat, lng }) =>
                   update({ originCityId: null, originCityName: name, originLat: lat, originLng: lng })
                 }
+                onCitizenshipChange={(code) => update({ citizenshipCode: code })}
                 onDurationChange={(v) => update({ typicalDuration: v as DurationOption | null })}
               />
             )}

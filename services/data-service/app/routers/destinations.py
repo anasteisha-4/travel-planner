@@ -1,8 +1,9 @@
+import pycountry
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.deps import get_internal_db
-from app.models import Destination, NameTranslationEntity
+from app.models import Destination, NameTranslationEntity, VisaRule
 from app.services.destination_search import (
     DestinationSearchCandidate,
     destination_search_aliases,
@@ -137,6 +138,21 @@ def get_destinations_by_ids(
         for i in ids
         if i in dest_map
     ]
+
+
+@router.get("/citizenships")
+def list_supported_citizenships(db: Session = Depends(get_internal_db)):
+    rows = db.query(VisaRule.citizenship_code).filter(VisaRule.citizenship_code.isnot(None)).distinct().all()
+    citizenships = []
+    for row in rows:
+        code = str(row.citizenship_code or "").strip().upper()
+        if len(code) != 2 or not code.isalpha():
+            continue
+        country = pycountry.countries.get(alpha_2=code)
+        if not country:
+            continue
+        citizenships.append({"code": code, "name": country.name})
+    return sorted(citizenships, key=lambda item: (item["name"], item["code"]))
 
 
 @router.get("/{destination_id}")

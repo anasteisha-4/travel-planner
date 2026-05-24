@@ -1,6 +1,7 @@
 """Itinerary generation using POI scoring and constrained template optimization."""
 
 import hashlib
+import itertools
 import math
 import random
 import re
@@ -28,6 +29,9 @@ _LOW_SIGNAL_NAMES = {
     "странная девушка",
 }
 
+# Category priors separate "destination-defining" POI (heritage, museums,
+# nature) from supporting stops (shopping, nightlife). They are small enough to
+# be overridden by user preferences and POI quality.
 _CATEGORY_PRIOR = {
     "heritage": 1.1,
     "museum": 1.0,
@@ -41,6 +45,33 @@ _CATEGORY_PRIOR = {
     "culture": 0.2,
     "nightlife": 0.15,
 }
+
+_ROUTE_TRAVEL_MINUTE_PENALTY = 0.015
+_ROUTE_CATEGORY_REPEAT_PENALTY = 0.12
+_MAX_CROSS_DAY_SWAP_ATTEMPTS = 700
+_ROUTE_DISTANCE_PENALTY_CAP = 2.0
+_ROUTE_DISTANCE_PENALTY_DIVISOR_KM = 12.0
+_POI_MIN_SCORE = 1.65
+_DEFAULT_DESTINATION_RADIUS_KM = 35.0
+_MIN_DESTINATION_RADIUS_KM = 12.0
+_MAX_DESTINATION_RADIUS_KM = 60.0
+_DESTINATION_RADIUS_MULTIPLIER = 1.6
+_ISLAND_DESTINATION_RADIUS_KM = 120.0
+_MIN_CANDIDATE_QUERY_LIMIT = 300
+_MAX_CANDIDATE_QUERY_LIMIT = 1800
+_CANDIDATE_POOL_MULTIPLIER = 18
+_CROWD_INDEX_HIGH_THRESHOLD = 0.72
+_LOW_POPULARITY_IN_CROWDED_DESTINATION = 0.35
+_CROWDED_DESTINATION_LOW_POI_PENALTY = 0.25
+_SAME_DAY_CATEGORY_REPEAT_PENALTY = 0.35
+_SAME_DAY_CATEGORY_DIVERSITY_BONUS = 0.25
+_PAID_POI_BUDGET_SHARE_THRESHOLD = 0.08
+_PAID_POI_BUDGET_PENALTY = 0.7
+_DWELL_BUFFER_MINUTES = 20
+_ASSUMED_ROUTE_SPEED_KMH = 20.0
+_TRAVEL_TIME_FIXED_BUFFER_MINUTES = 5
+_MIN_TRAVEL_MINUTES = 5
+_MAX_TRAVEL_MINUTES = 75
 
 
 def generate_itinerary(
@@ -265,8 +296,8 @@ def poi_relevance_score(
     fee = getattr(poi, "entrance_fee_usd", None)
     if fee and trip_budget is not None:
         party_fee = float(fee) * max(people_count, 1)
-        if party_fee > trip_budget * 0.08:
-            score -= 0.7
+        if party_fee > trip_budget * _PAID_POI_BUDGET_SHARE_THRESHOLD:
+            score -= _PAID_POI_BUDGET_PENALTY
     return score
 
 
@@ -364,19 +395,28 @@ def rest_day_numbers(duration_days: int, rest_days_count: int) -> set[int]:
 
 def _destination_radius_km(destination: Any | None) -> float:
     if destination is None:
-        return 35.0
+        return _DEFAULT_DESTINATION_RADIUS_KM
     name = str(getattr(destination, "name", "") or "").casefold()
     radius_m = int(getattr(destination, "radius_m", 0) or 0)
-    base = max(12.0, min(60.0, radius_m / 1000 * 1.6 if radius_m else 35.0))
+    base = max(
+        _MIN_DESTINATION_RADIUS_KM,
+        min(
+            _MAX_DESTINATION_RADIUS_KM,
+            radius_m / 1000 * _DESTINATION_RADIUS_MULTIPLIER if radius_m else _DEFAULT_DESTINATION_RADIUS_KM,
+        ),
+    )
     if any(token in name for token in ("island", "islands", "canary", "остров")):
-        return max(base, 120.0)
+        return max(base, _ISLAND_DESTINATION_RADIUS_KM)
     return base
 
 
 def _candidate_query_limit(duration_days: int, pace: str, rest_days_count: int) -> int:
     max_per_day = {"relaxed": 3, "standard": 4, "intense": 5}.get(pace, 4)
     active_days = max(1, duration_days - min(rest_days_count, duration_days))
-    return max(300, min(1800, active_days * max_per_day * 18))
+    return max(
+        _MIN_CANDIDATE_QUERY_LIMIT,
+        min(_MAX_CANDIDATE_QUERY_LIMIT, active_days * max_per_day * _CANDIDATE_POOL_MULTIPLIER),
+    )
 
 
 def _dedupe_pois(pois: list[Any]) -> list[Any]:
@@ -430,9 +470,13 @@ def _ranked_destination_pois(
             - distance_penalty
             + min(0.7, prior.get(str(getattr(poi, "id", "")), 0) * 0.18)
         )
-        if crowd_index is not None and crowd_index >= 0.72 and float(getattr(poi, "popularity_score", 0) or 0) < 0.35:
-            score -= 0.25
-        if score < 1.65:
+        if (
+            crowd_index is not None
+            and crowd_index >= _CROWD_INDEX_HIGH_THRESHOLD
+            and float(getattr(poi, "popularity_score", 0) or 0) < _LOW_POPULARITY_IN_CROWDED_DESTINATION
+        ):
+            score -= _CROWDED_DESTINATION_LOW_POI_PENALTY
+        if score < _POI_MIN_SCORE:
             continue
         ranked.append((score, poi))
     ranked.sort(key=lambda item: item[0], reverse=True)
@@ -585,8 +629,22 @@ def build_personalized_variant(
             }
         )
 
+    optimization = _optimize_variant_days(
+        days=days,
+        start_date=start_date,
+        day_start_time=day_start_time,
+        day_end_time=day_end_time,
+        preferred_activities=preferred_activities,
+        trip_budget=trip_budget,
+        people_count=people_count,
+        min_per_day=min_per_day,
+    )
+    days = optimization["days"]
     signature = route_signature(days)
     total_poi = sum(len(day["items"]) for day in days)
+    total_score = float(optimization["total_score"])
+    total_travel = int(optimization["travel_overhead_minutes"])
+    opening_warnings = int(optimization["opening_hours_warnings"])
     return {
         "destination_id": destination_id,
         "duration_days": duration_days,
@@ -599,14 +657,19 @@ def build_personalized_variant(
         "source": "personalized-orienteering-heuristic",
         "has_template": True,
         "score_summary": {
-            "algorithm": "greedy_team_orienteering_with_time_windows_v2",
+            "algorithm": "greedy_team_orienteering_with_time_windows_v3",
             "mathematical_model": "maximize weighted POI utility subject to day time windows, rest days, deduplication, route-distance penalties, budget and opening-hour constraints",
+            "optimizer": optimization["optimizer"],
             "objective_weights": {
                 "preference_match": 1.4,
                 "poi_popularity_quality": 1.9,
                 "category_prior": 1.1,
                 "trajectory_prior": 0.18,
-                "route_distance_penalty": "min(2.0, distance_km / 12)",
+                "route_distance_penalty": (
+                    f"min({_ROUTE_DISTANCE_PENALTY_CAP}, distance_km / {_ROUTE_DISTANCE_PENALTY_DIVISOR_KM:g})"
+                ),
+                "local_search_travel_penalty_per_minute": _ROUTE_TRAVEL_MINUTE_PENALTY,
+                "local_search_category_repeat_penalty": _ROUTE_CATEGORY_REPEAT_PENALTY,
                 "destination_crowd_penalty": 0.25,
             },
             "total_pois": total_poi,
@@ -616,6 +679,14 @@ def build_personalized_variant(
             "opening_hours_violations": opening_warnings,
             "rest_days_count": len(rest_days),
             "avg_relevance": round(total_score / max(total_poi, 1), 4),
+            "route_optimization": {
+                "same_day_reorders": optimization["same_day_reorders"],
+                "cross_day_swaps": optimization["cross_day_swaps"],
+                "travel_before_minutes": optimization["travel_before_minutes"],
+                "travel_after_minutes": optimization["travel_overhead_minutes"],
+                "objective_before": optimization["objective_before"],
+                "objective_after": optimization["objective_after"],
+            },
             "candidate_pool_size": len(candidate_pois),
             "trajectories_available": trajectories_available,
             "trajectory_prior_poi_count": len(trajectory_prior),
@@ -651,6 +722,341 @@ def _top_route_categories(days: list[dict]) -> list[str]:
             category = str(item.get("category") or "urban").lower()
             counts[category] = counts.get(category, 0) + 1
     return [category for category, _count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:5]]
+
+
+def _optimize_variant_days(
+    *,
+    days: list[dict],
+    start_date: date | datetime | None,
+    day_start_time: time,
+    day_end_time: time,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+    min_per_day: int,
+) -> dict[str, Any]:
+    optimized_days = [_copy_day(day) for day in days]
+    before = _route_metrics(optimized_days)
+    same_day_reorders = 0
+    cross_day_swaps = 0
+
+    for day_index, day in enumerate(optimized_days):
+        if _is_rest_day(day):
+            continue
+        current_items = list(day.get("items", []))
+        best = _best_day_schedule(
+            current_items,
+            start_date=start_date,
+            day_idx=day_index,
+            day_start_time=day_start_time,
+            day_end_time=day_end_time,
+            preferred_activities=preferred_activities,
+            trip_budget=trip_budget,
+            people_count=people_count,
+            min_per_day=min_per_day,
+        )
+        if best is None:
+            continue
+        current_objective = _day_objective(current_items)
+        best_objective = _day_objective(best["items"])
+        if best_objective > current_objective + 1e-6:
+            _replace_day_items(day, best)
+            same_day_reorders += 1
+
+    swap_attempts = 0
+    improved = True
+    while improved and swap_attempts < _MAX_CROSS_DAY_SWAP_ATTEMPTS:
+        improved = False
+        active_indices = [
+            index
+            for index, day in enumerate(optimized_days)
+            if not _is_rest_day(day) and len(day.get("items", [])) >= min_per_day
+        ]
+        for left_pos, left_index in enumerate(active_indices):
+            if swap_attempts >= _MAX_CROSS_DAY_SWAP_ATTEMPTS:
+                break
+            for right_index in active_indices[left_pos + 1 :]:
+                if swap_attempts >= _MAX_CROSS_DAY_SWAP_ATTEMPTS:
+                    break
+                accepted = _try_improve_by_cross_day_swap(
+                    optimized_days=optimized_days,
+                    left_index=left_index,
+                    right_index=right_index,
+                    start_date=start_date,
+                    day_start_time=day_start_time,
+                    day_end_time=day_end_time,
+                    preferred_activities=preferred_activities,
+                    trip_budget=trip_budget,
+                    people_count=people_count,
+                    min_per_day=min_per_day,
+                )
+                swap_attempts += 1
+                if accepted:
+                    cross_day_swaps += 1
+                    improved = True
+                    break
+            if improved:
+                break
+
+    after = _route_metrics(optimized_days)
+    _strip_optimizer_fields(optimized_days)
+    return {
+        "days": optimized_days,
+        "optimizer": "bounded_local_search_v1",
+        "same_day_reorders": same_day_reorders,
+        "cross_day_swaps": cross_day_swaps,
+        "travel_before_minutes": before["travel_overhead_minutes"],
+        "travel_overhead_minutes": after["travel_overhead_minutes"],
+        "opening_hours_warnings": after["opening_hours_warnings"],
+        "total_score": after["total_score"],
+        "objective_before": round(before["objective"], 4),
+        "objective_after": round(after["objective"], 4),
+    }
+
+
+def _try_improve_by_cross_day_swap(
+    *,
+    optimized_days: list[dict],
+    left_index: int,
+    right_index: int,
+    start_date: date | datetime | None,
+    day_start_time: time,
+    day_end_time: time,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+    min_per_day: int,
+) -> bool:
+    left_day = optimized_days[left_index]
+    right_day = optimized_days[right_index]
+    left_items = list(left_day.get("items", []))
+    right_items = list(right_day.get("items", []))
+    current_objective = _day_objective(left_items) + _day_objective(right_items)
+
+    best_pair: tuple[float, dict[str, Any], dict[str, Any]] | None = None
+    for left_item_index, left_item in enumerate(left_items):
+        for right_item_index, right_item in enumerate(right_items):
+            candidate_left = list(left_items)
+            candidate_right = list(right_items)
+            candidate_left[left_item_index] = right_item
+            candidate_right[right_item_index] = left_item
+            left_schedule = _best_day_schedule(
+                candidate_left,
+                start_date=start_date,
+                day_idx=left_index,
+                day_start_time=day_start_time,
+                day_end_time=day_end_time,
+                preferred_activities=preferred_activities,
+                trip_budget=trip_budget,
+                people_count=people_count,
+                min_per_day=min_per_day,
+            )
+            if left_schedule is None:
+                continue
+            right_schedule = _best_day_schedule(
+                candidate_right,
+                start_date=start_date,
+                day_idx=right_index,
+                day_start_time=day_start_time,
+                day_end_time=day_end_time,
+                preferred_activities=preferred_activities,
+                trip_budget=trip_budget,
+                people_count=people_count,
+                min_per_day=min_per_day,
+            )
+            if right_schedule is None:
+                continue
+            objective = _day_objective(left_schedule["items"]) + _day_objective(right_schedule["items"])
+            if objective <= current_objective + 1e-6:
+                continue
+            if best_pair is None or objective > best_pair[0]:
+                best_pair = (objective, left_schedule, right_schedule)
+
+    if best_pair is None:
+        return False
+    _replace_day_items(left_day, best_pair[1])
+    _replace_day_items(right_day, best_pair[2])
+    return True
+
+
+def _best_day_schedule(
+    items: list[dict],
+    *,
+    start_date: date | datetime | None,
+    day_idx: int,
+    day_start_time: time,
+    day_end_time: time,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+    min_per_day: int,
+) -> dict[str, Any] | None:
+    if len(items) < min_per_day:
+        return None
+    best: dict[str, Any] | None = None
+    # Pace keeps day cardinality at <= 5; permutations are exact for the selected day POI set.
+    for ordered_items in itertools.permutations(items):
+        candidate = _reschedule_day_items(
+            list(ordered_items),
+            start_date=start_date,
+            day_idx=day_idx,
+            day_start_time=day_start_time,
+            day_end_time=day_end_time,
+            preferred_activities=preferred_activities,
+            trip_budget=trip_budget,
+            people_count=people_count,
+        )
+        if candidate is None:
+            continue
+        if best is None or _day_objective(candidate["items"]) > _day_objective(best["items"]):
+            best = candidate
+    return best
+
+
+def _reschedule_day_items(
+    items: list[dict],
+    *,
+    start_date: date | datetime | None,
+    day_idx: int,
+    day_start_time: time,
+    day_end_time: time,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+) -> dict[str, Any] | None:
+    current_dt = visit_datetime_at(start_date, day_idx, day_start_time)
+    end_dt = visit_datetime_at(start_date, day_idx, day_end_time)
+    previous: dict | None = None
+    scheduled: list[dict] = []
+    total_score = 0.0
+    total_travel = 0
+    opening_warnings = 0
+
+    for raw_item in items:
+        item = dict(raw_item)
+        item.setdefault("_base_score", float(item.get("score") or 0.0))
+        travel_minutes = _estimate_payload_travel_minutes(previous, item) if previous else 0
+        arrival_dt = current_dt + timedelta(minutes=travel_minutes)
+        duration = int(
+            item.get("visit_duration_minutes")
+            or item.get("duration_minutes")
+            or default_duration(item.get("category", ""))
+        )
+        departure_dt = arrival_dt + timedelta(minutes=duration)
+        if departure_dt > end_dt:
+            return None
+        opening_status = _payload_opening_status(item, arrival_dt)
+        if opening_status == "closed":
+            opening_warnings += 1
+            return None
+        score = _payload_relevance_score(item, preferred_activities, trip_budget, people_count)
+        item.update(
+            {
+                "arrival_time": arrival_dt.time().isoformat(timespec="minutes"),
+                "departure_time": departure_dt.time().isoformat(timespec="minutes"),
+                "travel_from_previous_minutes": travel_minutes,
+                "opening_status": opening_status,
+                "is_open_at_midday": _payload_opening_status(item, visit_datetime(start_date, day_idx)) == "open",
+                "score": round(score, 4),
+            }
+        )
+        scheduled.append(item)
+        total_score += score
+        total_travel += travel_minutes
+        current_dt = departure_dt + timedelta(minutes=_DWELL_BUFFER_MINUTES)
+        previous = item
+
+    return {
+        "items": scheduled,
+        "total_score": round(total_score, 4),
+        "travel_overhead_minutes": total_travel,
+        "opening_hours_warnings": opening_warnings,
+    }
+
+
+def _payload_relevance_score(
+    item: dict,
+    preferred_activities: list[str],
+    trip_budget: float | None,
+    people_count: int,
+) -> float:
+    del preferred_activities, trip_budget, people_count
+    return float(item.get("_base_score", item.get("score") or 0.0))
+
+
+def _payload_opening_status(item: dict, visit_dt: datetime) -> str:
+    opening_hours = item.get("opening_hours")
+    if not opening_hours:
+        return "unknown"
+    return "open" if OpeningHoursParser.is_open(opening_hours, visit_dt) else "closed"
+
+
+def _estimate_payload_travel_minutes(previous: dict | None, current: dict) -> int:
+    if previous is None:
+        return 0
+    if (
+        previous.get("lat") is None
+        or previous.get("lng") is None
+        or current.get("lat") is None
+        or current.get("lng") is None
+    ):
+        return max(0, int(current.get("travel_from_previous_minutes") or 20))
+    distance = haversine_km(
+        float(previous["lat"]), float(previous["lng"]), float(current["lat"]), float(current["lng"])
+    )
+    return max(
+        _MIN_TRAVEL_MINUTES,
+        min(_MAX_TRAVEL_MINUTES, int(distance / _ASSUMED_ROUTE_SPEED_KMH * 60) + _TRAVEL_TIME_FIXED_BUFFER_MINUTES),
+    )
+
+
+def _day_objective(items: list[dict]) -> float:
+    score = sum(float(item.get("score") or 0.0) for item in items)
+    travel = sum(max(0, int(item.get("travel_from_previous_minutes") or 0)) for item in items)
+    repeated_categories = max(0, len(items) - len({str(item.get("category") or "") for item in items}))
+    return score - travel * _ROUTE_TRAVEL_MINUTE_PENALTY - repeated_categories * _ROUTE_CATEGORY_REPEAT_PENALTY
+
+
+def _route_metrics(days: list[dict]) -> dict[str, float | int]:
+    total_score = 0.0
+    travel_overhead = 0
+    opening_warnings = 0
+    objective = 0.0
+    for day in days:
+        items = list(day.get("items", []))
+        total_score += sum(float(item.get("score") or 0.0) for item in items)
+        travel_overhead += sum(max(0, int(item.get("travel_from_previous_minutes") or 0)) for item in items)
+        opening_warnings += sum(1 for item in items if item.get("opening_status") == "closed")
+        objective += _day_objective(items)
+    return {
+        "total_score": round(total_score, 4),
+        "travel_overhead_minutes": travel_overhead,
+        "opening_hours_warnings": opening_warnings,
+        "objective": round(objective, 4),
+    }
+
+
+def _copy_day(day: dict) -> dict:
+    copied = dict(day)
+    copied["items"] = [dict(item) for item in day.get("items", day.get("places", []))]
+    copied["places"] = copied["items"]
+    return copied
+
+
+def _replace_day_items(day: dict, schedule: dict[str, Any]) -> None:
+    day["items"] = schedule["items"]
+    day["places"] = schedule["items"]
+    day["total_score"] = schedule["total_score"]
+
+
+def _is_rest_day(day: dict) -> bool:
+    return str(day.get("theme") or "").lower() == "rest"
+
+
+def _strip_optimizer_fields(days: list[dict]) -> None:
+    for day in days:
+        for item in day.get("items", []):
+            item.pop("_base_score", None)
 
 
 def build_variant(
@@ -859,7 +1265,7 @@ def schedule_day(
         used_categories.add(_category_for(poi))
         total_score += score
         total_travel += travel_minutes
-        current_dt = departure_dt + timedelta(minutes=20)
+        current_dt = departure_dt + timedelta(minutes=_DWELL_BUFFER_MINUTES)
         prev = poi
     return result, total_score, total_travel, opening_warnings
 
@@ -886,12 +1292,12 @@ def _select_next_day_poi(
         )
         if previous is not None:
             distance = haversine_km(float(previous.lat), float(previous.lng), float(poi.lat), float(poi.lng))
-            score -= min(2.0, distance / 12.0)
+            score -= min(_ROUTE_DISTANCE_PENALTY_CAP, distance / _ROUTE_DISTANCE_PENALTY_DIVISOR_KM)
         category = _category_for(poi)
         if category in used_categories:
-            score -= 0.35
+            score -= _SAME_DAY_CATEGORY_REPEAT_PENALTY
         elif used_categories:
-            score += 0.25
+            score += _SAME_DAY_CATEGORY_DIVERSITY_BONUS
         if best is None or score > best[0]:
             best = (score, poi)
     return best[1] if best is not None else remaining[0]
@@ -936,7 +1342,10 @@ def default_duration(category: str) -> int:
 
 def estimate_travel_minutes(prev: Any, poi: Any) -> int:
     distance = haversine_km(float(prev.lat), float(prev.lng), float(poi.lat), float(poi.lng))
-    return max(5, min(75, int(distance / 20 * 60) + 5))
+    return max(
+        _MIN_TRAVEL_MINUTES,
+        min(_MAX_TRAVEL_MINUTES, int(distance / _ASSUMED_ROUTE_SPEED_KMH * 60) + _TRAVEL_TIME_FIXED_BUFFER_MINUTES),
+    )
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

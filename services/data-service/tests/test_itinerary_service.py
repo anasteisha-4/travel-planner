@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from app.lib.opening_hours_parser import OpeningHoursParser
 from app.services.itinerary_service import (
+    _optimize_variant_days,
     _ranked_destination_pois,
     _seeded_candidate_pool,
     build_personalized_variant,
@@ -243,4 +244,70 @@ def test_personalized_orienteering_variant_supports_month_long_routes():
     assert variant is not None
     assert variant["duration_days"] == 31
     assert all(len(day["items"]) >= 3 for day in variant["days"])
-    assert variant["score_summary"]["algorithm"] == "greedy_team_orienteering_with_time_windows_v2"
+    assert variant["score_summary"]["algorithm"] == "greedy_team_orienteering_with_time_windows_v3"
+    assert variant["score_summary"]["optimizer"] == "bounded_local_search_v1"
+
+
+def test_optimizer_reorders_day_to_reduce_travel_without_changing_poi_set():
+    day = {
+        "day": 1,
+        "day_number": 1,
+        "theme": "culture",
+        "start_time": "09:30",
+        "end_time": "19:00",
+        "items": [
+            {
+                "id": "a",
+                "poi_id": "a",
+                "name": "A",
+                "category": "culture",
+                "lat": 55.0,
+                "lng": 37.0,
+                "visit_duration_minutes": 60,
+                "opening_hours": None,
+                "score": 5.0,
+                "travel_from_previous_minutes": 0,
+            },
+            {
+                "id": "c",
+                "poi_id": "c",
+                "name": "C",
+                "category": "culture",
+                "lat": 55.0,
+                "lng": 37.20,
+                "visit_duration_minutes": 60,
+                "opening_hours": None,
+                "score": 5.0,
+                "travel_from_previous_minutes": 70,
+            },
+            {
+                "id": "b",
+                "poi_id": "b",
+                "name": "B",
+                "category": "culture",
+                "lat": 55.0,
+                "lng": 37.01,
+                "visit_duration_minutes": 60,
+                "opening_hours": None,
+                "score": 5.0,
+                "travel_from_previous_minutes": 70,
+            },
+        ],
+    }
+
+    optimized = _optimize_variant_days(
+        days=[day],
+        start_date=datetime(2026, 6, 10),
+        day_start_time=datetime.strptime("09:30", "%H:%M").time(),
+        day_end_time=datetime.strptime("19:00", "%H:%M").time(),
+        preferred_activities=["culture"],
+        trip_budget=None,
+        people_count=1,
+        min_per_day=2,
+    )
+
+    optimized_ids = [item["poi_id"] for item in optimized["days"][0]["items"]]
+    assert set(optimized_ids) == {"a", "b", "c"}
+    assert optimized_ids == ["a", "b", "c"]
+    assert optimized["travel_overhead_minutes"] < optimized["travel_before_minutes"]
+    assert optimized["same_day_reorders"] == 1

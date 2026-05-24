@@ -22,7 +22,7 @@ import { StepVacationPrefs } from './StepVacationPrefs';
 const STEP_META = [
   { title: 'Виды отдыха', subtitle: 'Расскажите о себе' },
   { title: 'Бюджет', subtitle: 'Финансовые предпочтения' },
-  { title: 'Откуда летаете', subtitle: 'Город и длительность' },
+  { title: 'Откуда летаете', subtitle: 'Город, гражданство и длительность' },
   { title: 'Любимые места', subtitle: 'Ваши фавориты' },
   { title: 'Безопасность и визы', subtitle: 'Ограничения и комфорт' },
   { title: 'Климат и атмосфера', subtitle: 'Финальные штрихи' },
@@ -44,6 +44,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
     restLevel,
     typicalDuration,
     originCityName,
+    citizenshipCode,
     likedDests,
     riskTolerance,
     visaTolerance,
@@ -142,6 +143,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
           {currentStep === 3 && (
             <StepOriginCity
               cityName={originCityName}
+              citizenshipCode={citizenshipCode}
               duration={typicalDuration}
               onSelect={({ name, lat, lng }) =>
                 update({
@@ -151,6 +153,7 @@ export const OnboardingV2Wizard = ({ onComplete }: Props) => {
                   originLng: lng,
                 })
               }
+              onCitizenshipChange={(code) => update({ citizenshipCode: code })}
               onDurationChange={(v) => update({ typicalDuration: v as DurationOption | null })}
               cityError={errors.origin_city_name}
               durationError={errors.typical_duration}

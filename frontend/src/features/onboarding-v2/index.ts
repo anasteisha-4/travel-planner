@@ -6,6 +6,7 @@ export * from './ui/OnboardingV2Wizard';
 export * from './ui/StepVacationPrefs';
 export * from './ui/StepBudgetDuration';
 export * from './ui/StepOriginCity';
+export * from './ui/CitizenshipSearch';
 export { StepLikedDests } from './ui/StepLikedDests';
 export type { LikedDest } from './ui/StepLikedDests';
 export * from './ui/StepRiskVisaLang';

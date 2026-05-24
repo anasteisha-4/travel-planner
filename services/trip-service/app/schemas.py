@@ -347,6 +347,19 @@ class PushSubscriptionResponse(BaseModel):
         from_attributes = True
 
 
+def _normalize_citizenship_code(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        if not normalized:
+            return None
+        if len(normalized) != 2 or not normalized.isalpha():
+            raise ValueError("citizenship_code must be a 2-letter ISO country code")
+        return normalized
+    return value
+
+
 class UserProfileCreate(BaseModel):
     preferred_currency: str = "RUB"
     budget_min: Decimal | None = None
@@ -357,6 +370,7 @@ class UserProfileCreate(BaseModel):
     origin_city_name: str | None = None
     origin_lat: float | None = None
     origin_lng: float | None = None
+    citizenship_code: str | None = None
     vacation_preferences_ranked: Annotated[list[str], Field(max_length=5)] | None = None
     liked_destination_ids: Annotated[list[str], Field(max_length=10)] | None = None
     liked_destination_names: Annotated[list[str], Field(max_length=10)] | None = None
@@ -391,6 +405,11 @@ class UserProfileCreate(BaseModel):
             raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
         return v
 
+    @field_validator("citizenship_code", mode="before")
+    @classmethod
+    def valid_citizenship_code(cls, v: object) -> object:
+        return _normalize_citizenship_code(v)
+
 
 class UserProfileUpdate(BaseModel):
     preferred_currency: str | None = None
@@ -402,6 +421,7 @@ class UserProfileUpdate(BaseModel):
     origin_city_name: str | None = None
     origin_lat: float | None = None
     origin_lng: float | None = None
+    citizenship_code: str | None = None
     vacation_preferences_ranked: list[str] | None = None
     liked_destination_ids: list[str] | None = None
     liked_destination_names: list[str] | None = None
@@ -419,6 +439,11 @@ class UserProfileUpdate(BaseModel):
             raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
         return v
 
+    @field_validator("citizenship_code", mode="before")
+    @classmethod
+    def valid_citizenship_code(cls, v: object) -> object:
+        return _normalize_citizenship_code(v)
+
 
 class UserProfileResponse(BaseModel):
     id: UUID
@@ -435,6 +460,7 @@ class UserProfileResponse(BaseModel):
     origin_city_name: str | None
     origin_lat: float | None
     origin_lng: float | None
+    citizenship_code: str | None
     vacation_preferences_ranked: list[str] | None
     liked_destination_ids: list[str] | None
     liked_destination_names: list[str] | None
@@ -464,6 +490,7 @@ class OnboardingStepPayload(BaseModel):
     origin_city_name: str | None = None
     origin_lat: float | None = None
     origin_lng: float | None = None
+    citizenship_code: str | None = None
     vacation_preferences_ranked: list[str] | None = None
     liked_destination_ids: list[str] | None = None
     liked_destination_names: list[str] | None = None
@@ -480,3 +507,8 @@ class OnboardingStepPayload(BaseModel):
         if v is not None and v not in {"economy", "standard", "comfort", "luxury"}:
             raise ValueError("rest_level must be one of economy, standard, comfort, luxury")
         return v
+
+    @field_validator("citizenship_code", mode="before")
+    @classmethod
+    def valid_citizenship_code(cls, v: object) -> object:
+        return _normalize_citizenship_code(v)

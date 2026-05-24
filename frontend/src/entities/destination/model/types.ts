@@ -15,3 +15,8 @@ export type DestinationDetail = DestinationSearchResult & {
   cost_index: number | null;
   safety_score: number | null;
 };
+
+export type CitizenshipOption = {
+  code: string;
+  name: string;
+};
