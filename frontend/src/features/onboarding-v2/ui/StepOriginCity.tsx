@@ -1,16 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Loader2, Check, X } from 'lucide-react';
+import { Check, Loader2, MapPin, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
+import { DURATION_OPTIONS } from '@/shared/config';
 import { getCountryFlag, useDebouncedValue } from '@/shared/lib';
-import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import {
+  HAPTIC_SINGLE_CONFIRM,
+  HAPTIC_SINGLE_TAP,
+  useHapticFeedback,
+} from '@/shared/lib/useHapticFeedback';
 import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { cn } from '@/shared/lib/utils';
-import { DURATION_OPTIONS } from '@/shared/config';
 import { AppInput, FieldLabel } from '@/shared/ui';
 
-import { onboardingV2Api } from '../api/onboarding-v2.api';
 import type { DestinationSearchResult } from '../api/onboarding-v2.api';
+import { onboardingV2Api } from '../api/onboarding-v2.api';
 import type { DurationOption } from '../model/types';
 import { CitizenshipSearch } from './CitizenshipSearch';
 
@@ -66,11 +70,14 @@ export const StepOriginCity = ({
   };
 
   const showDropdown =
-    open && inputValue.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
+    open &&
+    inputValue.trim().length >= 2 &&
+    debouncedQuery.trim().length >= 2 &&
+    (results.length > 0 || isFetching);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="relative">
         <FieldLabel>Откуда обычно летаете?</FieldLabel>
         <p className="mb-3 text-[13px] text-muted-foreground">
           Поможет подобрать удобные направления с хорошей связностью
@@ -107,7 +114,7 @@ export const StepOriginCity = ({
 
         {showDropdown && (
           <div
-            className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
+            className="absolute z-50 mt-1.5 max-h-[min(320px,42dvh)] w-full overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
             {...dropdownScrollHaptics}
           >
             {isFetching && results.length === 0 ? (
@@ -148,25 +155,29 @@ export const StepOriginCity = ({
               type="button"
               onClick={() => {
                 play(duration === d.id ? HAPTIC_SINGLE_TAP : HAPTIC_SINGLE_CONFIRM);
-                onDurationChange(duration === d.id ? null : d.id as DurationOption);
+                onDurationChange(duration === d.id ? null : (d.id as DurationOption));
               }}
               className={cn(
                 'flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98]',
                 duration === d.id
                   ? 'border-primary/35 bg-primary/10 shadow-[0_2px_8px_rgba(37,99,235,0.1)]'
-                  : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]',
+                  : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'
               )}
             >
-              <span className={cn(
-                'text-[15px] font-semibold',
-                duration === d.id ? 'text-primary' : 'text-foreground',
-              )}>
+              <span
+                className={cn(
+                  'text-[15px] font-semibold',
+                  duration === d.id ? 'text-primary' : 'text-foreground'
+                )}
+              >
                 {d.label}
               </span>
-              <span className={cn(
-                'text-[13px] font-medium',
-                duration === d.id ? 'text-blue-500' : 'text-muted-foreground',
-              )}>
+              <span
+                className={cn(
+                  'text-[13px] font-medium',
+                  duration === d.id ? 'text-blue-500' : 'text-muted-foreground'
+                )}
+              >
                 ~{d.days} дн.
               </span>
             </button>

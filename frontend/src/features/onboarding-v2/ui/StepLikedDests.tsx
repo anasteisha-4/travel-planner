@@ -3,12 +3,16 @@ import { Globe, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { getCountryFlag, useDebouncedValue } from '@/shared/lib';
-import { HAPTIC_SINGLE_CONFIRM, HAPTIC_SINGLE_TAP, useHapticFeedback } from '@/shared/lib/useHapticFeedback';
+import {
+  HAPTIC_SINGLE_CONFIRM,
+  HAPTIC_SINGLE_TAP,
+  useHapticFeedback,
+} from '@/shared/lib/useHapticFeedback';
 import { useScrollHaptics } from '@/shared/lib/useScrollHaptics';
 import { AppInput, FieldLabel } from '@/shared/ui';
 
-import { onboardingV2Api } from '../api/onboarding-v2.api';
 import type { DestinationSearchResult } from '../api/onboarding-v2.api';
+import { onboardingV2Api } from '../api/onboarding-v2.api';
 
 export type LikedDest = { id: string; name: string; country_code: string };
 
@@ -47,11 +51,14 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
   };
 
   const showDropdown =
-    open && query.trim().length >= 2 && debouncedQuery.trim().length >= 2 && (results.length > 0 || isFetching);
+    open &&
+    query.trim().length >= 2 &&
+    debouncedQuery.trim().length >= 2 &&
+    (results.length > 0 || isFetching);
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div className="relative">
         <FieldLabel>Любимые направления</FieldLabel>
         <p className="mb-3 text-[13px] text-muted-foreground">
           До 10 мест — поможет находить похожие направления (необязательно)
@@ -91,7 +98,10 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
             </div>
             <AppInput
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
               onFocus={() => setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 150)}
               placeholder="Стамбул, Барселона, Токио..."
@@ -102,7 +112,7 @@ export const StepLikedDests = ({ dests, onChange }: Props) => {
 
         {showDropdown && (
           <div
-            className="mt-1.5 max-h-[min(320px,42dvh)] overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
+            className="absolute mt-1.5 max-h-[min(320px,42dvh)] w-full overflow-y-auto overscroll-contain rounded-2xl border border-[hsl(var(--surface-border))] bg-[hsl(var(--surface))] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
             {...dropdownScrollHaptics}
           >
             {isFetching && results.length === 0 ? (
