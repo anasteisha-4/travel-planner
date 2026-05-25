@@ -471,7 +471,7 @@ export const BudgetMonitoringCard = ({
             <div className="min-h-0 overflow-hidden">
               <div className="px-3 pb-3">
                 {categoryBreakdown.length > 0 && (
-                  <div className="mt-3 rounded-2xl border border-[hsl(var(--surface-border))] px-3 py-3">
+                  <div className="px-3 py-2">
                     <div className="mb-2.5 flex items-center justify-between">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
                         Примерный бюджет по категориям
