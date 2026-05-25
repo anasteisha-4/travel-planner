@@ -85,6 +85,7 @@ class TripResponse(BaseModel):
 class ExpenseCategory(StrEnum):
     food = "food"
     transport = "transport"
+    travel_to_destination = "travel_to_destination"
     housing = "housing"
     entertainment = "entertainment"
     shopping = "shopping"

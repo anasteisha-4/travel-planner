@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ExpenseCategoryEnum = z.enum([
   'food',
   'transport',
+  'travel_to_destination',
   'housing',
   'entertainment',
   'shopping',
@@ -14,6 +15,7 @@ export type ExpenseCategory = z.infer<typeof ExpenseCategoryEnum>;
 export const CATEGORY_META: Record<ExpenseCategory, { label: string }> = {
   food: { label: 'Еда' },
   transport: { label: 'Транспорт' },
+  travel_to_destination: { label: 'Авиабилеты' },
   housing: { label: 'Жильё' },
   entertainment: { label: 'Развлечения' },
   shopping: { label: 'Покупки' },

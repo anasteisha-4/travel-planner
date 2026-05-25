@@ -661,7 +661,7 @@ def test_budget_monitor_small_forecast_overage_is_on_track_not_over_budget(clien
     assert data["risk_status"] == "on_track"
 
 
-def test_budget_monitor_large_planning_transport_closes_destination_travel(client: TestClient):
+def test_budget_monitor_explicit_airfare_closes_destination_travel(client: TestClient):
     with_ticket = client.post(
         "/api/v1/budget/monitor",
         json=_payload(
@@ -669,7 +669,7 @@ def test_budget_monitor_large_planning_transport_closes_destination_travel(clien
                 {
                     "amount": 800,
                     "currency": "USD",
-                    "category": "transport",
+                    "category": "travel_to_destination",
                     "description": "Авиабилеты",
                     "expense_date": "2026-05-15",
                 }
@@ -724,12 +724,106 @@ def test_budget_monitor_large_planning_transport_closes_destination_travel(clien
     ticket_transport_remaining = next(
         item["remaining_mid"] for item in ticket_data["category_contributions"] if item["category"] == "transport"
     )
+    ticket_travel_remaining = next(
+        item["remaining_mid"]
+        for item in ticket_data["category_contributions"]
+        if item["category"] == "travel_to_destination"
+    )
+    ticket_travel_spent = next(
+        item["spent"] for item in ticket_data["category_contributions"] if item["category"] == "travel_to_destination"
+    )
     taxi_transport_remaining = next(
         item["remaining_mid"] for item in taxi_data["category_contributions"] if item["category"] == "transport"
     )
+    taxi_travel_remaining = next(
+        item["remaining_mid"]
+        for item in taxi_data["category_contributions"]
+        if item["category"] == "travel_to_destination"
+    )
     assert ticket_data["assumptions"]["destination_transport_paid_usd"] == 800
     assert taxi_data["assumptions"]["destination_transport_paid_usd"] == 0
-    assert taxi_transport_remaining > ticket_transport_remaining + 100
+    assert ticket_transport_remaining > 0
+    assert ticket_travel_spent == 800
+    assert ticket_travel_remaining == 0
+    assert taxi_travel_remaining > 0
+    assert taxi_transport_remaining > ticket_transport_remaining
+
+
+def test_budget_monitor_one_time_transport_does_not_close_airfare(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            expenses=[
+                {
+                    "amount": 80,
+                    "currency": "USD",
+                    "category": "transport",
+                    "description": "Трансфер",
+                    "expense_date": "2026-06-01",
+                    "is_one_time": True,
+                }
+            ],
+            pre_trip_prediction={
+                "total_min": 1200,
+                "total_mid": 1580,
+                "total_max": 1900,
+                "breakdown": {
+                    "accommodation": 700,
+                    "meals": 300,
+                    "transport": 260,
+                    "activities": 180,
+                    "travel_to_destination": 650,
+                },
+                "model_version": "budget-v1",
+            },
+        ),
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    transport = next(item for item in data["category_contributions"] if item["category"] == "transport")
+    travel = next(item for item in data["category_contributions"] if item["category"] == "travel_to_destination")
+    assert data["assumptions"]["destination_transport_paid_usd"] == 0
+    assert transport["spent"] == 80
+    assert travel["spent"] == 0
+    assert travel["remaining_mid"] > 0
+
+
+def test_budget_monitor_any_recorded_flight_expense_closes_planned_airfare(client: TestClient):
+    resp = client.post(
+        "/api/v1/budget/monitor",
+        json=_payload(
+            expenses=[
+                {
+                    "amount": 500,
+                    "currency": "USD",
+                    "category": "travel_to_destination",
+                    "description": "Авиабилеты",
+                    "expense_date": "2026-06-01",
+                }
+            ],
+            pre_trip_prediction={
+                "total_min": 1200,
+                "total_mid": 1580,
+                "total_max": 1900,
+                "breakdown": {
+                    "accommodation": 700,
+                    "meals": 300,
+                    "transport": 260,
+                    "activities": 180,
+                    "travel_to_destination": 650,
+                },
+                "model_version": "budget-v1",
+            },
+        ),
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    ticket = next(item for item in data["category_contributions"] if item["category"] == "travel_to_destination")
+    assert ticket["spent"] == 500
+    assert ticket["remaining_mid"] == 0
+    assert ticket["kind"] == "fixed_once"
 
 
 def test_budget_monitor_without_pretrip_prediction_ignores_user_budget_as_cost_estimate(client: TestClient):

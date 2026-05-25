@@ -293,8 +293,9 @@ def predict_budget(
     fare_trip_class = None
     travel_adjustment_usd = -fallback_travel_usd if fallback_travel_usd > 0 else 0.0
     if fare is not None and fare.price_usd > 0:
-        breakdown_usd["travel_to_destination"] = fare.price_usd
-        travel_adjustment_usd = fare.price_usd - fallback_travel_usd
+        fare_total_usd = fare.price_usd * max(request.people_count, 1)
+        breakdown_usd["travel_to_destination"] = fare_total_usd
+        travel_adjustment_usd = fare_total_usd - fallback_travel_usd
         travel_cost_source = fare.source
         origin_iata = fare.origin_iata
         destination_iata = fare.destination_iata

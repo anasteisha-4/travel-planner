@@ -21,7 +21,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/shared/ui';
-import { Car, Coffee, Home, Info, Loader2, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import {
+  Car,
+  Coffee,
+  Home,
+  Info,
+  Loader2,
+  MoreHorizontal,
+  Music,
+  Plane,
+  ShoppingBag,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useExpenseForm } from '../model/useExpenseForm';
 
@@ -74,6 +84,7 @@ const InfoTip = ({ text }: { text: string }) => {
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   food: Coffee,
   transport: Car,
+  travel_to_destination: Plane,
   housing: Home,
   entertainment: Music,
   shopping: ShoppingBag,
@@ -97,6 +108,13 @@ const CATEGORY_COLORS: Record<
     selectedBg: 'bg-blue-100 dark:bg-blue-900/40',
     selectedIcon: 'text-blue-600',
     ring: 'border-blue-300/60',
+  },
+  travel_to_destination: {
+    bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+    icon: 'text-indigo-500',
+    selectedBg: 'bg-indigo-100 dark:bg-indigo-900/40',
+    selectedIcon: 'text-indigo-600',
+    ring: 'border-indigo-300/60',
   },
   housing: {
     bg: 'bg-sky-50 dark:bg-sky-900/20',
@@ -130,9 +148,10 @@ const CATEGORY_COLORS: Record<
 
 const CATEGORIES: ExpenseCategory[] = [
   'food',
-  'transport',
-  'housing',
   'entertainment',
+  'transport',
+  'travel_to_destination',
+  'housing',
   'shopping',
   'other',
 ];
@@ -246,12 +265,13 @@ export const ExpenseForm = ({
         {/* Category */}
         <div>
           <Label className={labelClass}>Категория</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {CATEGORIES.map((cat) => {
+          <div className="grid grid-cols-6 gap-2">
+            {CATEGORIES.map((cat, index) => {
               const meta = CATEGORY_META[cat];
               const isSelected = form.category === cat;
               const Icon = CATEGORY_ICONS[cat] ?? MoreHorizontal;
               const colors = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS['other'];
+              const columnSpan = index < 4 ? 'col-span-3' : 'col-span-2';
               return (
                 <button
                   key={cat}
@@ -260,7 +280,7 @@ export const ExpenseForm = ({
                     play(HAPTIC_SINGLE_TAP);
                     form.setCategory(cat);
                   }}
-                  className={`flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${
+                  className={`flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 px-2 py-3 transition-all ${columnSpan} ${
                     isSelected
                       ? `${colors.ring} ${colors.selectedBg}`
                       : 'border-[hsl(var(--surface-border))] bg-[hsl(var(--surface-muted))]'

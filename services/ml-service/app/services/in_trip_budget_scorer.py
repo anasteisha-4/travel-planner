@@ -165,12 +165,8 @@ def classify_expenses(request: BudgetMonitorRequest) -> list[ClassifiedExpense]:
     return classified
 
 
-def _is_destination_transport_paid(
-    expense: ClassifiedExpense, pretrip_travel_usd: float, pretrip_total_mid: float
-) -> bool:
-    if expense.category.lower() != "transport":
-        return False
-    return expense.kind in {"planning_once", "fixed_once"}
+def _is_destination_travel_paid(expense: ClassifiedExpense) -> bool:
+    return expense.category.lower() == "travel_to_destination"
 
 
 def _trimmed_mean(values: list[float]) -> float:
@@ -196,7 +192,9 @@ def _pretrip_category_total_usd(category: str, pretrip_breakdown: dict[str, floa
     if normalized == "food":
         return pretrip_breakdown.get("food", 0.0)
     if normalized == "transport":
-        return pretrip_breakdown.get("transport", 0.0) + pretrip_breakdown.get("travel_to_destination", 0.0)
+        return pretrip_breakdown.get("transport", 0.0)
+    if normalized == "travel_to_destination":
+        return pretrip_breakdown.get("travel_to_destination", 0.0)
     if normalized == "entertainment":
         return pretrip_breakdown.get("entertainment", 0.0)
     if normalized in {"shopping", "other"}:
@@ -308,11 +306,13 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     planning_spent = locked_fixed = recurring_spent = optional_activity_spent = 0.0
     for expense in expenses:
         kind = expense.kind
-        if kind != "planning_once" and _is_destination_transport_paid(expense, pretrip_travel, pretrip_total_mid):
+        is_destination_travel = _is_destination_travel_paid(expense)
+        if is_destination_travel and kind != "planning_once":
             kind = "fixed_once"
-        category_spent[expense.category] = category_spent.get(expense.category, 0.0) + expense.amount_usd
-        if category_kind.get(expense.category) != "fixed_once":
-            category_kind[expense.category] = kind
+        category = "travel_to_destination" if is_destination_travel else expense.category
+        category_spent[category] = category_spent.get(category, 0.0) + expense.amount_usd
+        if category_kind.get(category) != "fixed_once":
+            category_kind[category] = kind
         if kind == "planning_once":
             planning_spent += expense.amount_usd
         elif kind == "fixed_once":
@@ -324,11 +324,8 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
 
     current_spent = planning_spent + locked_fixed + recurring_spent + optional_activity_spent
 
-    destination_transport_paid = sum(
-        expense.amount_usd
-        for expense in expenses
-        if _is_destination_transport_paid(expense, pretrip_travel, pretrip_total_mid)
-    )
+    destination_transport_paid = sum(expense.amount_usd for expense in expenses if _is_destination_travel_paid(expense))
+    destination_travel_recorded = destination_transport_paid > 0
 
     itinerary = request.itinerary_summary
     itinerary_fee_remaining = convert_to_usd(
@@ -346,7 +343,8 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     if request.pre_trip_prediction is not None and current_spent == 0 and elapsed == 0:
         category_remaining = {
             "housing": max(0.0, pretrip_accommodation),
-            "transport": max(0.0, pretrip_transport + pretrip_travel),
+            "travel_to_destination": max(0.0, pretrip_travel),
+            "transport": max(0.0, pretrip_transport),
             "food": max(0.0, pretrip_meals),
             "entertainment": max(0.0, pretrip_activities),
         }
@@ -428,6 +426,8 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
 
     recurring_amounts_by_category: dict[str, list[float]] = {}
     for expense in expenses:
+        if _is_destination_travel_paid(expense):
+            continue
         if expense.kind in {"planning_once", "fixed_once"}:
             continue
         recurring_amounts_by_category.setdefault(expense.category, []).append(expense.amount_usd)
@@ -446,6 +446,10 @@ def compute_baseline(request: BudgetMonitorRequest) -> InTripBaseline:
     projection_categories = set(pretrip_breakdown) | set(category_spent) | set(recurring_amounts_by_category)
     for category in projection_categories:
         spent = category_spent.get(category, 0.0)
+        if category == "travel_to_destination" and destination_travel_recorded:
+            category_remaining[category] = 0.0
+            category_kind[category] = "fixed_once"
+            continue
         if category in projected_recurring_total_by_category:
             projected_total = projected_recurring_total_by_category[category]
             category_remaining[category] = max(0.0, projected_total - spent)

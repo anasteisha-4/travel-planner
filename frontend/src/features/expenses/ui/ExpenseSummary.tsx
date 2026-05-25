@@ -1,4 +1,5 @@
-import type { ConvertedExpenseSummary, Expense, ExpenseCategory } from '@/entities/expense';
+import type { ConvertedExpenseSummary, Expense } from '@/entities/expense';
+import { CATEGORY_META } from '@/entities/expense';
 import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import {
   AlertTriangle,
@@ -9,6 +10,7 @@ import {
   Home,
   MoreHorizontal,
   Music,
+  Plane,
   Plus,
   ShoppingBag,
 } from 'lucide-react';
@@ -32,6 +34,11 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
     text: 'text-blue-600 dark:text-blue-400',
     border: 'border-blue-600 dark:border-blue-400',
   },
+  travel_to_destination: {
+    bg: 'bg-blue-100 dark:bg-blue-900/30',
+    text: 'text-blue-700 dark:text-blue-300',
+    border: 'border-blue-700 dark:border-blue-300',
+  },
   housing: {
     bg: 'bg-sky-100 dark:bg-sky-900/30',
     text: 'text-sky-600 dark:text-sky-400',
@@ -54,9 +61,10 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
   },
 };
 
-const CATEGORY_ICONS = {
+const CATEGORY_ICONS: Record<string, typeof Coffee> = {
   food: Coffee,
   transport: Car,
+  travel_to_destination: Plane,
   housing: Home,
   entertainment: Music,
   shopping: ShoppingBag,
@@ -286,7 +294,8 @@ export const ExpenseSummary = ({
         <div className="mb-5 mt-3 flex flex-wrap gap-2">
           {categoryEntries.map(({ category, amount }) => {
             const colors = CATEGORY_COLORS[category] ?? CATEGORY_COLORS['other'];
-            const Icon = CATEGORY_ICONS[category as ExpenseCategory] ?? MoreHorizontal;
+            const Icon = CATEGORY_ICONS[category] ?? MoreHorizontal;
+            const label = CATEGORY_META[category as keyof typeof CATEGORY_META]?.label;
             return (
               <div
                 key={category}
@@ -294,6 +303,7 @@ export const ExpenseSummary = ({
               >
                 <Icon className="h-3 w-3" strokeWidth={2} />
                 <span>
+                  {label ? `${label} · ` : ''}
                   {fmt(amount)} {currency}
                 </span>
               </div>

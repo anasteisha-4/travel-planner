@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.travelpayouts_service import FareEstimate
+
 DEST_ID = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
 
@@ -135,6 +137,31 @@ def test_budget_predict_more_people_costs_more(client: TestClient):
     resp_1 = client.post("/api/v1/budget/predict", json=_payload(people_count=1))
     resp_2 = client.post("/api/v1/budget/predict", json=_payload(people_count=2))
     assert resp_1.json()["total_mid"] < resp_2.json()["total_mid"]
+
+
+def test_budget_predict_multiplies_real_fare_by_people_count(client: TestClient, monkeypatch):
+    monkeypatch.setattr(
+        "app.routers.budget.get_cached_fare_usd",
+        lambda **_kwargs: FareEstimate(
+            price_usd=180,
+            source="travelpayouts_prices_for_dates_multi_date",
+            origin_iata="MOW",
+            destination_iata="BCN",
+            fare_strategy="typical_economy",
+            trip_class=0,
+        ),
+    )
+
+    resp = client.post(
+        "/api/v1/budget/predict",
+        json=_payload(people_count=3, origin_city_name="Москва"),
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["breakdown"]["travel_to_destination"] == 540
+    assert data["one_time_costs"] == 540
+    assert data["assumptions"]["travel_cost_source"] == "travelpayouts_prices_for_dates_multi_date"
 
 
 def test_budget_predict_accommodation_tiers(client: TestClient):

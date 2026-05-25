@@ -1,5 +1,6 @@
 import fnmatch
 import json
+from datetime import date
 
 from app.services import travelpayouts_service as fares
 from app.services.iata_resolver import resolve_iata
@@ -96,6 +97,53 @@ def test_extract_nearest_places_picks_cheapest():
     assert fare.trip_class == 1
 
 
+def test_comfort_rest_level_uses_typical_economy_strategy():
+    assert fares._fare_strategy("comfort") == ("typical_economy", 0)
+
+
+def test_multi_date_fares_use_representative_month_price():
+    candidates = [
+        fares.FareEstimate(
+            price_usd=600,
+            source="travelpayouts_prices_for_dates",
+            origin_iata="MOW",
+            destination_iata="BCN",
+            fare_strategy="typical_economy",
+            trip_class=0,
+        ),
+        fares.FareEstimate(
+            price_usd=400,
+            source="travelpayouts_prices_for_dates",
+            origin_iata="MOW",
+            destination_iata="BCN",
+            fare_strategy="typical_economy",
+            trip_class=0,
+        ),
+        fares.FareEstimate(
+            price_usd=500,
+            source="travelpayouts_prices_for_dates",
+            origin_iata="MOW",
+            destination_iata="BCN",
+            fare_strategy="typical_economy",
+            trip_class=0,
+        ),
+        fares.FareEstimate(
+            price_usd=300,
+            source="travelpayouts_prices_for_dates",
+            origin_iata="MOW",
+            destination_iata="BCN",
+            fare_strategy="typical_economy",
+            trip_class=0,
+        ),
+    ]
+
+    fare = fares._select_representative_fare(candidates, "typical_economy")
+
+    assert fare is not None
+    assert fare.price_usd == 500
+    assert fare.source == "travelpayouts_prices_for_dates_multi_date"
+
+
 class FakeRedis:
     def __init__(self) -> None:
         self.store: dict[str, str] = {}
@@ -110,6 +158,56 @@ class FakeRedis:
         for key in self.store:
             if fnmatch.fnmatch(key, pattern):
                 yield key
+
+    def incr(self, key: str) -> int:
+        value = int(self.store.get(key, "0")) + 1
+        self.store[key] = str(value)
+        return value
+
+    def expire(self, _key: str, _ttl: int) -> None:
+        return None
+
+
+class FakeResponse:
+    def __init__(self, data: dict) -> None:
+        self._data = data
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self._data
+
+
+class FakeTravelpayoutsClient:
+    requests: list[dict] = []
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args) -> None:
+        return None
+
+    def get(self, _url: str, params: dict):
+        self.requests.append(params)
+        day = int(params["departure_at"][-2:])
+        price_by_day = {1: 600, 5: 400, 10: 500, 15: 300, 22: 450, 28: 800}
+        return FakeResponse(
+            {
+                "success": True,
+                "data": [
+                    {
+                        "origin": params["origin"],
+                        "destination": params["destination"],
+                        "price": price_by_day.get(day, 700),
+                        "trip_class": params["trip_class"],
+                    }
+                ],
+            }
+        )
 
 
 def _fare(price: float = 250.0) -> fares.FareEstimate:
@@ -153,3 +251,27 @@ def test_nearest_duration_cache_fallback_for_old_exact_keys(monkeypatch):
     cached = fares._cache_get_fare("MOW", "IST", "2026-06-01", "2026-06-17", 16, "typical_economy", 0)
 
     assert cached == closer
+
+
+def test_get_cached_fare_uses_multiple_real_fare_dates(monkeypatch):
+    fake_redis = FakeRedis()
+    FakeTravelpayoutsClient.requests = []
+    next_month = date.today().month % 12 + 1
+    monkeypatch.setattr(fares, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(fares.settings, "TRAVELPAYOUTS_API_TOKEN", "token")
+    monkeypatch.setattr(fares.httpx, "Client", FakeTravelpayoutsClient)
+
+    fare = fares.get_cached_fare_usd(
+        origin_city_name="Москва",
+        destination_name="Барселона",
+        destination_country_code="ES",
+        travel_month=next_month,
+        duration_days=7,
+        accommodation_tier="comfort",
+    )
+
+    assert fare is not None
+    assert len(FakeTravelpayoutsClient.requests) >= 3
+    assert fare.source == "travelpayouts_prices_for_dates_multi_date"
+    assert fare.fare_strategy == "typical_economy"
+    assert fare.price_usd in {531.0, 590.0}

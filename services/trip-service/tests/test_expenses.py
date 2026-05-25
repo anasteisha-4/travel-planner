@@ -34,6 +34,17 @@ class TestCreateExpense:
         assert data["description"] is None
         assert data["expense_date"] is None
 
+    def test_create_airfare_category(self, client, auth_headers, trip_data):
+        trip_resp = client.post("/api/trips/", json=trip_data, headers=auth_headers)
+        trip_id = trip_resp.json()["id"]
+
+        expense_data = {"amount": "300", "currency": "EUR", "category": "travel_to_destination"}
+        response = client.post(f"/api/trips/{trip_id}/expenses", json=expense_data, headers=auth_headers)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["category"] == "travel_to_destination"
+
     def test_create_no_auth(self, client, trip_data):
         response = client.post(
             "/api/trips/00000000-0000-0000-0000-000000000000/expenses",

@@ -1,7 +1,7 @@
 import type { Expense, ExpenseCategory } from '@/entities/expense';
 import { CATEGORY_META } from '@/entities/expense';
 import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
-import { CalendarClock, Car, Coffee, Home, MoreHorizontal, Music, ShoppingBag } from 'lucide-react';
+import { CalendarClock, Car, Coffee, Home, MoreHorizontal, Music, Plane, ShoppingBag } from 'lucide-react';
 
 type ExpenseListProps = {
   expenses: Expense[];
@@ -27,6 +27,7 @@ const groupByDate = (expenses: Expense[]) => {
 const CATEGORY_STYLES: Record<string, { bg: string; icon: string }> = {
   food: { bg: 'bg-amber-50 dark:bg-amber-900/25', icon: 'text-amber-500 dark:text-amber-400' },
   transport: { bg: 'bg-blue-50 dark:bg-blue-900/25', icon: 'text-blue-500 dark:text-blue-400' },
+  travel_to_destination: { bg: 'bg-blue-50 dark:bg-blue-900/25', icon: 'text-blue-600 dark:text-blue-300' },
   housing: { bg: 'bg-sky-50 dark:bg-sky-900/25', icon: 'text-sky-500 dark:text-sky-400' },
   entertainment: {
     bg: 'bg-violet-50 dark:bg-violet-900/25',
@@ -39,9 +40,10 @@ const CATEGORY_STYLES: Record<string, { bg: string; icon: string }> = {
   other: { bg: 'bg-stone-100 dark:bg-[hsl(var(--surface-muted))]', icon: 'text-stone-400 dark:text-stone-500' },
 };
 
-const CATEGORY_ICONS = {
+const CATEGORY_ICONS: Record<string, typeof Coffee> = {
   food: Coffee,
   transport: Car,
+  travel_to_destination: Plane,
   housing: Home,
   entertainment: Music,
   shopping: ShoppingBag,

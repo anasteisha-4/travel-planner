@@ -9,6 +9,7 @@ import {
   Gauge,
   Loader2,
   MoreHorizontal,
+  Plane,
   RotateCcw,
   ShoppingBag,
   Sigma,
@@ -90,6 +91,11 @@ const CATEGORY_META: Record<
     label: 'Транспорт',
     icon: Bus,
     accent: 'bg-sky-500',
+  },
+  travel_to_destination: {
+    label: 'Авиабилеты',
+    icon: Plane,
+    accent: 'bg-blue-600',
   },
   housing: {
     label: 'Жильё',
@@ -448,11 +454,6 @@ export const BudgetMonitoringCard = ({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {monitor.used_ml_model && (
-                <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-300">
-                  ML
-                </span>
-              )}
               <ChevronDown
                 className={cn(
                   'h-5 w-5 text-stone-400 transition-transform duration-300 dark:text-stone-500',

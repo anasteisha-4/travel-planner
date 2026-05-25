@@ -19,6 +19,7 @@ _PRICES_FOR_DATES_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_d
 _NEAREST_PLACES_URL = "https://api.travelpayouts.com/v2/prices/nearest-places-matrix"
 _PRICES_FOR_DATES_RATE_LIMIT_PER_MIN = 500
 _NEAREST_PLACES_RATE_LIMIT_PER_MIN = 50
+_SAMPLE_DEPARTURE_DAYS = (1, 5, 10, 15, 22, 28)
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ class FareEstimate:
 def _fare_strategy(accommodation_tier: str) -> tuple[str, int]:
     if accommodation_tier == "luxury":
         return "business_comfort", 1
-    if accommodation_tier == "mid":
+    if accommodation_tier in {"mid", "comfort"}:
         return "typical_economy", 0
     return "cheapest_economy", 0
 
@@ -46,13 +47,32 @@ def _month_start(year: int, month: int) -> date:
 
 
 def _date_window(travel_month: int, duration_days: int) -> tuple[str, str]:
+    return _date_windows(travel_month, duration_days)[0]
+
+
+def _date_windows(travel_month: int, duration_days: int) -> list[tuple[str, str]]:
     today = date.today()
     year = today.year + (1 if travel_month < today.month else 0)
-    depart = _month_start(year, travel_month)
-    if depart < today:
-        depart = today + timedelta(days=7)
-    return_at = depart + timedelta(days=max(1, duration_days))
-    return depart.isoformat(), return_at.isoformat()
+    first_depart = _month_start(year, travel_month)
+    earliest_depart = today + timedelta(days=7)
+    if first_depart < earliest_depart:
+        first_depart = earliest_depart
+
+    windows: list[tuple[str, str]] = []
+    for day in _SAMPLE_DEPARTURE_DAYS:
+        try:
+            depart = date(year, travel_month, day)
+        except ValueError:
+            continue
+        if depart < first_depart:
+            continue
+        return_at = depart + timedelta(days=max(1, duration_days))
+        windows.append((depart.isoformat(), return_at.isoformat()))
+
+    if not windows:
+        return_at = first_depart + timedelta(days=max(1, duration_days))
+        windows.append((first_depart.isoformat(), return_at.isoformat()))
+    return windows
 
 
 def _cache_get(cache_key: str) -> FareEstimate | None:
@@ -97,7 +117,7 @@ def _exact_cache_key(
     trip_class: int,
 ) -> str:
     return (
-        "travelpayouts:fare:v1:"
+        "travelpayouts:fare:v2:"
         f"{origin_iata}:{destination_hint}:{depart_at[:7]}:{return_at[:7]}:{duration_days}:usd:{fare_strategy}:{trip_class}"
     )
 
@@ -110,7 +130,7 @@ def _route_month_cache_key(
     trip_class: int,
 ) -> str:
     return (
-        "travelpayouts:fare:route-month:v1:"
+        "travelpayouts:fare:route-month:v2:"
         f"{origin_iata}:{destination_hint}:{depart_at[:7]}:usd:{fare_strategy}:{trip_class}"
     )
 
@@ -124,7 +144,7 @@ def _cache_get_nearest_duration(
     trip_class: int,
 ) -> FareEstimate | None:
     pattern = (
-        f"travelpayouts:fare:v1:{origin_iata}:{destination_hint}:{depart_at[:7]}:*:*:usd:{fare_strategy}:{trip_class}"
+        f"travelpayouts:fare:v2:{origin_iata}:{destination_hint}:{depart_at[:7]}:*:*:usd:{fare_strategy}:{trip_class}"
     )
     try:
         keys = list(get_redis().scan_iter(pattern))
@@ -210,6 +230,57 @@ def _adjust_fare_for_strategy(price: float, strategy: str) -> float:
     return price
 
 
+def _priced_rows(
+    data: dict[str, Any],
+    origin_iata: str,
+    destination_iata: str,
+    trip_class: int,
+    price_field: str,
+) -> list[dict[str, Any]]:
+    rows = data.get("data") if price_field == "price" else data.get("prices")
+    if not isinstance(rows, list):
+        return []
+
+    priced: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_price = row.get(price_field)
+        if not raw_price:
+            continue
+        try:
+            price = float(raw_price)
+        except (TypeError, ValueError):
+            continue
+        if price <= 0:
+            continue
+        row_origin = row.get("origin")
+        row_destination = row.get("destination")
+        row_trip_class = row.get("trip_class")
+        if row_origin and str(row_origin).upper() != origin_iata:
+            continue
+        should_match_destination = bool(destination_iata and len(destination_iata) == 3)
+        if should_match_destination and row_destination and str(row_destination).upper() != destination_iata:
+            continue
+        if row_trip_class is not None:
+            try:
+                if int(row_trip_class) != trip_class:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        priced.append({**row, price_field: price})
+    return sorted(priced, key=lambda row: float(row[price_field]))
+
+
+def _select_representative_row(priced_rows: list[dict[str, Any]], fare_strategy: str) -> dict[str, Any] | None:
+    if not priced_rows:
+        return None
+    if fare_strategy == "typical_economy" and len(priced_rows) >= 3:
+        index = min(round((len(priced_rows) - 1) * 0.55), len(priced_rows) - 1)
+        return priced_rows[index]
+    return priced_rows[0]
+
+
 def _extract_prices_for_dates(
     data: dict[str, Any],
     origin_iata: str,
@@ -219,16 +290,12 @@ def _extract_prices_for_dates(
 ) -> FareEstimate | None:
     if not data.get("success"):
         return None
-    rows = data.get("data")
-    if not isinstance(rows, list) or not rows:
+    selected = _select_representative_row(
+        _priced_rows(data, origin_iata, destination_iata, trip_class, "price"),
+        fare_strategy,
+    )
+    if selected is None:
         return None
-    priced_rows = sorted((row for row in rows if row.get("price")), key=lambda row: float(row["price"]))
-    if not priced_rows:
-        return None
-    if fare_strategy == "typical_economy" and len(priced_rows) >= 3:
-        selected = priced_rows[min(len(priced_rows) // 2, len(priced_rows) - 1)]
-    else:
-        selected = priced_rows[0]
     return FareEstimate(
         price_usd=round(_adjust_fare_for_strategy(float(selected["price"]), fare_strategy), 2),
         source="travelpayouts_prices_for_dates",
@@ -241,6 +308,36 @@ def _extract_prices_for_dates(
     )
 
 
+def _select_representative_fare(candidates: list[FareEstimate], fare_strategy: str) -> FareEstimate | None:
+    if not candidates:
+        return None
+    sorted_candidates = sorted(candidates, key=lambda fare: fare.price_usd)
+    if fare_strategy == "typical_economy" and len(sorted_candidates) >= 3:
+        selected = sorted_candidates[min(round((len(sorted_candidates) - 1) * 0.55), len(sorted_candidates) - 1)]
+        return FareEstimate(
+            price_usd=selected.price_usd,
+            source="travelpayouts_prices_for_dates_multi_date",
+            origin_iata=selected.origin_iata,
+            destination_iata=selected.destination_iata,
+            fare_strategy=selected.fare_strategy,
+            trip_class=selected.trip_class,
+            found_at=selected.found_at,
+            expires_at=selected.expires_at,
+        )
+    selected = sorted_candidates[0]
+    source = "travelpayouts_prices_for_dates_multi_date" if len(sorted_candidates) > 1 else selected.source
+    return FareEstimate(
+        price_usd=selected.price_usd,
+        source=source,
+        origin_iata=selected.origin_iata,
+        destination_iata=selected.destination_iata,
+        fare_strategy=selected.fare_strategy,
+        trip_class=selected.trip_class,
+        found_at=selected.found_at,
+        expires_at=selected.expires_at,
+    )
+
+
 def _extract_nearest_places(
     data: dict[str, Any],
     origin_iata: str,
@@ -248,20 +345,20 @@ def _extract_nearest_places(
     fare_strategy: str,
     trip_class: int,
 ) -> FareEstimate | None:
-    rows = data.get("prices")
-    if not isinstance(rows, list) or not rows:
-        return None
-    cheapest = min((row for row in rows if row.get("value")), key=lambda row: float(row["value"]), default=None)
-    if not cheapest:
+    selected = _select_representative_row(
+        _priced_rows(data, origin_iata, destination_hint, trip_class, "value"),
+        fare_strategy,
+    )
+    if selected is None:
         return None
     return FareEstimate(
-        price_usd=round(_adjust_fare_for_strategy(float(cheapest["value"]), fare_strategy), 2),
+        price_usd=round(_adjust_fare_for_strategy(float(selected["value"]), fare_strategy), 2),
         source="travelpayouts_nearest_places",
-        origin_iata=str(cheapest.get("origin") or origin_iata),
-        destination_iata=str(cheapest.get("destination") or destination_hint),
+        origin_iata=str(selected.get("origin") or origin_iata),
+        destination_iata=str(selected.get("destination") or destination_hint),
         fare_strategy=fare_strategy,
-        trip_class=int(cheapest.get("trip_class") if cheapest.get("trip_class") is not None else trip_class),
-        found_at=cheapest.get("found_at"),
+        trip_class=int(selected.get("trip_class") if selected.get("trip_class") is not None else trip_class),
+        found_at=selected.get("found_at"),
         expires_at=None,
     )
 
@@ -298,7 +395,8 @@ def get_cached_fare_usd(
     if len(destination_hint) not in (2, 3):
         return None
 
-    depart_at, return_at = _date_window(travel_month, duration_days)
+    date_windows = _date_windows(travel_month, duration_days)
+    depart_at, return_at = date_windows[0]
     cache_key = _exact_cache_key(
         origin_iata,
         destination_hint,
@@ -331,33 +429,46 @@ def get_cached_fare_usd(
     try:
         with httpx.Client(timeout=settings.TRAVELPAYOUTS_TIMEOUT_SECONDS, headers=headers) as client:
             fare = None
-            if destination_iata and _rate_limit_allows("prices_for_dates", _PRICES_FOR_DATES_RATE_LIMIT_PER_MIN):
-                started_at = time.perf_counter()
-                resp = client.get(
-                    _PRICES_FOR_DATES_URL,
-                    params={
-                        "origin": origin_iata,
-                        "destination": destination_iata,
-                        "departure_at": depart_at,
-                        "return_at": return_at,
-                        "one_way": "false",
-                        "direct": "false",
-                        "sorting": "price",
-                        "currency": "usd",
-                        "market": "ru",
-                        "limit": 30,
-                        "page": 1,
-                        "trip_class": trip_class,
-                    },
-                )
-                resp.raise_for_status()
-                fare = _extract_prices_for_dates(resp.json(), origin_iata, destination_iata, fare_strategy, trip_class)
-                record_external_api(
-                    "travelpayouts_prices_for_dates",
-                    (time.perf_counter() - started_at) * 1000,
-                    ok=True,
-                    no_coverage=fare is None,
-                )
+            date_fares: list[FareEstimate] = []
+            if destination_iata:
+                for candidate_depart_at, candidate_return_at in date_windows:
+                    if not _rate_limit_allows("prices_for_dates", _PRICES_FOR_DATES_RATE_LIMIT_PER_MIN):
+                        break
+                    started_at = time.perf_counter()
+                    resp = client.get(
+                        _PRICES_FOR_DATES_URL,
+                        params={
+                            "origin": origin_iata,
+                            "destination": destination_iata,
+                            "departure_at": candidate_depart_at,
+                            "return_at": candidate_return_at,
+                            "one_way": "false",
+                            "direct": "false",
+                            "sorting": "price",
+                            "currency": "usd",
+                            "market": "ru",
+                            "limit": 30,
+                            "page": 1,
+                            "trip_class": trip_class,
+                        },
+                    )
+                    resp.raise_for_status()
+                    candidate_fare = _extract_prices_for_dates(
+                        resp.json(),
+                        origin_iata,
+                        destination_iata,
+                        fare_strategy,
+                        trip_class,
+                    )
+                    record_external_api(
+                        "travelpayouts_prices_for_dates",
+                        (time.perf_counter() - started_at) * 1000,
+                        ok=True,
+                        no_coverage=candidate_fare is None,
+                    )
+                    if candidate_fare is not None:
+                        date_fares.append(candidate_fare)
+                fare = _select_representative_fare(date_fares, fare_strategy)
 
             if fare is None and _rate_limit_allows("nearest_places_matrix", _NEAREST_PLACES_RATE_LIMIT_PER_MIN):
                 started_at = time.perf_counter()
