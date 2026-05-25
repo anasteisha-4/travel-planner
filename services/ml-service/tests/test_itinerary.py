@@ -1772,6 +1772,28 @@ def test_generate_itinerary_retries_single_variant_after_data_service_timeout(
     assert variant_counts == [3, 1]
 
 
+def test_generate_itinerary_caps_long_data_service_requests_to_single_variant(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS", 25.0)
+    monkeypatch.setattr(settings, "DATA_SERVICE_LONG_ITINERARY_TIMEOUT_SECONDS", 75.0)
+    monkeypatch.setattr(settings, "DATA_SERVICE_SINGLE_VARIANT_MIN_DAYS", 6)
+    response = Mock()
+    response.json.return_value = _itinerary_payload()
+    response.raise_for_status.return_value = None
+    post_mock = Mock(return_value=response)
+    monkeypatch.setattr("app.routers.itinerary.httpx.post", post_mock)
+
+    resp = client.post("/api/v1/itinerary", json=_payload(duration_days=7, variant_count=3))
+
+    assert resp.status_code == 200
+    assert post_mock.call_count == 1
+    data_service_call = post_mock.call_args_list[0]
+    params = data_service_call.kwargs["params"]
+    assert ("variant_count", 1) in params
+    assert data_service_call.kwargs["timeout"] == settings.DATA_SERVICE_LONG_ITINERARY_TIMEOUT_SECONDS
+
+
 def test_generate_itinerary_requires_internal_secret(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "DATA_SERVICE_SECRET", "")
     monkeypatch.setattr(settings, "INTERNAL_API_SECRET", "")

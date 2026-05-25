@@ -73,11 +73,26 @@ def _activity_preferences(profile: dict, request: ItineraryGenerateRequest) -> l
     return []
 
 
+def _data_service_variant_count(request: ItineraryGenerateRequest) -> int:
+    if request.duration_days >= settings.DATA_SERVICE_SINGLE_VARIANT_MIN_DAYS:
+        return 1
+    return request.variant_count
+
+
+def _data_service_timeout(request: ItineraryGenerateRequest) -> float:
+    if request.duration_days >= settings.DATA_SERVICE_SINGLE_VARIANT_MIN_DAYS:
+        return max(
+            settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS,
+            settings.DATA_SERVICE_LONG_ITINERARY_TIMEOUT_SECONDS,
+        )
+    return settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS
+
+
 def _params(request: ItineraryGenerateRequest, activities: list[str]) -> list[tuple[str, str | int | float]]:
     params: list[tuple[str, str | int | float]] = [
         ("duration_days", request.duration_days),
         ("start_date", request.start_date.isoformat()),
-        ("variant_count", request.variant_count),
+        ("variant_count", _data_service_variant_count(request)),
         ("pace", request.pace),
         ("day_start_time", request.day_start_time),
         ("day_end_time", request.day_end_time),
@@ -101,22 +116,23 @@ def _request_data_service_itinerary(
     activities: list[str],
     secret: str,
 ):
+    timeout = _data_service_timeout(request)
     try:
         return httpx.post(
             f"{settings.DATA_SERVICE_URL}/internal/itinerary",
             params=_params(request, activities),
             headers={"X-Internal-Secret": secret},
-            timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
     except httpx.TimeoutException:
-        if request.variant_count <= 1:
+        if _data_service_variant_count(request) <= 1:
             raise
         single_variant_request = request.model_copy(update={"variant_count": 1})
         return httpx.post(
             f"{settings.DATA_SERVICE_URL}/internal/itinerary",
             params=_params(single_variant_request, activities),
             headers={"X-Internal-Secret": secret},
-            timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
 
 
@@ -597,7 +613,7 @@ def generate_itinerary(
             message="Itinerary generation is temporarily unavailable.",
         ) from exc
     except httpx.TimeoutException as exc:
-        _log_itinerary_failure(request, "data_service_timeout", timeout=settings.DATA_SERVICE_ITINERARY_TIMEOUT_SECONDS)
+        _log_itinerary_failure(request, "data_service_timeout", timeout=_data_service_timeout(request))
         raise AppException(
             status_code=503,
             code="ITINERARY_UNAVAILABLE",
