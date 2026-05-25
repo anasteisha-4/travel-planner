@@ -120,6 +120,9 @@ def compute_baselines(df: pd.DataFrame) -> np.ndarray:
         )
         b = formula_baseline(
             avg_daily_cost=float(row_["avg_daily_cost_usd"]) if row_["avg_daily_cost_usd"] is not None else 80.0,
+            avg_meal_cost=_nullable_float(row_.get("avg_meal_cost_usd")),
+            avg_transport_cost=_nullable_float(row_.get("avg_transport_cost_usd")),
+            avg_activity_cost=None,
             hostel_usd=_nullable_float(row_.get("hostel_usd")),
             budget_usd=_nullable_float(row_.get("budget_usd")),
             mid_usd=_nullable_float(row_.get("mid_usd")),

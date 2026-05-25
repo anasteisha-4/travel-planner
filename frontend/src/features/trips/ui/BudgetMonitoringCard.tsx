@@ -2,19 +2,30 @@ import { useHapticFeedback } from '@/shared/lib/useHapticFeedback';
 import cn from 'classnames';
 import {
   AlertTriangle,
+  BedDouble,
+  Bus,
   CheckCircle2,
+  ChevronDown,
   Gauge,
   Loader2,
+  MoreHorizontal,
   RotateCcw,
+  ShoppingBag,
+  Sigma,
+  Ticket,
   TrendingUp,
+  Utensils,
   WalletCards,
 } from 'lucide-react';
+import { useState } from 'react';
 import type { BudgetMonitoringStatus } from '../model/useTripAnalytics';
 
 type BudgetMonitorCardData = {
   risk_status: string;
   budget_usage_projected_pct: number | null;
+  projected_final_min: number;
   projected_final_mid: number;
+  projected_final_max: number;
   budget_gap_mid: number | null;
   current_spent: number;
   planning_spent: number;
@@ -25,6 +36,7 @@ type BudgetMonitorCardData = {
   assumptions?: Record<string, unknown>;
   category_contributions: Array<{
     category: string;
+    spent: number;
     remaining_mid: number;
     kind?: string;
   }>;
@@ -55,6 +67,68 @@ const fmt = (value: number): string =>
   value.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const formatMoney = (value: number, currency: string): string => `${fmt(value)} ${currency}`;
+
+const CATEGORY_META: Record<
+  string,
+  {
+    label: string;
+    icon: typeof Utensils;
+    accent: string;
+  }
+> = {
+  food: {
+    label: 'Еда',
+    icon: Utensils,
+    accent: 'bg-amber-500',
+  },
+  meals: {
+    label: 'Еда',
+    icon: Utensils,
+    accent: 'bg-amber-500',
+  },
+  transport: {
+    label: 'Транспорт',
+    icon: Bus,
+    accent: 'bg-sky-500',
+  },
+  housing: {
+    label: 'Жильё',
+    icon: BedDouble,
+    accent: 'bg-indigo-500',
+  },
+  accommodation: {
+    label: 'Жильё',
+    icon: BedDouble,
+    accent: 'bg-indigo-500',
+  },
+  entertainment: {
+    label: 'Развлечения',
+    icon: Ticket,
+    accent: 'bg-rose-500',
+  },
+  activities: {
+    label: 'Развлечения',
+    icon: Ticket,
+    accent: 'bg-rose-500',
+  },
+  shopping: {
+    label: 'Покупки',
+    icon: ShoppingBag,
+    accent: 'bg-emerald-500',
+  },
+  other: {
+    label: 'Другое',
+    icon: MoreHorizontal,
+    accent: 'bg-stone-400',
+  },
+};
+
+const getCategoryMeta = (category: string) =>
+  CATEGORY_META[category] ?? {
+    label: category,
+    icon: MoreHorizontal,
+    accent: 'bg-stone-400',
+  };
 
 const formatDays = (count: number): string => {
   const lastDigit = Math.abs(count) % 10;
@@ -135,6 +209,7 @@ export const BudgetMonitoringCard = ({
   totalSpent,
 }: BudgetMonitoringCardProps) => {
   const { play } = useHapticFeedback();
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
 
   if (hasError) {
     return (
@@ -255,6 +330,15 @@ export const BudgetMonitoringCard = ({
   const preparationSpent = monitor
     ? monitor.planning_spent + monitor.locked_fixed_costs
     : totalSpent;
+  const categoryBreakdown = monitor
+    ? monitor.category_contributions
+        .filter((item) => item.spent > 0 || item.remaining_mid > 0)
+        .slice(0, 5)
+    : [];
+  const categoryRemainingTotal = categoryBreakdown.reduce(
+    (sum, item) => sum + Math.max(0, item.remaining_mid),
+    0
+  );
   const dailyLabel =
     effectiveBurnRate > 0
       ? `${formatMoney(effectiveBurnRate, currency)}/день`
@@ -341,6 +425,103 @@ export const BudgetMonitoringCard = ({
           </div>
         </div>
       </div>
+
+      {monitor && (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-[hsl(var(--surface-border))] bg-background/60 dark:bg-white/[0.03]">
+          <button
+            type="button"
+            onClick={() => {
+              play('light');
+              setIsBreakdownOpen((value) => !value);
+            }}
+            className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-3 text-left active:bg-[hsl(var(--surface-muted))]/70"
+            aria-expanded={isBreakdownOpen}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-300">
+                <Sigma className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                  Ожидаемые дополнительные расходы до конца поездки
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {monitor.used_ml_model && (
+                <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                  ML
+                </span>
+              )}
+              <ChevronDown
+                className={cn(
+                  'h-5 w-5 text-stone-400 transition-transform duration-300 dark:text-stone-500',
+                  isBreakdownOpen && 'rotate-180'
+                )}
+              />
+            </div>
+          </button>
+
+          <div
+            className={cn(
+              'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+              isBreakdownOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="px-3 pb-3">
+                {categoryBreakdown.length > 0 && (
+                  <div className="mt-3 rounded-2xl border border-[hsl(var(--surface-border))] px-3 py-3">
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                        Примерный бюджет по категориям
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-2.5">
+                      {categoryBreakdown.map((item) => {
+                        const itemMeta = getCategoryMeta(item.category);
+                        const CategoryIcon = itemMeta.icon;
+                        const widthPct =
+                          categoryRemainingTotal > 0
+                            ? Math.max(
+                                8,
+                                Math.round(
+                                  (Math.max(0, item.remaining_mid) / categoryRemainingTotal) * 100
+                                )
+                              )
+                            : 0;
+
+                        return (
+                          <div key={item.category} className="min-w-0">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <CategoryIcon className="h-3.5 w-3.5 shrink-0 text-stone-400 dark:text-stone-500" />
+                                <span className="truncate text-[12px] font-bold text-stone-700 dark:text-stone-200">
+                                  {itemMeta.label}
+                                </span>
+                              </div>
+                              <span className="shrink-0 text-[12px] font-extrabold text-stone-900 dark:text-white">
+                                {formatMoney(item.remaining_mid, currency)}
+                              </span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
+                              <div
+                                className={`h-full rounded-full ${itemMeta.accent}`}
+                                style={{ width: `${widthPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-[hsl(var(--surface-border))] px-3 py-2.5">

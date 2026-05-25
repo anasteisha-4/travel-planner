@@ -85,9 +85,15 @@ const getStoredTripBudgetSnapshot = (tripId: string): CreatedTripBudgetSnapshot 
 const getAccommodationTier = (
   restLevel?: string | null,
   budgetLimitUsd?: number | null
-): 'budget' | 'mid' | 'luxury' => {
+): 'budget' | 'mid' | 'comfort' | 'luxury' => {
   const profileTier =
-    restLevel === 'economy' ? 'budget' : restLevel === 'luxury' ? 'luxury' : 'mid';
+    restLevel === 'economy'
+      ? 'budget'
+      : restLevel === 'comfort'
+        ? 'comfort'
+        : restLevel === 'luxury'
+          ? 'luxury'
+          : 'mid';
 
   if (budgetLimitUsd !== null && budgetLimitUsd !== undefined) {
     if (budgetLimitUsd < 900) return 'budget';

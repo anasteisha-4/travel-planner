@@ -16,7 +16,16 @@ from app.schemas.budget import (
     BudgetPredictResponse,
 )
 from app.services.analytics_events import emit_ml_quality_event
-from app.services.budget_formula import estimate_travel_cost, haversine
+from app.services.budget_formula import (
+    ACCOMMODATION_DAILY_FRACTION,
+    ACTIVITIES_DAILY_FRACTION,
+    ACTIVITY_SPEND_MULTIPLIER_BY_TIER,
+    MEALS_DAILY_FRACTION,
+    MEALS_PER_DAY_BY_TIER,
+    TRANSPORT_DAILY_FRACTION,
+    estimate_travel_cost,
+    haversine,
+)
 from app.services.budget_scorer import get_budget_scorer
 from app.services.content_scorer import resolve_accommodation_tier
 from app.services.currency import SUPPORTED_CURRENCY_RATES, normalize_currency
@@ -26,11 +35,6 @@ from app.services.profile_client import _get_profile_sync
 from app.services.travelpayouts_service import get_cached_fare_usd
 
 router = APIRouter()
-
-ACCOMMODATION_DAILY_FRACTION = {"hostel": 0.18, "budget": 0.35, "mid": 0.65, "luxury": 1.60}
-MEALS_DAILY_FRACTION = {"hostel": 0.25, "budget": 0.30, "mid": 0.38, "luxury": 0.55}
-TRANSPORT_DAILY_FRACTION = 0.12
-ACTIVITIES_DAILY_FRACTION = 0.08
 
 
 def _as_float(value: object) -> float | None:
@@ -72,7 +76,26 @@ def _load_costs(db: Session, dest_id: uuid.UUID) -> dict:
     ).fetchone()
     if row is None:
         return {}
-    return dict(row._mapping)
+    costs = dict(row._mapping)
+    poi_table_exists = db.execute(text("SELECT to_regclass('poi')")).scalar()
+    if poi_table_exists:
+        paid_poi = db.execute(
+            text(
+                "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY entrance_fee_usd) AS median_fee, "
+                "COUNT(*) AS priced_count "
+                "FROM poi "
+                "WHERE destination_id = :did "
+                "AND entrance_fee_usd IS NOT NULL "
+                "AND entrance_fee_usd > 0"
+            ),
+            {"did": str(dest_id)},
+        ).fetchone()
+        if paid_poi and int(paid_poi.priced_count or 0) >= 3 and paid_poi.median_fee is not None:
+            fallback_activity = float(costs.get("avg_daily_cost_usd") or 80.0) * ACTIVITIES_DAILY_FRACTION
+            costs["avg_activity_cost_usd"] = max(float(paid_poi.median_fee), fallback_activity)
+            costs["activity_price_source"] = "poi_entrance_fee_median"
+            costs["activity_priced_poi_count"] = int(paid_poi.priced_count or 0)
+    return costs
 
 
 def _load_destination_info(db: Session, dest_id: uuid.UUID) -> dict:
@@ -104,15 +127,40 @@ def _formula_breakdown(
     seasonal = float(sm.get(str(travel_month), 1.0)) if sm else 1.0
 
     avg_daily = float(costs.get("avg_daily_cost_usd") or 80.0)
+    avg_meal = _as_float(costs.get("avg_meal_cost_usd"))
+    avg_transport = _as_float(costs.get("avg_transport_cost_usd"))
+    avg_activity = _as_float(costs.get("avg_activity_cost_usd"))
     tier = accommodation_tier if accommodation_tier in ACCOMMODATION_DAILY_FRACTION else "mid"
 
-    hotel_tier_nightly = costs.get(f"{tier}_usd") or (avg_daily * ACCOMMODATION_DAILY_FRACTION[tier])
+    if tier == "comfort":
+        hotel_tier_nightly = costs.get("mid_usd")
+        hotel_tier_nightly = float(hotel_tier_nightly) * 1.25 if hotel_tier_nightly else None
+    else:
+        hotel_tier_nightly = costs.get(f"{tier}_usd")
+    hotel_tier_nightly = hotel_tier_nightly or (avg_daily * ACCOMMODATION_DAILY_FRACTION[tier])
     rooms = max(1, math.ceil(people_count / 2))
     accommodation_total = float(hotel_tier_nightly) * rooms * seasonal * duration_days
 
-    meals_total = avg_daily * MEALS_DAILY_FRACTION[tier] * people_count * seasonal * duration_days
-    transport_total = avg_daily * TRANSPORT_DAILY_FRACTION * people_count * duration_days
-    activities_total = avg_daily * ACTIVITIES_DAILY_FRACTION * people_count * duration_days
+    if avg_meal is not None and avg_meal > 0:
+        meals_total = avg_meal * MEALS_PER_DAY_BY_TIER[tier] * people_count * seasonal * duration_days
+    else:
+        meals_total = avg_daily * MEALS_DAILY_FRACTION[tier] * people_count * seasonal * duration_days
+
+    if avg_transport is not None and avg_transport > 0:
+        transport_total = avg_transport * people_count * duration_days
+    else:
+        transport_total = avg_daily * TRANSPORT_DAILY_FRACTION * people_count * duration_days
+
+    if avg_activity is not None and avg_activity > 0:
+        activities_total = avg_activity * ACTIVITY_SPEND_MULTIPLIER_BY_TIER[tier] * people_count * duration_days
+    else:
+        activities_total = (
+            avg_daily
+            * ACTIVITIES_DAILY_FRACTION
+            * ACTIVITY_SPEND_MULTIPLIER_BY_TIER[tier]
+            * people_count
+            * duration_days
+        )
     travel_total = estimate_travel_cost(origin_lat, origin_lng, dest_lat, dest_lng, people_count, travel_month)
 
     return {

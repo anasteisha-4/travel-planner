@@ -222,7 +222,7 @@ PROFILE_TYPES = [
     "family",
 ]
 
-ACCOMMODATION_TIERS = ["hostel", "budget", "mid", "luxury"]
+ACCOMMODATION_TIERS = ["hostel", "budget", "mid", "comfort", "luxury"]
 
 BUDGET_TIER_MULTIPLIERS = {
     "budget": 0.6,
@@ -238,6 +238,7 @@ ACCOMMODATION_COST_FRACTION = {
     "hostel": 0.18,
     "budget": 0.35,
     "mid": 0.65,
+    "comfort": 1.05,
     "luxury": 1.60,
 }
 
@@ -245,11 +246,19 @@ MEALS_COST_FRACTION = {
     "hostel": 0.25,
     "budget": 0.30,
     "mid": 0.38,
+    "comfort": 0.45,
     "luxury": 0.55,
 }
 
 TRANSPORT_COST_FRACTION = 0.12
-ACTIVITIES_COST_FRACTION = 0.08
+ACTIVITIES_COST_FRACTION = 0.18
+ACTIVITY_SPEND_MULTIPLIER = {
+    "hostel": 0.65,
+    "budget": 0.8,
+    "mid": 1.0,
+    "comfort": 1.35,
+    "luxury": 1.8,
+}
 
 
 def _jitter(value: float, pct: float = 0.30) -> float:
@@ -326,7 +335,7 @@ def generate_preferences(
 def generate_budgets(
     session: Session,
     destination_ids: list[uuid.UUID],
-    costs_by_dest: dict[uuid.UUID, float],
+    costs_by_dest: dict[uuid.UUID, dict[str, float]],
     seasonality_by_dest: dict[uuid.UUID, dict[int, float]],
     coords_by_dest: dict[uuid.UUID, tuple[float, float]],
     n: int = 100_000,
@@ -346,7 +355,10 @@ def generate_budgets(
 
     for _ in range(n):
         dest_id = random.choice(destination_ids)
-        avg_daily = costs_by_dest.get(dest_id, 80.0)
+        cost_row = costs_by_dest.get(dest_id, {})
+        avg_daily = cost_row.get("avg_daily_cost_usd", 80.0)
+        avg_meal = cost_row.get("avg_meal_cost_usd")
+        avg_transport = cost_row.get("avg_transport_cost_usd")
 
         duration = random.randint(3, 28)
         people = random.choices(range(1, 7), weights=people_weights)[0]
@@ -375,13 +387,21 @@ def generate_budgets(
         acc_nightly_per_room = _jitter(effective_daily * acc_frac, 0.15) * seasonal_mult
         accommodation_usd = round(acc_nightly_per_room * rooms * duration, 2)
 
-        meals_daily_per_person = _jitter(effective_daily * meals_frac, 0.15) * seasonal_mult
+        if avg_meal is not None and avg_meal > 0:
+            meals_per_day = {"hostel": 2.0, "budget": 2.3, "mid": 2.6, "comfort": 2.8, "luxury": 3.0}[acc_tier]
+            meals_daily_per_person = _jitter(avg_meal * bias * meals_per_day, 0.15) * seasonal_mult
+        else:
+            meals_daily_per_person = _jitter(effective_daily * meals_frac, 0.15) * seasonal_mult
         meals_usd = round(meals_daily_per_person * people * duration, 2)
 
-        transport_daily = _jitter(effective_daily * transport_frac, 0.15)
+        transport_daily = _jitter(
+            (avg_transport * bias) if avg_transport and avg_transport > 0 else effective_daily * transport_frac, 0.15
+        )
         transport_usd = round(transport_daily * people * duration, 2)
 
-        activities_daily = _jitter(effective_daily * ACTIVITIES_COST_FRACTION, 0.15)
+        activities_daily = _jitter(
+            effective_daily * ACTIVITIES_COST_FRACTION * ACTIVITY_SPEND_MULTIPLIER[acc_tier], 0.15
+        )
         activities_usd = round(activities_daily * people * duration, 2)
 
         # Travel-to-destination: pick a random world origin city
@@ -500,10 +520,19 @@ def main(table: str | None = None) -> None:
         logger.info("  %d destinations loaded.", len(destination_ids))
 
         logger.info("Loading cost index per destination...")
-        costs_by_dest: dict[uuid.UUID, float] = {
-            row[0]: float(row[1])
+        costs_by_dest: dict[uuid.UUID, dict[str, float]] = {
+            row[0]: {
+                "avg_daily_cost_usd": float(row[1]),
+                "avg_meal_cost_usd": float(row[2]),
+                "avg_transport_cost_usd": float(row[3]),
+            }
             for row in session.execute(
-                select(DestinationCosts.destination_id, DestinationCosts.avg_daily_cost_usd)
+                select(
+                    DestinationCosts.destination_id,
+                    DestinationCosts.avg_daily_cost_usd,
+                    DestinationCosts.avg_meal_cost_usd,
+                    DestinationCosts.avg_transport_cost_usd,
+                )
             ).all()
         }
         logger.info("  %d cost records loaded.", len(costs_by_dest))

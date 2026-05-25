@@ -261,7 +261,7 @@ def resolve_accommodation_tier(
     tier_by_rest_level = {
         "economy": "budget",
         "standard": "mid",
-        "comfort": "mid",
+        "comfort": "comfort",
         "luxury": "luxury",
     }
     tier = tier_by_rest_level.get(rest_level or "", fallback)

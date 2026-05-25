@@ -21,6 +21,7 @@ ACCOMMODATION_DAILY_FRACTION: dict[str, float] = {
     "hostel": 0.18,
     "budget": 0.35,
     "mid": 0.65,
+    "comfort": 1.05,
     "luxury": 1.60,
 }
 
@@ -31,15 +32,35 @@ MEALS_DAILY_FRACTION: dict[str, float] = {
     "hostel": 0.25,
     "budget": 0.30,
     "mid": 0.38,
+    "comfort": 0.45,
     "luxury": 0.55,
+}
+
+# Used when destination_costs exposes a city-specific average meal price. Higher
+# tiers assume more sit-down meals, while economy tiers mix cafes/groceries.
+MEALS_PER_DAY_BY_TIER: dict[str, float] = {
+    "hostel": 2.0,
+    "budget": 2.3,
+    "mid": 2.6,
+    "comfort": 2.8,
+    "luxury": 3.0,
 }
 
 # Local transport and activities are fixed shares because the source catalog has
 # destination-level daily cost but sparse category-level prices for many cities.
+# Activities cover paid tickets, museums, tours, shows, and attraction entrances,
+# so the share is intentionally higher than simple incidental entertainment.
 TRANSPORT_DAILY_FRACTION: float = 0.12
-ACTIVITIES_DAILY_FRACTION: float = 0.08
+ACTIVITIES_DAILY_FRACTION: float = 0.18
+ACTIVITY_SPEND_MULTIPLIER_BY_TIER: dict[str, float] = {
+    "hostel": 0.65,
+    "budget": 0.8,
+    "mid": 1.0,
+    "comfort": 1.35,
+    "luxury": 1.8,
+}
 
-ACC_TIER_ENCODING: dict[str, int] = {"hostel": 0, "budget": 1, "mid": 2, "luxury": 3}
+ACC_TIER_ENCODING: dict[str, int] = {"hostel": 0, "budget": 1, "mid": 2, "comfort": 3, "luxury": 4}
 
 # Round-trip economy fallback by great-circle distance, in USD per person. The
 # brackets are intentionally coarse: they are only used when cached fare data is
@@ -101,6 +122,9 @@ def estimate_travel_cost(
 
 def formula_baseline(
     avg_daily_cost: float,
+    avg_meal_cost: float | None,
+    avg_transport_cost: float | None,
+    avg_activity_cost: float | None,
     hostel_usd: float | None,
     budget_usd: float | None,
     mid_usd: float | None,
@@ -122,15 +146,29 @@ def formula_baseline(
         "hostel": hostel_usd,
         "budget": budget_usd,
         "mid": mid_usd,
+        "comfort": mid_usd * 1.25 if mid_usd is not None else None,
         "luxury": luxury_usd,
     }
     hotel_tier_nightly = tier_cost_map.get(tier) or (avg_daily_cost * ACCOMMODATION_DAILY_FRACTION[tier])
     rooms = max(1, math.ceil(people_count / 2))
     accommodation_per_day = float(hotel_tier_nightly) * rooms * seasonal_mult
 
-    meals_per_day = avg_daily_cost * MEALS_DAILY_FRACTION[tier] * people_count * seasonal_mult
-    transport_per_day = avg_daily_cost * TRANSPORT_DAILY_FRACTION * people_count
-    activities_per_day = avg_daily_cost * ACTIVITIES_DAILY_FRACTION * people_count
+    if avg_meal_cost is not None and avg_meal_cost > 0:
+        meals_per_day = avg_meal_cost * MEALS_PER_DAY_BY_TIER[tier] * people_count * seasonal_mult
+    else:
+        meals_per_day = avg_daily_cost * MEALS_DAILY_FRACTION[tier] * people_count * seasonal_mult
+
+    if avg_transport_cost is not None and avg_transport_cost > 0:
+        transport_per_day = avg_transport_cost * people_count
+    else:
+        transport_per_day = avg_daily_cost * TRANSPORT_DAILY_FRACTION * people_count
+
+    if avg_activity_cost is not None and avg_activity_cost > 0:
+        activities_per_day = avg_activity_cost * ACTIVITY_SPEND_MULTIPLIER_BY_TIER[tier] * people_count
+    else:
+        activities_per_day = (
+            avg_daily_cost * ACTIVITIES_DAILY_FRACTION * ACTIVITY_SPEND_MULTIPLIER_BY_TIER[tier] * people_count
+        )
 
     daily = accommodation_per_day + meals_per_day + transport_per_day + activities_per_day
     return daily * duration_days + travel_to_destination

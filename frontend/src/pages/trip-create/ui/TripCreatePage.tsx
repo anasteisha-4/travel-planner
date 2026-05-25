@@ -37,10 +37,17 @@ const getAccommodationTier = (
   value: string | null,
   restLevel?: string | null,
   budgetLimitUsd?: number | null
-): 'budget' | 'mid' | 'luxury' => {
-  const requested = value === 'budget' || value === 'luxury' ? value : 'mid';
+): 'budget' | 'mid' | 'comfort' | 'luxury' => {
+  const requested =
+    value === 'budget' || value === 'comfort' || value === 'luxury' ? value : 'mid';
   const profileTier =
-    restLevel === 'economy' ? 'budget' : restLevel === 'luxury' ? 'luxury' : 'mid';
+    restLevel === 'economy'
+      ? 'budget'
+      : restLevel === 'comfort'
+        ? 'comfort'
+        : restLevel === 'luxury'
+          ? 'luxury'
+          : 'mid';
 
   if (budgetLimitUsd !== null && budgetLimitUsd !== undefined) {
     if (budgetLimitUsd < 900) return 'budget';

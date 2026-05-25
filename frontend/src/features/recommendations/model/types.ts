@@ -70,7 +70,7 @@ export type BudgetPredictRequest = {
   duration_days: number;
   people_count: number;
   travel_month: number;
-  accommodation_tier?: 'hostel' | 'budget' | 'mid' | 'luxury';
+  accommodation_tier?: 'hostel' | 'budget' | 'mid' | 'comfort' | 'luxury';
   currency?: string;
   budget_limit_usd?: number | null;
   origin_city_name?: string | null;
