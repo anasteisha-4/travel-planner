@@ -47,6 +47,20 @@ def test_travel_advisory_keeps_allowed_middle_east_destinations():
     assert [item["name"] for item in blocked] == ["Doha"]
 
 
+def test_travel_advisory_blocks_cuba_for_ru_citizenship():
+    havana = _dest("Havana", "CU")
+    istanbul = _dest("Istanbul", "TR")
+
+    allowed, blocked = filter_destinations_by_travel_advisory(
+        destinations=[havana, istanbul],
+        citizenship_code="RU",
+    )
+
+    assert [item["name"] for item in allowed] == ["Istanbul"]
+    assert [item["name"] for item in blocked] == ["Havana"]
+    assert blocked[0]["reason"] == "country_travel_advisory"
+
+
 def test_travel_advisory_blocks_domestic_security_advisory_for_ru():
     destinations = [
         _dest("Moscow", "RU"),
